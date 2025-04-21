@@ -6,6 +6,7 @@ import { ModelUser } from '../../../schema/SchemaUser.schema';
 import { ModelTask } from "../../../schema/SchemaTask.schema";
 import { ModelMemo } from "../../../schema/SchemaMemoQuickAi.schema";
 import { tsUserApiKey } from "../../../utils/llm/llmCommonFunc";
+import openrouterMarketing from "../../../config/openrouterMarketing";
 
 interface Message {
     role: string;
@@ -93,6 +94,7 @@ const fetchLlm = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };

@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
 import { ModelChatOne } from '../../../schema/SchemaChatOne.schema';
 import envKeys from "../../../config/envKeys";
+import openrouterMarketing from "../../../config/openrouterMarketing";
 
 interface Message {
     role: string;
@@ -91,6 +92,7 @@ const fetchLlmGroq = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };

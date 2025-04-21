@@ -6,6 +6,7 @@ import { ModelTask } from '../../../schema/SchemaTask.schema';
 
 import { tsTaskSubList } from '../../../types/typesSchema/schemaTaskSubList.types';
 import { tsTaskList } from '../../../types/typesSchema/SchemaTaskList2.types';
+import openrouterMarketing from '../../../config/openrouterMarketing';
 
 interface tsTaskListWithSubTask extends tsTaskList {
     taskSubArr: tsTaskSubList[];
@@ -88,6 +89,7 @@ const fetchLlmGroq = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };

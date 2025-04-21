@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 import envKeys from "../../../config/envKeys";
+import openrouterMarketing from "../../../config/openrouterMarketing";
 
 const fetchLlmGroqVision = async ({
     argContent,
@@ -58,6 +59,7 @@ const fetchLlmGroqVision = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };

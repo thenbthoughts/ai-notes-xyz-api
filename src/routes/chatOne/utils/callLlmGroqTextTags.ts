@@ -3,6 +3,7 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
+import openrouterMarketing from "../../../config/openrouterMarketing";
 
 interface Message {
     role: string;
@@ -71,6 +72,7 @@ const fetchLlmGroqTags = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };

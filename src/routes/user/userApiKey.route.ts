@@ -6,6 +6,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { putFileToS3 } from '../../utils/files/s3PutFile';
 import { getFileFromS3R2 } from '../../utils/files/s3R2GetFile';
+import openrouterMarketing from '../../config/openrouterMarketing';
 
 // Router
 const router = Router();
@@ -66,6 +67,7 @@ const fetchLlm = async ({
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
+                ...openrouterMarketing,
             },
             data: JSON.stringify(data)
         };
