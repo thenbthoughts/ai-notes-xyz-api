@@ -1,12 +1,12 @@
+import mongoose from "mongoose";
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
-import { ModelChatOne } from '../../../schema/SchemaChatOne.schema';
-import envKeys from "../../../config/envKeys";
-import { ModelUser } from '../../../schema/SchemaUser.schema';
-import { ModelTask } from "../../../schema/SchemaTask.schema";
-import { ModelMemo } from "../../../schema/SchemaMemoQuickAi.schema";
-import { tsUserApiKey } from "../../../utils/llm/llmCommonFunc";
-import openrouterMarketing from "../../../config/openrouterMarketing";
+import { ModelChatLlm } from '../../../../schema/SchemaChatLlm.schema';
+import { ModelUser } from '../../../../schema/SchemaUser.schema';
+import { ModelTask } from "../../../../schema/SchemaTask.schema";
+import { ModelMemo } from "../../../../schema/SchemaMemoQuickAi.schema";
+import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
+import openrouterMarketing from "../../../../config/openrouterMarketing";
 
 interface Message {
     role: string;
@@ -15,14 +15,20 @@ interface Message {
 
 // Function to get the last 20 conversations from MongoDB
 const getLast30Conversations = async ({
-    username
+    // thread
+    threadId,
+    
+    // auth
+    username,
 }: {
-    username: string
+    threadId: mongoose.Types.ObjectId,
+    username: string;
 }): Promise<Message[]> => {
-    const conversations = await ModelChatOne
+    const conversations = await ModelChatLlm
         .find({
             username,
-            type: "text"
+            type: "text",
+            threadId: threadId,
         })
         .sort({ createdAtUtc: -1 })
         .limit(16)
@@ -111,16 +117,22 @@ const fetchLlm = async ({
 };
 
 const getNextMessageFromLast30Conversation = async ({
+    // thread
+    threadId,
+    
+    // auth
     username,
-
+    
+    // api key
     userApiKey,
 }: {
+    threadId: mongoose.Types.ObjectId,
     username: string;
-
     userApiKey: tsUserApiKey;
 }) => {
     const lastConversationsDesc = await getLast30Conversations({
-        username
+        username,
+        threadId,
     });
     const lastConversations = lastConversationsDesc.reverse();
 
