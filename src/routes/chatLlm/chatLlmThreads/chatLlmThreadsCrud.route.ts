@@ -4,6 +4,7 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 
 import { ModelChatLlmThread } from '../../../schema/SchemaChatLlmThread.schema';
+import { ModelChatLlm } from '../../../schema/SchemaChatLlm.schema';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 
@@ -66,6 +67,13 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
         if (!deletedThread) {
             return res.status(404).json({ message: 'Thread not found' });
         }
+
+        // delete all chat related to the thread
+        await ModelChatLlm.deleteMany({
+            threadId: threadId,
+            username: res.locals.auth_username
+        });
+
         return res.json({ message: 'Thread deleted successfully' });
     } catch (error) {
         console.error(error);
