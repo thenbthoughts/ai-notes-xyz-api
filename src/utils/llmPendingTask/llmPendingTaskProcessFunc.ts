@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { ModelLlmPendingTaskCron } from "../../schema/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
 import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById";
+import generateChatTagsById from "./page/chat/generateChatTagsById";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -28,24 +29,28 @@ const llmPendingTaskProcessFunc = async ({
         // TODO is task lock
         let isTaskLock = false;
 
-        if(resultTask.taskType === llmPendingTaskTypes.page.chat.generateChatThreadTitleById) {
+        if (resultTask.taskType === llmPendingTaskTypes.page.chat.generateChatThreadTitleById) {
             isTaskDone = await generateChatThreadTitleById({
+                targetRecordId: resultTask.targetRecordId,
+            });
+        } else if (resultTask.taskType === llmPendingTaskTypes.page.chat.generateChatTagsById) {
+            isTaskDone = await generateChatTagsById({
                 targetRecordId: resultTask.targetRecordId,
             });
         }
 
         // update task info
-        if(isTaskDone === true) {
+        if (isTaskDone === true) {
             resultTask.taskStatus = 'success';
         } else {
             resultTask.taskRetryCount += 1;
         }
-        if(resultTask.taskRetryCount >= 3) {
+        if (resultTask.taskRetryCount >= 3) {
             resultTask.taskStatus = 'failed';
         }
         const dateTimeEnd = new Date().valueOf();
-        console.log(dateTimeEnd-dateTimeStart);
-        resultTask.taskTimeTakenInMills = dateTimeEnd-dateTimeStart;
+        console.log(dateTimeEnd - dateTimeStart);
+        resultTask.taskTimeTakenInMills = dateTimeEnd - dateTimeStart;
         await resultTask.save();
 
         return isTaskDone;

@@ -7,7 +7,6 @@ import fetchLlmGroqAudio from './utils/callLlmGroqAudio';
 import { GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import mongoose, { ObjectId } from 'mongoose';
-import callLlmGroqTextTags from './utils/callLlmGroqTextTags';
 import getNextMessageFromLast30Conversation from './utils/getNextMessageFromLast25Conversation';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
@@ -20,45 +19,21 @@ const router = Router();
 
 const generateTags = async ({
     mongodbRecordId,
-    content,
-
-    llmAuthToken,
-    provider,
+    auth_username,
 }: {
     mongodbRecordId: string,
-    content: string,
-
-    llmAuthToken: string;
-    provider: 'groq' | 'openrouter';
+    auth_username: string,
 }) => {
     try {
-        // generate tags
-        let argContentTags = `${content}`;
-        const resultTags = await callLlmGroqTextTags({
-            argContent: argContentTags,
-
-            llmAuthToken: llmAuthToken,
-            provider,
-        })
-        if (resultTags.length >= 1) {
-            await ModelChatLlm.findOneAndUpdate(
-                {
-                    _id: mongodbRecordId,
-                },
-                {
-                    $set: {
-                        tags: resultTags
-                    }
-                },
-                {
-                    new: true
-                }
-            );
-        }
+        await ModelLlmPendingTaskCron.create({
+            username: auth_username,
+            taskType: llmPendingTaskTypes.page.chat.generateChatTagsById,
+            targetRecordId: mongodbRecordId,
+        });
     } catch (error) {
         console.error(error);
     }
-}
+};
 
 // Add Note API
 router.post(
@@ -154,23 +129,15 @@ router.post(
                             });
 
                             // add tags
-                            if (provider === 'groq' || provider === 'openrouter') {
-                                await generateTags({
-                                    mongodbRecordId: (newNote._id as ObjectId).toString(),
-                                    content: contentAi,
-
-                                    provider,
-                                    llmAuthToken,
-                                });
-                                // add tags
-                                await generateTags({
-                                    mongodbRecordId: (result._id as ObjectId).toString(),
-                                    content: contentAi,
-
-                                    provider,
-                                    llmAuthToken,
-                                });
-                            }
+                            await generateTags({
+                                mongodbRecordId: (newNote._id as ObjectId).toString(),
+                                auth_username,
+                            });
+                            // add tags
+                            await generateTags({
+                                mongodbRecordId: (result._id as ObjectId).toString(),
+                                auth_username,
+                            });
 
                             // add notes from last 25 conversations
                             if (provider === 'groq' || provider === 'openrouter') {
@@ -197,15 +164,12 @@ router.post(
 
                                     ...actionDatetimeObj,
                                 });
-                                if (provider === 'groq' || provider === 'openrouter') {
-                                    await generateTags({
-                                        mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                                        content: content,
 
-                                        provider,
-                                        llmAuthToken,
-                                    });
-                                }
+                                // add tags
+                                await generateTags({
+                                    mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
+                                    auth_username,
+                                });
                             }
                         }
                     }
@@ -297,15 +261,10 @@ router.post(
                             });
 
                             // add tags
-                            if (provider === 'groq' || provider === 'openrouter') {
-                                await generateTags({
-                                    mongodbRecordId: (newNoteAudio._id as ObjectId).toString(),
-                                    content: contentAudio,
-
-                                    provider,
-                                    llmAuthToken,
-                                });
-                            }
+                            await generateTags({
+                                mongodbRecordId: (newNoteAudio._id as ObjectId).toString(),
+                                auth_username,
+                            });
 
                             // add notes from last 25 conversations
                             if (provider === 'groq' || provider === 'openrouter') {
@@ -332,15 +291,12 @@ router.post(
 
                                     ...actionDatetimeObj,
                                 });
-                                if (provider === 'groq' || provider === 'openrouter') {
-                                    await generateTags({
-                                        mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                                        content: content,
 
-                                        provider,
-                                        llmAuthToken,
-                                    });
-                                }
+                                // add tags
+                                await generateTags({
+                                    mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
+                                    auth_username,
+                                });
                             }
                         }
                     }
@@ -361,15 +317,11 @@ router.post(
 
                     ...actionDatetimeObj,
                 });
-                if (provider === 'groq' || provider === 'openrouter') {
-                    await generateTags({
-                        mongodbRecordId: (newNote._id as ObjectId).toString(),
-                        content: content,
-
-                        provider,
-                        llmAuthToken,
-                    });
-                }
+                // add tags
+                await generateTags({
+                    mongodbRecordId: (newNote._id as ObjectId).toString(),
+                    auth_username,
+                });
 
                 // add notes
                 if (provider === 'groq' || provider === 'openrouter') {
@@ -396,15 +348,11 @@ router.post(
 
                         ...actionDatetimeObj,
                     });
-                    if (provider === 'groq' || provider === 'openrouter') {
-                        await generateTags({
-                            mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                            content: content,
-
-                            provider,
-                            llmAuthToken,
-                        });
-                    }
+                    // add tags
+                    await generateTags({
+                        mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
+                        auth_username,
+                    });
                 }
                 return res.status(201).json(newNote);
             }
