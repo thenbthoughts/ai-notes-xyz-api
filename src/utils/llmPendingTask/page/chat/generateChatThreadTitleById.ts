@@ -351,7 +351,7 @@ const  generateChatThreadTitleById = async ({
             modelProvider,
         })
         if (resultSummary.length >= 1) {
-            updateObj.threadTitle = resultSummary;
+            updateObj.aiSummary = resultSummary;
 
             // Use fetchLlmGroqTags to generate tags from the content of the first message
             const generatedTags = await fetchLlmTags({
