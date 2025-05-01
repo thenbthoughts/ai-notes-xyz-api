@@ -8,7 +8,7 @@ export interface IChatLlmThread extends Document {
     // model info
     aiSummary: string;
     aiTasks: object[];
-    tagsAutoAi: string[];
+    tagsAi: string[];
 
     // auth
     username: string;

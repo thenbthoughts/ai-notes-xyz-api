@@ -10,7 +10,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     },
 
     // ai
-    tagsAutoAi: { type: [String], default: [] },
+    tagsAi: { type: [String], default: [] },
     aiSummary: {
         type: String,
         default: '',

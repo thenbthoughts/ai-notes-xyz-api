@@ -12,6 +12,8 @@ import getNextMessageFromLast30Conversation from './utils/getNextMessageFromLast
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
+import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
+import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 
 // Router
 const router = Router();
@@ -65,6 +67,7 @@ router.post(
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
         try {
+            const auth_username = res.locals.auth_username;
             const { type, content, tags, fileUrl, fileUrlArr } = req.body; // Added threadId
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
@@ -89,6 +92,13 @@ router.post(
                 provider = 'openrouter';
                 llmAuthToken = apiKeys.apiKeyOpenrouter;
             }
+
+            // update title
+            await ModelLlmPendingTaskCron.create({
+                username: auth_username,
+                taskType: llmPendingTaskTypes.page.chat.generateChatThreadTitleById,
+                targetRecordId: threadId,
+            });
 
             // get date utc str as YYYY-MM
             if (type === 'image') {

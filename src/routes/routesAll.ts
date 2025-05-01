@@ -29,6 +29,8 @@ import uploadFileS3 from './upload/uploadFileS3';
 
 import apiKeyDefault from './apiKeyDefault/apiKeyDefault.route';
 
+import llmTaskBackgroundProcessCrudRouter from './llmTaskBackgroundProcess/llmTaskBackgroundProcessCrud.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -68,6 +70,9 @@ router.use('/uploads/crudS3', uploadFileS3);
 
 // other
 router.use('/apiKeyDefault/crud', apiKeyDefault);
+
+// llm task background process
+router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRouter);
 
 /*
 Example:
