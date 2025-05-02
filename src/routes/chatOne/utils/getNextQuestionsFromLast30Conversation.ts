@@ -167,8 +167,6 @@ const getNextQuestionsFromLast30Conversation = async ({
             provider,
         });
 
-        console.log(resultNextQuestions);
-
         const questionObj = JSON.parse(resultNextQuestions);
 
         const questionArr = [] as string[];
