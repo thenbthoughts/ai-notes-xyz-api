@@ -23,6 +23,9 @@ import routeTaskAiGenerated from './task/taskAiGenerated.route';
 import routesTaskSub from './task/routesTaskSub.route';
 import routesTaskComments from './task/routesTaskComments.route';
 
+// page -> life events
+import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.route';
+
 import routesMemoCrud from './memo/memoCrud.route';
 
 import uploadFileS3 from './upload/uploadFileS3';
@@ -61,6 +64,9 @@ router.use('/task-sub/crud', routesTaskSub);
 router.use('/task-board/crud', routesTaskBoard);
 router.use('/task-board-list/crud', routesTaskBoardList);
 router.use('/task-comments/crud', routesTaskComments);
+
+// router -> life events
+router.use('/life-events/crud', routesLifeEventsCrud);
 
 // memo -> 
 router.use('/memos/crud', routesMemoCrud);
