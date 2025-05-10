@@ -32,6 +32,7 @@ const lifeEventsSchema = new Schema<ILifeEvents>({
         5. huge
         */
     },
+    tags: { type: [String], default: [] },
 
     // identification - pagination
     eventDateUtc: { type: Date, required: true, default: null, index: true },

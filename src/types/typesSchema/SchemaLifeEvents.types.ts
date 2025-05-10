@@ -12,6 +12,7 @@ export interface ILifeEvents extends Document {
     categorySubUniqueKey: string;
     isStarred: boolean;
     eventImpact: string;
+    tags: string[];
 
     // identification - pagination
     eventDateUtc: Date;

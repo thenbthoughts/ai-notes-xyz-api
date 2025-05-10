@@ -191,6 +191,8 @@ router.post('/lifeEventsAdd', middlewareUserAuth, async (req: Request, res: Resp
 
             username: res.locals.auth_username,
             title: `Empty Event - ${eventDateUtc.toDateString()} ${eventDateUtc.toLocaleTimeString().substring(0, 7)}`,
+
+            aiTags: ['Empty event'],
         });
 
         return res.json({
