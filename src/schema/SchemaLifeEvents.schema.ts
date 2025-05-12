@@ -10,8 +10,14 @@ const lifeEventsSchema = new Schema<ILifeEvents>({
     // fields
     title: { type: String, default: '' },
     description: { type: String, default: '' },
-    categoryUniqueKey: { type: String, default: '' },
-    categorySubUniqueKey: { type: String, default: '' },
+    categoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
+    categorySubId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
     isStarred: { type: Boolean, default: false },
     eventImpact: {
         type: String,

@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 
 // LifeEvents
 export interface ILifeEvents extends Document {
@@ -8,8 +8,8 @@ export interface ILifeEvents extends Document {
     // fields
     title: string;
     description: string;
-    categoryUniqueKey: string;
-    categorySubUniqueKey: string;
+    categoryId: mongoose.Schema.Types.ObjectId | null;
+    categorySubId: mongoose.Schema.Types.ObjectId | null;
     isStarred: boolean;
     eventImpact: string;
     tags: string[];
