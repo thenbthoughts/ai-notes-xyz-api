@@ -1,7 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 
 // LifeEvents
-export interface ILifeEventsFileExists extends Document {
+export interface ILifeEventsFileUpload extends Document {
     // file fields
     fileType: string;
     fileUrl: string;

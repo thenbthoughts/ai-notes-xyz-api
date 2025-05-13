@@ -14,23 +14,6 @@ router.post('/lifeEventCategoryGet', middlewareUserAuth, async (req: Request, re
         const pipelineDocument: PipelineStage[] = [];
         const pipelineCount: PipelineStage[] = [];
 
-        // args
-        let page = 1;
-        let perPage = 10;
-
-        // set arg -> page
-        if (typeof req.body?.page === 'number') {
-            if (req.body.page >= 1) {
-                page = req.body.page;
-            }
-        }
-        // set arg -> perPage
-        if (typeof req.body?.perPage === 'number') {
-            if (req.body.perPage >= 1) {
-                perPage = req.body.perPage;
-            }
-        }
-
         // stage -> match -> auth
         tempStage = {
             $match: {
@@ -60,67 +43,41 @@ router.post('/lifeEventCategoryGet', middlewareUserAuth, async (req: Request, re
             }
         }
 
-        // stage -> search
-        if (typeof req.body?.search === 'string') {
-            if (req.body.search.length >= 1) {
-                let searchQuery = req.body.search as string;
-
-                let searchQueryArr = searchQuery
-                    .replace('-', ' ')
-                    .split(' ');
-
-                const matchAnd = [];
-                for (let index = 0; index < searchQueryArr.length; index++) {
-                    const elementStr = searchQueryArr[index];
-                    matchAnd.push({
-                        $or: [
-                            { title: { $regex: elementStr, $options: 'i' } },
-                            { description: { $regex: elementStr, $options: 'i' } },
-                            { categoryUniqueKey: { $regex: elementStr, $options: 'i' } },
-                            { categorySubUniqueKey: { $regex: elementStr, $options: 'i' } },
-                            { aiSummary: { $regex: elementStr, $options: 'i' } },
-                            { aiTags: { $regex: elementStr, $options: 'i' } },
-                            { aiSuggestions: { $regex: elementStr, $options: 'i' } },
-                        ]
-                    })
+        // stage -> match -> lifeEventId
+        const arg_parentId = req.body.parentId;
+        if (typeof arg_parentId === 'string') {
+            if (arg_parentId.length === 24) {
+                let _id = null as mongoose.Types.ObjectId | null;
+                _id = arg_parentId ? mongoose.Types.ObjectId.createFromHexString(arg_parentId) : null;
+                if (_id) {
+                    if (_id.toHexString().length === 24) {
+                        tempStage = {
+                            $match: {
+                                parentId: _id,
+                            }
+                        };
+                        pipelineDocument.push(tempStage);
+                        pipelineCount.push(tempStage);
+                    }
                 }
+            }
+        }
 
+        // stage -> 
+        const arg_isSubCategory = req.body.isSubCategory;
+        if (typeof arg_isSubCategory === 'string') {
+            if(arg_isSubCategory === 'true' || arg_isSubCategory === 'false') {
                 tempStage = {
                     $match: {
-                        $and: [
-                            ...matchAnd,
-                        ],
-                    },
+                        isSubCategory: arg_isSubCategory === 'true' ? true : false,
+                    }
                 };
-                console.log(JSON.stringify([
-                    tempStage,
-                ]))
                 pipelineDocument.push(tempStage);
                 pipelineCount.push(tempStage);
             }
         }
 
-        // sort
-        tempStage = {
-            $sort: {
-                eventDateUtc: 1,
-            }
-        };
-        pipelineDocument.push(tempStage);
-        pipelineCount.push(tempStage);
-
-        // stage -> skip
-        tempStage = {
-            $skip: (page - 1) * perPage,
-        };
-        pipelineDocument.push(tempStage);
-
-        // stage -> limit
-        tempStage = {
-            $limit: perPage,
-        };
-        pipelineDocument.push(tempStage);
-
+        // stage -> lookup -> sub category
         tempStage = {
             $lookup: {
                 from: 'lifeEventCategory',

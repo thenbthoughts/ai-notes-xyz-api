@@ -75,8 +75,6 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
                         $or: [
                             { title: { $regex: elementStr, $options: 'i' } },
                             { description: { $regex: elementStr, $options: 'i' } },
-                            { categoryUniqueKey: { $regex: elementStr, $options: 'i' } },
-                            { categorySubUniqueKey: { $regex: elementStr, $options: 'i' } },
                             { aiSummary: { $regex: elementStr, $options: 'i' } },
                             { aiTags: { $regex: elementStr, $options: 'i' } },
                             { aiSuggestions: { $regex: elementStr, $options: 'i' } },
@@ -222,8 +220,8 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
         } as {
             title?: string;
             description?: string;
-            categoryUniqueKey?: string;
-            categorySubUniqueKey?: string;
+            categoryId?: mongoose.Types.ObjectId | null;
+            categorySubId?: mongoose.Types.ObjectId | null;
             isStarred?: boolean;
             eventImpact?: string;
             eventDateUtc?: Date;
@@ -235,11 +233,13 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
         if (typeof req.body.description === 'string') {
             updateObj.description = req.body.description;
         }
-        if (typeof req.body.categoryUniqueKey === 'string') {
-            updateObj.categoryUniqueKey = req.body.categoryUniqueKey;
+        if (typeof req.body.categoryId === 'string') {
+            const arg_categoryId = req.body.categoryId;
+            let categoryId = arg_categoryId ? mongoose.Types.ObjectId.createFromHexString(arg_categoryId) : null;
+            updateObj.categoryId = categoryId;
         }
-        if (typeof req.body.categorySubUniqueKey === 'string') {
-            updateObj.categorySubUniqueKey = req.body.categorySubUniqueKey;
+        if (typeof req.body.categorySubId === 'string') {
+            updateObj.categorySubId = req.body.categorySubId;
         }
         if (typeof req.body.isStarred === 'boolean') {
             updateObj.isStarred = req.body.isStarred;
