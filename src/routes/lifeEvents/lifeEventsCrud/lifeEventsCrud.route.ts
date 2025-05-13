@@ -118,6 +118,28 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
         };
         pipelineDocument.push(tempStage);
 
+        // stage -> lookup -> category
+        tempStage = {
+            $lookup: {
+                from: 'lifeEventCategory',
+                localField: 'categoryId',
+                foreignField: '_id',
+                as: 'categoryArr',
+            }
+        };
+        pipelineDocument.push(tempStage);
+
+        // stage -> lookup -> sub category
+        tempStage = {
+            $lookup: {
+                from: 'lifeEventCategory',
+                localField: 'categorySubId',
+                foreignField: '_id',
+                as: 'categorySubArr',
+            }
+        };
+        pipelineDocument.push(tempStage);
+
         // stageCount -> count
         pipelineCount.push({
             $count: 'count'
