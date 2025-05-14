@@ -59,6 +59,46 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        // stage -> match -> isStar
+        if (typeof req.body?.isStar === 'string') {
+            if (
+                req.body?.isStar === 'true' ||
+                req.body?.isStar === 'false'
+            ) {
+                const isStar = req.body?.isStar === 'true';
+                tempStage = {
+                    $match: {
+                        isStar: isStar,
+                    },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
+        // stage -> match -> eventImpact
+        if (typeof req.body?.eventImpact === 'string') {
+            console.log(req.body?.eventImpact);
+            if (
+                [
+                    'very-low',
+                    'low',
+                    'medium',
+                    'large',
+                    'huge'
+                ].includes(req.body.eventImpact)
+            ) {
+                const eventImpact = req.body.eventImpact;
+                tempStage = {
+                    $match: {
+                        eventImpact: eventImpact,
+                    },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> search
         if (typeof req.body?.search === 'string') {
             if (req.body.search.length >= 1) {
@@ -244,7 +284,7 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
             description?: string;
             categoryId?: mongoose.Types.ObjectId | null;
             categorySubId?: mongoose.Types.ObjectId | null;
-            isStarred?: boolean;
+            isStar?: boolean;
             eventImpact?: string;
             eventDateUtc?: Date;
         };
@@ -263,8 +303,8 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
         if (typeof req.body.categorySubId === 'string') {
             updateObj.categorySubId = req.body.categorySubId;
         }
-        if (typeof req.body.isStarred === 'boolean') {
-            updateObj.isStarred = req.body.isStarred;
+        if (typeof req.body.isStar === 'boolean') {
+            updateObj.isStar = req.body.isStar;
         }
         if (typeof req.body.eventImpact === 'string') {
             updateObj.eventImpact = req.body.eventImpact;

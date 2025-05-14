@@ -18,7 +18,7 @@ const lifeEventsSchema = new Schema<ILifeEvents>({
         type: mongoose.Schema.Types.ObjectId,
         default: null,
     },
-    isStarred: { type: Boolean, default: false },
+    isStar: { type: Boolean, default: false },
     eventImpact: {
         type: String,
         default: 'very-low',

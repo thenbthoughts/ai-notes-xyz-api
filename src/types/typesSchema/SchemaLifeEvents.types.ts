@@ -10,7 +10,7 @@ export interface ILifeEvents extends Document {
     description: string;
     categoryId: mongoose.Schema.Types.ObjectId | null;
     categorySubId: mongoose.Schema.Types.ObjectId | null;
-    isStarred: boolean;
+    isStar: boolean;
     eventImpact: string;
     tags: string[];
 
