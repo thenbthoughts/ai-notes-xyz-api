@@ -59,6 +59,38 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        // stage -> match -> category
+        const arg_categoryId = req.body.categoryId;
+        if (typeof arg_categoryId === 'string') {
+            if (arg_categoryId.length === 24) {
+                let categoryId = null as mongoose.Types.ObjectId | null;
+                categoryId = arg_categoryId ? mongoose.Types.ObjectId.createFromHexString(arg_categoryId) : null;
+                if (categoryId) {
+                    if (categoryId.toHexString().length === 24) {
+                        tempStage = { $match: { categoryId: categoryId } };
+                        pipelineDocument.push(tempStage);
+                        pipelineCount.push(tempStage);
+                    }
+                }
+            }
+        }
+
+        // stage -> match -> category
+        const arg_categorySubId = req.body.categorySubId;
+        if (typeof arg_categorySubId === 'string') {
+            if (arg_categorySubId.length === 24) {
+                let categorySubId = null as mongoose.Types.ObjectId | null;
+                categorySubId = arg_categorySubId ? mongoose.Types.ObjectId.createFromHexString(arg_categorySubId) : null;
+                if (categorySubId) {
+                    if (categorySubId.toHexString().length === 24) {
+                        tempStage = { $match: { categorySubId: categorySubId } };
+                        pipelineDocument.push(tempStage);
+                        pipelineCount.push(tempStage);
+                    }
+                }
+            }
+        }
+
         // stage -> match -> isStar
         if (typeof req.body?.isStar === 'string') {
             if (
@@ -78,7 +110,6 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
 
         // stage -> match -> eventImpact
         if (typeof req.body?.eventImpact === 'string') {
-            console.log(req.body?.eventImpact);
             if (
                 [
                     'very-low',
@@ -129,9 +160,6 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
                         ],
                     },
                 };
-                console.log(JSON.stringify([
-                    tempStage,
-                ]))
                 pipelineDocument.push(tempStage);
                 pipelineCount.push(tempStage);
             }
