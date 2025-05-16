@@ -1,0 +1,440 @@
+[
+  {
+    "name": "Career & Professional",
+    "subcategory": [
+      "New Position",
+      "Promotion",
+      "Demotion",
+      "Career Shift",
+      "Degree Completion",
+      "Certification",
+      "Training Program",
+      "Workshop",
+      "Award",
+      "Publication",
+      "Project Completion",
+      "Professional Recognition",
+      "Work Anniversary",
+      "Retirement",
+      "First Job",
+      "Leadership Role",
+      "Starting Business",
+      "Partnership",
+      "Acquisition",
+      "Expansion",
+      "Closing"
+    ]
+  },
+  {
+    "name": "Personal Development",
+    "subcategory": [
+      "Learning New Skill",
+      "Mastery Achievement",
+      "Teaching Others",
+      "Setting Goals",
+      "Goal Achievement",
+      "Revising Goals",
+      "Establishing Habit",
+      "Breaking Habit",
+      "Milestone",
+      "Personal Challenge",
+      "Overcoming Fear",
+      "Growth Moment"
+    ]
+  },
+  {
+    "name": "Relationships",
+    "subcategory": [
+      "Birth",
+      "Adoption",
+      "Marriage",
+      "Divorce",
+      "Death",
+      "Reunion",
+      "New Friendship",
+      "Friendship Milestone",
+      "Reconciliation",
+      "First Date",
+      "Relationship Milestone",
+      "Engagement",
+      "Wedding",
+      "Anniversary",
+      "Community Involvement",
+      "Group Joining",
+      "Leadership Role",
+      "Mentorship"
+    ]
+  },
+  {
+    "name": "Health & Wellness",
+    "subcategory": [
+      "Medical Procedure",
+      "Diagnosis",
+      "Recovery Milestone",
+      "Physical Achievement",
+      "Therapy Milestone",
+      "Mindfulness Practice",
+      "Stress Management",
+      "Weight Goal",
+      "Strength Goal",
+      "Endurance Milestone",
+      "Sports Achievement",
+      "Diet Change",
+      "Eating Habit Milestone",
+      "Cooking Achievement"
+    ]
+  },
+  {
+    "name": "Financial",
+    "subcategory": [
+      "Savings Goal",
+      "Emergency Fund Completion",
+      "New Investment",
+      "Portfolio Milestone",
+      "Return Achievement",
+      "Loan Acquired",
+      "Debt Repayment Milestone",
+      "Becoming Debt-Free",
+      "Home Purchase",
+      "Vehicle Purchase",
+      "Business Asset",
+      "Major Appliance",
+      "Income Milestone",
+      "Passive Income Stream",
+      "Bonus/Windfall"
+    ]
+  },
+  {
+    "name": "Home & Living",
+    "subcategory": [
+      "Moving Homes",
+      "Neighborhood Change",
+      "City/Country Move",
+      "First Apartment",
+      "Home Purchase",
+      "Renovation",
+      "Downsizing",
+      "New Household Formation",
+      "Combining Households",
+      "Empty Nest",
+      "Renovation Project",
+      "Decoration Milestone",
+      "Garden Achievement"
+    ]
+  },
+  {
+    "name": "Travel & Experiences",
+    "subcategory": [
+      "First Visit",
+      "Country/Continent Achievement",
+      "Return to Meaningful Place",
+      "Bucket List Item",
+      "New Experience",
+      "Challenge Completion",
+      "Festival Attendance",
+      "Cultural Immersion",
+      "Language Milestone",
+      "Vacation",
+      "Retreat",
+      "Sabbatical",
+      "Staycation"
+    ]
+  },
+  {
+    "name": "Creative & Intellectual",
+    "subcategory": [
+      "Art Creation",
+      "Performance",
+      "Exhibition",
+      "Publication",
+      "Course Completion",
+      "Book Goal",
+      "Research Project",
+      "New Hobby",
+      "Hobby Milestone",
+      "Competition",
+      "Mastery Level",
+      "Reading Goal",
+      "Writing Achievement",
+      "Teaching Others"
+    ]
+  },
+  {
+    "name": "Spiritual & Personal Values",
+    "subcategory": [
+      "Religious Milestone",
+      "Spiritual Retreat",
+      "Faith Community Role",
+      "Value Clarification",
+      "Living According to Values",
+      "Value-Based Decision",
+      "Purpose Discovery",
+      "Legacy Work",
+      "Meaningful Contribution",
+      "Ceremony",
+      "Celebration",
+      "Commemoration",
+      "Anniversary"
+    ]
+  },
+  {
+    "name": "Civic & Community",
+    "subcategory": [
+      "New Role",
+      "Service Milestone",
+      "Leadership Position",
+      "Cause Participation",
+      "Campaign Involvement",
+      "Advocacy Achievement",
+      "Voting",
+      "Citizenship Status",
+      "Civic Duty",
+      "Public Service",
+      "Community Role",
+      "Neighborhood Improvement",
+      "Social Impact"
+    ]
+  },
+  {
+    "name": "Life Transitions",
+    "subcategory": [
+      "Birthday Decades",
+      "Coming of Age",
+      "Retirement Age",
+      "Childhood Events",
+      "Adolescence",
+      "Adulthood",
+      "Elderhood",
+      "Self-Discovery",
+      "Identity Affirmation",
+      "Name Change",
+      "Starting Over",
+      "New Beginning",
+      "Chapter Closing"
+    ]
+  },
+  {
+    "name": "Digital & Technology Life",
+    "subcategory": [
+      "First Website",
+      "App Launch",
+      "Online Community Building",
+      "New Device Mastery",
+      "Digital Tool Integration",
+      "Tech Upgrade",
+      "Social Media Milestone",
+      "Content Creation Achievement",
+      "Follower Count",
+      "Tech Break",
+      "Screen Time Reduction",
+      "Digital Minimalism"
+    ]
+  },
+  {
+    "name": "Environmental & Sustainability",
+    "subcategory": [
+      "Waste Reduction",
+      "Carbon Footprint Decrease",
+      "Sustainable Switch",
+      "Gardening Achievement",
+      "Wildlife Encounter",
+      "Natural Habitat Visit",
+      "Environmental Volunteering",
+      "Restoration Project",
+      "Advocacy Work",
+      "Zero-Waste Milestone",
+      "Renewable Energy Adoption",
+      "Minimalism Journey"
+    ]
+  },
+  {
+    "name": "Legacy & Heritage",
+    "subcategory": [
+      "Genealogy Discovery",
+      "Heritage Connection",
+      "Family Tree Completion",
+      "Will/Estate Planning",
+      "Ethical Will",
+      "Memory Preservation",
+      "Receiving Heirloom",
+      "Creating Heirloom",
+      "Passing Down Tradition",
+      "Cultural Heritage Exploration",
+      "DNA Test",
+      "Family Reunion"
+    ]
+  },
+  {
+    "name": "Parenting & Caregiving",
+    "subcategory": [
+      "First Steps",
+      "First Words",
+      "School Milestones",
+      "Graduation",
+      "Infant Care",
+      "Toddler Years",
+      "Teen Parenting",
+      "Empty Nest",
+      "Elder Care Beginning",
+      "Care Milestone",
+      "Respite Achievement",
+      "Life Skill Transfer",
+      "Value Teaching",
+      "Mentorship"
+    ]
+  },
+  {
+    "name": "Celebration & Commemoration",
+    "subcategory": [
+      "Holiday Traditions",
+      "Cultural Festivals",
+      "Annual Rituals",
+      "Death Anniversary",
+      "Survival Milestone",
+      "Recovery Mark",
+      "Award Ceremonies",
+      "Recognition Events",
+      "Completion Celebrations",
+      "Graduation Ceremonies",
+      "Retirement Parties",
+      "Moving Celebrations"
+    ]
+  },
+  {
+    "name": "Resilience & Recovery",
+    "subcategory": [
+      "Illness Recovery",
+      "Trauma Processing",
+      "Hardship Navigation",
+      "Therapy Breakthrough",
+      "Coping Skill Mastery",
+      "Support Group",
+      "Change Acceptance",
+      "New Normal Establishment",
+      "Post-Crisis Growth",
+      "Physical Healing",
+      "Emotional Recovery",
+      "Relationship Repair"
+    ]
+  },
+  {
+    "name": "Learning & Growth Mindset",
+    "subcategory": [
+      "Adult Learning",
+      "New Subject Mastery",
+      "Knowledge Expansion",
+      "Productive Failure",
+      "Lesson Integration",
+      "Second Attempt",
+      "Paradigm Change",
+      "Belief Evolution",
+      "Worldview Expansion",
+      "Life Lesson Recognition",
+      "Wisdom Application",
+      "Mentorship"
+    ]
+  },
+  {
+    "name": "Self-Care & Personal Boundaries",
+    "subcategory": [
+      "Sabbatical",
+      "Retreat",
+      "Significant Rest Achievement",
+      "New Personal Boundary",
+      "Boundary Enforcement",
+      "Relationship Reset",
+      "Intentional Joy Practice",
+      "Pleasure Priority",
+      "Fun Milestone",
+      "Work-Life Balance Achievement",
+      "Time Audit",
+      "Schedule Restructuring"
+    ]
+  },
+  {
+    "name": "Cultural & Identity Exploration",
+    "subcategory": [
+      "Cultural Practice Adoption",
+      "Heritage Learning",
+      "Cultural Connection",
+      "Identity Exploration",
+      "Gender Journey",
+      "Cultural Identity",
+      "Language Learning",
+      "Cultural Immersion",
+      "Cross-Cultural Bridge",
+      "Community Finding",
+      "Identity Affirmation",
+      "Group Connection"
+    ]
+  },
+  {
+    "name": "Ethical & Value-Based Life",
+    "subcategory": [
+      "Conscientious Consumer Decision",
+      "Ethical Career Change",
+      "Values-Based Choice",
+      "Philanthropy Milestone",
+      "Mentoring Relationship",
+      "Community Contribution",
+      "Life-Value Realignment",
+      "Integrity Moment",
+      "Conscientious Stand",
+      "Ethical Dilemma Navigation",
+      "Moral Reasoning Development",
+      "Principled Action"
+    ]
+  },
+  {
+    "name": "Seasonal & Cyclical Events",
+    "subcategory": [
+      "Year-End Review",
+      "Birthday Reflection",
+      "Anniversary Contemplation",
+      "Season Preparation",
+      "Seasonal Ritual",
+      "Weather Adaptation",
+      "Beginning/Ending Recognition",
+      "Cycle Completion",
+      "New Cycle Initiation",
+      "Moon Phase Practice",
+      "Solstice/Equinox Observance",
+      "Harvest Recognition"
+    ]
+  },
+  {
+    "name": "Social Justice & Activism",
+    "subcategory": [
+      "Learning About Issue",
+      "Perspective Transformation",
+      "Allyship Development",
+      "First Protest",
+      "Advocacy Campaign",
+      "Policy Change Work",
+      "Group Formation",
+      "Coalition Building",
+      "Movement Participation",
+      "Reparative Action",
+      "Justice Initiative",
+      "Equity Advancement"
+    ]
+  },
+  {
+    "name": "Non-Traditional Life Paths",
+    "subcategory": [
+      "Van Life Beginning",
+      "Communal Living",
+      "Off-Grid Transition",
+      "Gap Year",
+      "Sabbatical",
+      "Career Break",
+      "Life Restructuring",
+      "Digital Nomad Transition",
+      "Remote Work Adaptation",
+      "Travel Lifestyle",
+      "Downsizing Milestone",
+      "Minimalism Adoption",
+      "Intentional Limitation"
+    ]
+  }
+]
