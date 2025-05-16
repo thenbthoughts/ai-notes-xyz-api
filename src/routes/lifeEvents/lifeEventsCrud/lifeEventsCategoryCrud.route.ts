@@ -88,6 +88,14 @@ router.post('/lifeEventCategoryGet', middlewareUserAuth, async (req: Request, re
         };
         pipelineDocument.push(tempStage);
 
+        // stage -> sort -> by name
+        tempStage = {
+            $sort: {
+                name: 1
+            }
+        };
+        pipelineDocument.push(tempStage);
+
         // stageCount -> count
         pipelineCount.push({
             $count: 'count'
