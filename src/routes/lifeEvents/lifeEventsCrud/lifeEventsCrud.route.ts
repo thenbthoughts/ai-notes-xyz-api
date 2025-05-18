@@ -130,6 +130,23 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        if (typeof req.body?.startDate === 'string' && typeof req.body?.endDate === 'string') {
+            let startDateUtc = `${req.body.startDate}`;
+            let endDateUtc = `${req.body.endDate}`;
+            if (startDateUtc.length >= 24 && endDateUtc.length >= 24) {
+                tempStage = {
+                    $match: {
+                        eventDateUtc: {
+                            $gte: new Date(startDateUtc),
+                            $lte: new Date(endDateUtc),
+                        },
+                    },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> search
         if (typeof req.body?.search === 'string') {
             if (req.body.search.length >= 1) {
