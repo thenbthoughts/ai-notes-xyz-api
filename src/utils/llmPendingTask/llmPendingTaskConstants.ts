@@ -9,6 +9,12 @@ const llmPendingTaskTypes = {
             generateAudioById: 'pageChat_generateAudioById',
             generateNextResponseById: 'pageChat_generateNextResponseById',
         },
+
+        lifeEvents: {
+            // life events
+            generateLifeEventAiSummaryById: 'pageLifeEvents_generateLifeEventAiSummaryById',
+            generateLifeEventAiTagsById: 'pageLifeEvents_generateLifeEventAiTagsById',
+        },
     }
 };
 

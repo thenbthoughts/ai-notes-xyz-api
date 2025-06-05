@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import { ModelLifeEvents } from '../../../schema/SchemaLifeEvents.schema';
+import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
+import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 
 const router = Router();
 
@@ -381,6 +383,13 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
             );
             console.log(newLifeEvent);
         }
+
+        // generate ai tags by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById,
+            targetRecordId: _id,
+        });
 
         return res.json({
             message: 'Life event edited successfully',

@@ -3,6 +3,7 @@ import { ModelLlmPendingTaskCron } from "../../schema/SchemaLlmPendingTaskCron.s
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
 import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById";
 import generateChatTagsById from "./page/chat/generateChatTagsById";
+import generateLifeEventAiTagsById from "./page/lifeEvents/generateLifeEventAiTagsById";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -35,6 +36,16 @@ const llmPendingTaskProcessFunc = async ({
             });
         } else if (resultTask.taskType === llmPendingTaskTypes.page.chat.generateChatTagsById) {
             isTaskDone = await generateChatTagsById({
+                targetRecordId: resultTask.targetRecordId,
+            });
+        } else if (resultTask.taskType === llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById) {
+            // TODO
+            // isTaskDone = await generateLifeEventAiSummaryById({
+            //     targetRecordId: resultTask.targetRecordId,
+            // });
+        } else if (resultTask.taskType === llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById) {
+            console.log('generateLifeEventAiTagsById', resultTask.targetRecordId);
+            isTaskDone = await generateLifeEventAiTagsById({
                 targetRecordId: resultTask.targetRecordId,
             });
         }

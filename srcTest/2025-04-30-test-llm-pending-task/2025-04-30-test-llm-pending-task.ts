@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import envKeys from "../../src/config/envKeys";
 import { ModelLlmPendingTaskCron } from "../../src/schema/SchemaLlmPendingTaskCron.schema";
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
+import { llmPendingTaskTypes } from "../../src/utils/llmPendingTask/llmPendingTaskConstants";
 
 // Example usage
 const init = async () => {
@@ -11,8 +12,8 @@ const init = async () => {
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": "pageChat_generateChatThreadTitleById",
-        "targetRecordId": "6813386d3215f6833cc84d19",
+        "taskType": llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById,
+        "targetRecordId": "681f8c50c82023d7d603d3be",
         "aiModelName": "meta-llama/llama-4-scout-17b-16e-instruct",
         "aiModelProvider": "groq",
     });
