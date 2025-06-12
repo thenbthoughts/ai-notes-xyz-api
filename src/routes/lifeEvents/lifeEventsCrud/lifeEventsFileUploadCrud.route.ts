@@ -2,47 +2,42 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import { ModelLifeEvents } from '../../../schema/SchemaLifeEvents.schema';
 import { ModelLifeEventsFileUpload } from '../../../schema/SchemaLifeEventFileUpload.schema';
-import { ILifeEventsFileUpload } from '../../../types/typesSchema/SchemaLifeEventFileUpload.types';
 
 const router = Router();
 
 // Get Life Events File Upload API
 router.post('/lifeEventsFileUploadGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        let page = 1;
-        let perPage = 10;
+        const pipelineDocument: PipelineStage[] = [];
+        let tempStage: PipelineStage;
 
-        if (typeof req.body?.page === 'number' && req.body.page >= 1) {
-            page = req.body.page;
-        }
-        if (typeof req.body?.perPage === 'number' && req.body.perPage >= 1) {
-            perPage = req.body.perPage;
-        }
-
-        const matchStage: PipelineStage = {
+        tempStage = {
             $match: {
                 username: res.locals.auth_username,
             },
         };
+        pipelineDocument.push(tempStage);
 
-        const skipStage: PipelineStage = {
-            $skip: (page - 1) * perPage,
+        // stage -> match -> lifeEventId
+        const arg_lifeEventId = req.body.lifeEventId;
+        let lifeEventId = null as mongoose.Types.ObjectId | null;
+        lifeEventId = arg_lifeEventId ? mongoose.Types.ObjectId.createFromHexString(arg_lifeEventId) : null;
+        if (!lifeEventId) {
+            return res.status(400).json({ message: 'Life event ID cannot be null' });
+        }
+        tempStage = {
+            $match: {
+                lifeEventId: lifeEventId,
+            }
         };
+        pipelineDocument.push(tempStage);
 
-        const limitStage: PipelineStage = {
-            $limit: perPage,
-        };
-
-        const pipeline: PipelineStage[] = [matchStage, skipStage, limitStage];
-
-        const docs = await ModelLifeEventsFileUpload.aggregate(pipeline);
-        const totalCount = await ModelLifeEventsFileUpload.countDocuments(matchStage.$match);
+        const docs = await ModelLifeEventsFileUpload.aggregate(pipelineDocument);
 
         return res.json({
             message: 'Life events file uploads retrieved successfully',
-            count: totalCount,
+            count: docs.length,
             docs,
         });
     } catch (error) {

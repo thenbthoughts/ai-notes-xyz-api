@@ -5,7 +5,12 @@ import { ILifeEventsFileUpload } from '../types/typesSchema/SchemaLifeEventFileU
 // LifeEventsFileUpload Schema
 const lifeEventsFileUploadSchema = new Schema<ILifeEventsFileUpload>({
     // file fields
-    fileType: { type: String, required: true, default: '' },
+    fileType: {
+        type: String,
+        required: true,
+        default: '',
+        // fileType "image", "video", "audio" or "file"
+    },
     fileUrl: { type: String, required: true, default: '' },
     fileTitle: { type: String, default: '' },
     fileDescription: { type: String, default: '' },

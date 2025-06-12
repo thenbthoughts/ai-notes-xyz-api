@@ -26,6 +26,7 @@ import routesTaskComments from './task/routesTaskComments.route';
 // page -> life events
 import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.route';
 import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsCategoryCrud.route';
+import routesLifeEventFileUploadCrud from './lifeEvents/lifeEventsCrud/lifeEventsFileUploadCrud.route';
 
 import routesMemoCrud from './memo/memoCrud.route';
 
@@ -69,6 +70,7 @@ router.use('/task-comments/crud', routesTaskComments);
 // router -> life events
 router.use('/life-events/crud', routesLifeEventsCrud);
 router.use('/life-events/category-crud', routesLifeEventCategoryCrud);
+router.use('/life-events/file-upload-crud', routesLifeEventFileUploadCrud);
 
 // memo -> 
 router.use('/memos/crud', routesMemoCrud);
