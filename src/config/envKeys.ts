@@ -4,6 +4,7 @@ const envKeys = {
 
     // additional origin
     FRONTEND_CLIENT_URL: process.env.FRONTEND_CLIENT_URL || 'localhost:3000',
+    API_URL: process.env.API_URL || 'http://localhost:2000',
 
     // mongodb url
     MONGODB_URI: process.env.MONGODB_URI || '',

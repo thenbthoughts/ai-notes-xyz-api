@@ -16,7 +16,9 @@ app.use(cors({
         'http://localhost:3000',
         'localhost:3000',
         envKeys.FRONTEND_CLIENT_URL,
-        `https://${envKeys.FRONTEND_CLIENT_URL}`
+        `https://${envKeys.FRONTEND_CLIENT_URL}`,
+        envKeys.API_URL,
+        `https://${envKeys.API_URL}`,
     ],
     methods: 'GET,POST,PUT,DELETE',
     allowedHeaders: ['Content-Type', 'Set-Cookie'],
