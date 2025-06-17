@@ -402,6 +402,13 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
             targetRecordId: _id,
         });
 
+        // generate ai summary by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById,
+            targetRecordId: _id,
+        });
+
         return res.json({
             message: 'Life event edited successfully',
         });

@@ -12,8 +12,8 @@ const init = async () => {
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById,
-        "targetRecordId": "681f8c50c82023d7d603d3be",
+        "taskType": llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById,
+        "targetRecordId": "681f884dc82023d7d603d120",
         "aiModelName": "meta-llama/llama-4-scout-17b-16e-instruct",
         "aiModelProvider": "groq",
     });
@@ -21,7 +21,9 @@ const init = async () => {
     console.time('total-time');
     const resultInsert_id = resultInsert._id as string;
     const result = await llmPendingTaskProcessFunc({
-        _id: mongoose.Types.ObjectId.createFromHexString( resultInsert_id.toString()),
+        _id: mongoose.Types.ObjectId.createFromHexString(
+            resultInsert_id.toString()
+        ),
     })
     console.log('result: ', result);
     console.timeEnd('total-time');
