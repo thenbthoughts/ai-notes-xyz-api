@@ -1,4 +1,9 @@
-[
+export interface LifeCategory {
+  name: string;
+  subcategory: string[];
+}
+
+const lifeCategoriesAiJson: LifeCategory[] = [
   {
     "name": "Career Development",
     "subcategory": [
@@ -6,7 +11,8 @@
       "Education",
       "Training",
       "Entrepreneurship",
-      "Professional Milestones"
+      "Professional Milestones",
+      "Other"
     ]
   },
   {
@@ -15,7 +21,8 @@
       "Childhood Milestones",
       "Skill Development",
       "Goal Achievement",
-      "Self-Discovery"
+      "Self-Discovery",
+      "Other"
     ]
   },
   {
@@ -23,7 +30,8 @@
     "subcategory": [
       "Family Changes",
       "Parenting",
-      "Caregiving"
+      "Caregiving",
+      "Other"
     ]
   },
   {
@@ -31,7 +39,8 @@
     "subcategory": [
       "Relationship Milestones",
       "Loss",
-      "Bereavement"
+      "Bereavement",
+      "Other"
     ]
   },
   {
@@ -40,7 +49,8 @@
       "Physical Health",
       "Mental Health",
       "Healthy Habits",
-      "Chronic Conditions"
+      "Chronic Conditions",
+      "Other"
     ]
   },
   {
@@ -59,7 +69,8 @@
       "Relocation",
       "Home Improvement",
       "Lifestyle Choices",
-      "Environmental Adaptation"
+      "Environmental Adaptation",
+      "Other"
     ]
   },
   {
@@ -71,14 +82,16 @@
       "New Experiences",
       "Leisure",
       "Recreation",
-      "Peak Experiences"
+      "Peak Experiences",
+      "Other"
     ]
   },
   {
     "name": "Community",
     "subcategory": [
       "Civic Engagement",
-      "Community Leadership"
+      "Community Leadership",
+      "Other"
     ]
   },
   {
@@ -86,7 +99,8 @@
     "subcategory": [
       "Spiritual Development",
       "Legacy",
-      "Heritage"
+      "Heritage",
+      "Other"
     ]
   },
   {
@@ -96,7 +110,16 @@
       "Life Shifts",
       "Ceremonies",
       "Rituals",
-      "Adapting to Change"
+      "Adapting to Change",
+      "Other"
+    ]
+  },
+  {
+    "name": "Other",
+    "subcategory": [
+      "Other"
     ]
   }
-]
+];
+
+export default lifeCategoriesAiJson;

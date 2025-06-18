@@ -49,6 +49,8 @@ const lifeEventsSchema = new Schema<ILifeEvents>({
     aiSummary: { type: String, default: '' },
     aiTags: { type: [String], default: [] },
     aiSuggestions: { type: String, default: '' },
+    aiCategory: { type: String, default: 'Other' },
+    aiSubCategory: { type: String, default: 'Other' },
 
     // auto
     createdAtUtc: { type: Date, default: null },

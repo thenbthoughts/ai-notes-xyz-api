@@ -5,6 +5,7 @@ import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById
 import generateChatTagsById from "./page/chat/generateChatTagsById";
 import generateLifeEventAiTagsById from "./page/lifeEvents/generateLifeEventAiTagsById";
 import generateLifeEventAiSummaryById from "./page/lifeEvents/generateLifeEventAiSummaryById";
+import generateLifeEventAiCategoryById from "./page/lifeEvents/generateLifeEventAiCategoryById";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -46,6 +47,10 @@ const llmPendingTaskProcessFunc = async ({
         } else if (resultTask.taskType === llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById) {
             console.log('generateLifeEventAiTagsById', resultTask.targetRecordId);
             isTaskDone = await generateLifeEventAiTagsById({
+                targetRecordId: resultTask.targetRecordId,
+            });
+        } else if (resultTask.taskType === llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiCategoryById) {
+            isTaskDone = await generateLifeEventAiCategoryById({
                 targetRecordId: resultTask.targetRecordId,
             });
         }

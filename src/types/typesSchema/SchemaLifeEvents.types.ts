@@ -23,6 +23,8 @@ export interface ILifeEvents extends Document {
     aiSummary: string;
     aiTags: string[];
     aiSuggestions: string;
+    aiCategory: string;
+    aiSubCategory: string;
 
     // auto
     createdAtUtc: Date;

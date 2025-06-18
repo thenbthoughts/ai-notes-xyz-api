@@ -12,7 +12,7 @@ const init = async () => {
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById,
+        "taskType": llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiCategoryById,
         "targetRecordId": "681f884dc82023d7d603d120",
         "aiModelName": "meta-llama/llama-4-scout-17b-16e-instruct",
         "aiModelProvider": "groq",
