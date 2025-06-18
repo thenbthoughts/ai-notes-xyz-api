@@ -64,17 +64,25 @@ const fetchLlmTags = async ({
             }
         }
 
-        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from user life events.
-        Your task is to suggest category and subcategory based on the content provided by the user.
-        The category should be from the following list: ${lifeCategoriesAiJsonString}.
+        let systemPrompt = `
+        You are a JSON-based AI assistant trained to classify life events into structured categories.
+        Your task is to analyze the user's life event description and suggest the most appropriate "category" and "subcategory" based strictly on the provided list.
 
-        Output the result in JSON format as follows:
+        The list of categories and their subcategories is as follows:
+        ${lifeCategoriesAiJsonString}
+
+        Your response must:
+        - Select only one most relevant category and subcategory.
+        - Ensure the values are exact matches from the list (no new values or variants).
+        - Avoid generic or vague matches if a more specific one exists.
+        - Default to category "Other" and subcategory "Other" if no good match is found.
+
+        Respond only with the following JSON format (no extra text):
         {
             "category": "",
             "subcategory": ""
         }
-
-        Respond only with the JSON structure.`;
+        `;
 
         const data: tsRequestData = {
             messages: [
@@ -196,10 +204,10 @@ const generateLifeEventAiCategoryById = async ({
         let argContent = `Title: ${lifeEventFirst.title}`;
         argContent += `Description: ${lifeEventFirst.description}\n`;
         argContent += `Event Impact: ${lifeEventFirst.eventImpact}\n`;
-        if(lifeEventFirst.isStar) {
+        if (lifeEventFirst.isStar) {
             argContent += `Is Star: Starred life event\n`;
         }
-        if(lifeEventFirst.tags.length >= 1) {
+        if (lifeEventFirst.tags.length >= 1) {
             argContent += `Tags: ${lifeEventFirst.tags.join(', ')}\n`;
         }
         argContent += `Event Date: ${lifeEventFirst.eventDateUtc}\n`;
