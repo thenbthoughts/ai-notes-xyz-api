@@ -7,11 +7,11 @@ const lifeCategoriesAiJson: LifeCategory[] = [
   {
     "name": "Career Development",
     "subcategory": [
+      "Professional Milestones",
       "Job Changes",
       "Education",
       "Training",
       "Entrepreneurship",
-      "Professional Milestones",
       "Other"
     ]
   },
