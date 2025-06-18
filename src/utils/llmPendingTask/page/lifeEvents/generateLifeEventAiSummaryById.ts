@@ -135,12 +135,12 @@ const  generateLifeEventAiSummaryById = async ({
 
         let modelProvider = '' as "groq" | "openrouter";
         let llmAuthToken = '';
-        if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
-        } else if (apiKeys.apiKeyOpenrouterValid) {
+        if (apiKeys.apiKeyOpenrouterValid) {
             modelProvider = 'openrouter';
             llmAuthToken = apiKeys.apiKeyOpenrouter;
+        } else if (apiKeys.apiKeyGroqValid) {
+            modelProvider = 'groq';
+            llmAuthToken = apiKeys.apiKeyGroq;
         }
 
         const updateObj = {
