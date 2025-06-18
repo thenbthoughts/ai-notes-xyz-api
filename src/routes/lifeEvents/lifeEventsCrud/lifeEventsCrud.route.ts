@@ -93,6 +93,26 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        // stage -> match -> aiCategory
+        const arg_aiCategory = req.body.aiCategory;
+        if (typeof arg_aiCategory === 'string') {
+            if (arg_aiCategory.length >= 1) {
+                tempStage = { $match: { aiCategory: arg_aiCategory } };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
+        // stage -> match -> aiSubCategory
+        const arg_aiSubCategory = req.body.aiSubCategory;
+        if (typeof arg_aiSubCategory === 'string') {
+            if (arg_aiSubCategory.length >= 1) {
+                tempStage = { $match: { aiSubCategory: arg_aiSubCategory } };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> match -> isStar
         if (typeof req.body?.isStar === 'string') {
             if (
