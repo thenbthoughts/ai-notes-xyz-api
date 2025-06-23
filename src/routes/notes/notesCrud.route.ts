@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
+import { ModelNotesWorkspace } from '../../schema/schemaNotes/SchemaNotesWorkspace.schema';
 
 const router = Router();
 
@@ -207,10 +208,31 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
     try {
         let title = `Empty Note - ${new Date().toDateString()} ${new Date().toLocaleTimeString().substring(0, 7)}`;
 
+        // stage -> match -> notesWorkspaceId
+        let notesWorkspaceId = null as mongoose.Types.ObjectId | null;
+        const arg_notesWorkspaceId = req.body.notesWorkspaceId;
+        if (typeof arg_notesWorkspaceId === 'string') {
+            if (arg_notesWorkspaceId.length === 24) {
+                notesWorkspaceId = arg_notesWorkspaceId ? mongoose.Types.ObjectId.createFromHexString(arg_notesWorkspaceId) : null;
+            }
+        }
+        if (notesWorkspaceId === null) {
+            return res.status(400).json({ message: 'Notes workspace ID cannot be null' });
+        }
+
+        // does workspace belong to user
+        const notesWorkspace = await ModelNotesWorkspace.findOne({
+            _id: notesWorkspaceId,
+            username: res.locals.auth_username,
+        });
+        if (!notesWorkspace) {
+            return res.status(400).json({ message: 'Notes workspace not found or unauthorized' });
+        }
+
         const now = new Date();
         const newNote = await ModelNotes.create({
             username: res.locals.auth_username,
-            notesWorkspaceId: req.body.notesWorkspaceId ? mongoose.Types.ObjectId.createFromHexString(req.body.notesWorkspaceId) : null,
+            notesWorkspaceId: notesWorkspaceId,
             title: title,
             description: req.body.description || '',
             isStar: req.body.isStar === true,
@@ -254,9 +276,6 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
         }
         if (typeof req.body.description === 'string') {
             updateObj.description = req.body.description;
-        }
-        if (typeof req.body.notesWorkspaceId === 'string' && req.body.notesWorkspaceId.length === 24) {
-            updateObj.notesWorkspaceId = mongoose.Types.ObjectId.createFromHexString(req.body.notesWorkspaceId);
         }
         if (typeof req.body.isStar === 'boolean') {
             updateObj.isStar = req.body.isStar;
