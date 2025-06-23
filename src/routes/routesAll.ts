@@ -23,6 +23,10 @@ import routeTaskAiGenerated from './task/taskAiGenerated.route';
 import routesTaskSub from './task/routesTaskSub.route';
 import routesTaskComments from './task/routesTaskComments.route';
 
+// page -> notes
+import routesNotesCrud from './notes/notesCrud.route';
+import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
+
 // page -> life events
 import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.route';
 import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsCategoryCrud.route';
@@ -67,6 +71,10 @@ router.use('/task-sub/crud', routesTaskSub);
 router.use('/task-board/crud', routesTaskBoard);
 router.use('/task-board-list/crud', routesTaskBoardList);
 router.use('/task-comments/crud', routesTaskComments);
+
+// routes -> notes
+router.use('/notes/crud', routesNotesCrud);
+router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
 
 // router -> life events
 router.use('/life-events/crud', routesLifeEventsCrud);
