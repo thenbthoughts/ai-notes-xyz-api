@@ -27,6 +27,9 @@ import routesTaskComments from './task/routesTaskComments.route';
 import routesNotesCrud from './notes/notesCrud.route';
 import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
 
+// page -> info vault
+import routesInfoVaultAll from './infoVault/infoVaultAll.route';
+
 // page -> life events
 import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.route';
 import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsCategoryCrud.route';
@@ -75,6 +78,9 @@ router.use('/task-comments/crud', routesTaskComments);
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);
 router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
+
+// routes -> info vault
+router.use('/info-vault', routesInfoVaultAll);
 
 // router -> life events
 router.use('/life-events/crud', routesLifeEventsCrud);
