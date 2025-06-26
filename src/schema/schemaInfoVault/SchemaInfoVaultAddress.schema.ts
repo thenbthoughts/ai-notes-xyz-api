@@ -16,6 +16,9 @@ const infoVaultAddressSchema = new Schema<IInfoVaultAddress>({
     state: { type: String, default: '' },
     poBox: { type: String, default: '' },
     label: { type: String, default: '' },
+    latitude: { type: Number, default: 0 },
+    longitude: { type: Number, default: 0 },
+    isPrimary: { type: Boolean, default: false },
 
     // auto
     createdAtUtc: { type: Date, default: null },

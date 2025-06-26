@@ -222,6 +222,9 @@ router.post('/infoVaultAddressAdd', middlewareUserAuth, async (req: Request, res
             state: req.body.state || '',
             poBox: req.body.poBox || '',
             label: req.body.label || 'home',
+            latitude: req.body.latitude || 0,
+            longitude: req.body.longitude || 0,
+            isPrimary: req.body.isPrimary || false,
             createdAtUtc: now,
             createdAtIpAddress: req.ip || '',
             createdAtUserAgent: req.headers['user-agent'] || '',
@@ -274,6 +277,16 @@ router.post('/infoVaultAddressEdit', middlewareUserAuth, async (req: Request, re
         if (typeof req.body.label === 'string') {
             updateObj.label = req.body.label;
         }
+        if (typeof req.body.latitude === 'number') {
+            updateObj.latitude = req.body.latitude;
+        }
+        if (typeof req.body.longitude === 'number') {
+            updateObj.longitude = req.body.longitude;
+        }
+        if (typeof req.body.isPrimary === 'boolean') {
+            updateObj.isPrimary = req.body.isPrimary;
+        }
+
         updateObj.updatedAtUtc = new Date();
         updateObj.updatedAtIpAddress = req.ip || '';
         updateObj.updatedAtUserAgent = req.headers['user-agent'] || '';

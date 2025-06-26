@@ -15,6 +15,11 @@ export interface IInfoVaultAddress extends Document {
     poBox: string;
     label: string; // e.g., "home", "work", "other"
 
+    latitude: number;
+    longitude: number;
+
+    isPrimary: boolean;
+
     // auto
     createdAtUtc: Date;
     createdAtIpAddress: string;
