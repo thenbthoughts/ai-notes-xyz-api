@@ -90,8 +90,7 @@ router.post('/infoVaultAddressGet', middlewareUserAuth, async (req: Request, res
                     const elementStr = searchQueryArr[index];
                     matchAnd.push({
                         $or: [
-                            { streetAddress: { $regex: elementStr, $options: 'i' } },
-                            { streetAddress2: { $regex: elementStr, $options: 'i' } },
+                            { address: { $regex: elementStr, $options: 'i' } },
                             { city: { $regex: elementStr, $options: 'i' } },
                             { state: { $regex: elementStr, $options: 'i' } },
                             { countryRegion: { $regex: elementStr, $options: 'i' } },
@@ -217,8 +216,7 @@ router.post('/infoVaultAddressAdd', middlewareUserAuth, async (req: Request, res
             infoVaultId: infoVaultId,
             username: res.locals.auth_username,
             countryRegion: req.body.countryRegion || '',
-            streetAddress: req.body.streetAddress || '',
-            streetAddress2: req.body.streetAddress2 || '',
+            address: req.body.address || '',
             city: req.body.city || '',
             pincode: req.body.pincode || '',
             state: req.body.state || '',
@@ -258,11 +256,8 @@ router.post('/infoVaultAddressEdit', middlewareUserAuth, async (req: Request, re
         if (typeof req.body.countryRegion === 'string') {
             updateObj.countryRegion = req.body.countryRegion;
         }
-        if (typeof req.body.streetAddress === 'string') {
-            updateObj.streetAddress = req.body.streetAddress;
-        }
-        if (typeof req.body.streetAddress2 === 'string') {
-            updateObj.streetAddress2 = req.body.streetAddress2;
+        if (typeof req.body.address === 'string') {
+            updateObj.address = req.body.address;
         }
         if (typeof req.body.city === 'string') {
             updateObj.city = req.body.city;

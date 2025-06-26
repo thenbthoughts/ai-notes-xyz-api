@@ -10,8 +10,7 @@ const infoVaultAddressSchema = new Schema<IInfoVaultAddress>({
 
     // fields
     countryRegion: { type: String, default: '' },
-    streetAddress: { type: String, default: '' },
-    streetAddress2: { type: String, default: '' },
+    address: { type: String, default: '' },
     city: { type: String, default: '' },
     pincode: { type: String, default: '' },
     state: { type: String, default: '' },

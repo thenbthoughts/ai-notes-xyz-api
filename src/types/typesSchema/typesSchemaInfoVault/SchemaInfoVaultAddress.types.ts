@@ -8,8 +8,7 @@ export interface IInfoVaultAddress extends Document {
 
     // fields
     countryRegion: string;
-    streetAddress: string;
-    streetAddress2: string;
+    address: string;
     city: string;
     pincode: string;
     state: string;
