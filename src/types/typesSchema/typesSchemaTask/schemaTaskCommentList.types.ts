@@ -5,6 +5,18 @@ export interface tsTaskCommentList extends Document {
     commentText: string;
     isAi: boolean;
 
+    // file fields
+    fileType: string;
+    fileUrl: string;
+    fileTitle: string;
+    fileDescription: string;
+
+    // ai
+    aiTitle: string;
+    aiSummaryContext: string;
+    aiSummarySpecific: string;
+    aiTags: string[];
+
     // auth
     username: string;
 

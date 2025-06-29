@@ -20,13 +20,28 @@ router.post(
             );
             console.log(actionDatetimeObj);
 
-            const { commentText, taskId, isAi } = req.body;
+            const {
+                commentText,
+                taskId,
+
+                // file fields
+                fileType,
+                fileUrl,
+                fileTitle,
+                fileDescription,
+            } = req.body;
             const username = res.locals.auth_username;
 
             const newComment = await ModelTaskComments.create({
                 commentText,
                 taskId: mongoose.Types.ObjectId.createFromHexString(taskId),
                 username,
+
+                // file fields
+                fileType,
+                fileUrl,
+                fileTitle,
+                fileDescription,
 
                 // date time ip
                 ...actionDatetimeObj,
@@ -106,7 +121,6 @@ router.post(
         }
     }
 );
-
 
 // Delete Task Comment API
 router.post('/taskCommentDelete', middlewareUserAuth, async (req: Request, res: Response) => {

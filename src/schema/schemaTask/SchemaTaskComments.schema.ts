@@ -14,6 +14,22 @@ const taskCommentSchema = new Schema<tsTaskCommentList>({
         default: false,
     },
 
+    // file fields
+    fileType: {
+        type: String,
+        default: '',
+        // fileType "image", "video", "audio" or "file"
+    },
+    fileUrl: { type: String, default: '' },
+    fileTitle: { type: String, default: '' },
+    fileDescription: { type: String, default: '' },
+
+    // ai
+    aiTitle: { type: String, default: '' },
+    aiSummaryContext: { type: String, default: '' },
+    aiSummarySpecific: { type: String, default: '' },
+    aiTags: { type: [String], default: [] },
+
     // auth
     username: {
         type: String,
