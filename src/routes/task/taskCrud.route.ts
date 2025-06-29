@@ -76,7 +76,42 @@ router.post(
                 title?: RegExp;
                 description?: RegExp;
                 paginationDateLocalYearMonthStr?: string;
+                priority?: string;
+                isArchived?: boolean;
+                isCompleted?: boolean;
             };
+
+            // Filter by priority
+            if (req.body?.priority) {
+                if (typeof req.body?.priority === 'string') {
+                    if (req.body?.priority.trim() !== '') {
+                        tempStageMatch.priority = req.body?.priority;
+                    }
+                }
+            }
+
+            // Filter by archive status
+            if (req.body?.isArchived) {
+                if (typeof req.body?.isArchived === 'string') {
+                    if (req.body?.isArchived === 'archived') {
+                        tempStageMatch.isArchived = true;
+                    } else if (req.body?.isArchived === 'not-archived') {
+                        tempStageMatch.isArchived = false;
+                    }
+                }
+            }
+
+            // Filter by completion status
+            if (req.body?.isCompleted) {
+                if (typeof req.body?.isCompleted === 'string') {
+                    if (req.body?.isCompleted === 'completed') {
+                        tempStageMatch.isCompleted = true;
+                    } else if (req.body?.isCompleted === 'not-completed') {
+                        tempStageMatch.isCompleted = false;
+                    }
+                }
+            }
+
             tempStage = {
                 $match: {
                     ...tempStageMatch,
