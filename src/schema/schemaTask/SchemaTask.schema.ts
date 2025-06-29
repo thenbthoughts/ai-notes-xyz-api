@@ -17,7 +17,7 @@ const taskSchema = new Schema<tsTaskList>({
     priority: {
         type: String,
         default: '',
-        enum: ['', 'low', 'medium', 'high']
+        enum: ['', 'very-low', 'low', 'medium', 'high', 'very-high']
     },
     dueDate: {
         type: Date,
@@ -45,6 +45,16 @@ const taskSchema = new Schema<tsTaskList>({
         /*
         Values are: 'To Do', 'In Progress', 'Done'
         */
+    },
+
+    // status
+    isArchived: {
+        type: Boolean,
+        default: false,
+    },
+    isCompleted: {
+        type: Boolean,
+        default: false,
     },
 
     labels: {

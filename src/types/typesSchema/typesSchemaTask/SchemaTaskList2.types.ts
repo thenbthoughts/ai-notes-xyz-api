@@ -4,10 +4,14 @@ export interface tsTaskList extends Document{
     // Todo specific fields
     title: string;
     description: string;
-    priority: '' | 'low' | 'medium' | 'high';
     dueDate: Date;
     checklist: string[];
     comments: string[];
+    
+    // status
+    priority: '' | 'very-low' | 'low' | 'medium' | 'high' | 'very-high';
+    isArchived: boolean;
+    isCompleted: boolean;
 
     // labels
     labels: string[];

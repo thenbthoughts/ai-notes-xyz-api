@@ -26,7 +26,7 @@ router.post(
                 // 
                 title,
                 description,
-                priority: '',
+                priority: 'very-low',
                 dueDate: null,
 
                 // current
@@ -129,9 +129,9 @@ router.post(
             const actionDatetimeObj = normalizeDateTimeIpAddress(
                 res.locals.actionDatetime
             );
-            console.log(actionDatetimeObj);
 
-            const { id, title, description, taskStatus, labels } = req.body;
+            const { id, title, description, taskStatus, labels, isArchived, isCompleted, priority } = req.body;
+            
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
                     _id: id,
@@ -142,6 +142,11 @@ router.post(
                     description,
                     taskStatus,
                     labels,
+
+                    // status
+                    isArchived,
+                    isCompleted,
+                    priority: priority || 'very-low',
 
                     // datetime ip
                     updatedAtUtc: actionDatetimeObj.updatedAtUtc,
