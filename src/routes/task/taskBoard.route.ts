@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ModelTaskBoard } from '../../schema/SchemaTaskBoard.schema';
+import { ModelTaskBoard } from '../../schema/schemaTask/SchemaTaskBoard.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 
 // Router

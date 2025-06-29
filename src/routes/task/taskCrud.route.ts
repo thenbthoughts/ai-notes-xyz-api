@@ -1,6 +1,6 @@
 import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
-import { ModelTask } from '../../schema/SchemaTask.schema';
+import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';

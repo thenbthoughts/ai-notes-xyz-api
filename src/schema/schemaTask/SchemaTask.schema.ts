@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { tsTaskList } from '../types/typesSchema/SchemaTaskList2.types';
+import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 
 const taskSchema = new Schema<tsTaskList>({
     // Task specific fields

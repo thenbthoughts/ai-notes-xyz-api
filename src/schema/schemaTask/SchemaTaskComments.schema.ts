@@ -1,32 +1,31 @@
 import mongoose, { Schema } from 'mongoose';
-import { tsTaskSubList } from '../types/typesSchema/schemaTaskSubList.types';
+import { tsTaskCommentList } from '../../types/typesSchema/typesSchemaTask/schemaTaskCommentList.types';
 
-// Task Sub List Schema
-const taskSubListSchema = new Schema<tsTaskSubList>({
-    // Subtask specific fields
-    title: {
+// taskCommentSchema
+const taskCommentSchema = new Schema<tsTaskCommentList>({
+    // Comment specific fields
+    commentText: {
         type: String,
-        required: true,
+        default: '',
         trim: true,
     },
-    parentTaskId: {
-        type: mongoose.Schema.Types.ObjectId, // Changed to MongoDB ObjectId
-        required: true,
-    },
-    taskCompletedStatus: {
+    isAi: {
         type: Boolean,
         default: false,
-    },
-    taskPosition: {
-        type: Number,
-        required: true,
     },
 
     // auth
     username: {
         type: String,
         required: true,
+        default: '',
         index: true,
+    },
+
+    // Reference to the task
+    taskId: {
+        type: String,
+        required: true,
         default: '',
     },
 
@@ -57,13 +56,13 @@ const taskSubListSchema = new Schema<tsTaskSubList>({
     },
 });
 
-// Task Sub List Model
-const ModelTaskSubList = mongoose.model<tsTaskSubList>(
-    'tasksSub', // Updated collection name
-    taskSubListSchema,
-    'tasksSub'  // Updated collection name
+// Comment Model
+const ModelTaskComments = mongoose.model<tsTaskCommentList>(
+    'taskComments',
+    taskCommentSchema,
+    'taskComments'
 );
 
 export {
-    ModelTaskSubList
+    ModelTaskComments
 };

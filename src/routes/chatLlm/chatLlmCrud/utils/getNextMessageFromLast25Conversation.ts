@@ -3,7 +3,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
 import { ModelChatLlm } from '../../../../schema/SchemaChatLlm.schema';
 import { ModelUser } from '../../../../schema/SchemaUser.schema';
-import { ModelTask } from "../../../../schema/SchemaTask.schema";
+import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelMemo } from "../../../../schema/SchemaMemoQuickAi.schema";
 import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
 import openrouterMarketing from "../../../../config/openrouterMarketing";

@@ -2,10 +2,10 @@ import mongoose from 'mongoose';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
 import envKeys from "../../../config/envKeys";
-import { ModelTask } from '../../../schema/SchemaTask.schema';
+import { ModelTask } from '../../../schema/schemaTask/SchemaTask.schema';
 
-import { tsTaskSubList } from '../../../types/typesSchema/schemaTaskSubList.types';
-import { tsTaskList } from '../../../types/typesSchema/SchemaTaskList2.types';
+import { tsTaskSubList } from '../../../types/typesSchema/typesSchemaTask/schemaTaskSubList.types';
+import { tsTaskList } from '../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 import openrouterMarketing from '../../../config/openrouterMarketing';
 
 interface tsTaskListWithSubTask extends tsTaskList {

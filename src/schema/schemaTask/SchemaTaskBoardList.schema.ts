@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { tsTaskBoardList } from '../types/typesSchema/schemaTaskBoardList.types';
+import { tsTaskBoardList } from '../../types/typesSchema/typesSchemaTask/schemaTaskBoardList.types';
 
 // TaskBoardList Schema
 const taskBoardListSchema = new Schema<tsTaskBoardList>({

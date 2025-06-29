@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { ModelTaskSubList } from '../../schema/SchemaTaskSub.schema';
+import { ModelTaskSubList } from '../../schema/schemaTask/SchemaTaskSub.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';

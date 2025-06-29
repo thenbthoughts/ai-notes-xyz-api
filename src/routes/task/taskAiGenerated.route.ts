@@ -1,12 +1,12 @@
 import { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
-import { ModelTask } from '../../schema/SchemaTask.schema';
+import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import getTaskListByLast30Conversation from './utils/getTaskListByLast30Conversation';
 import funcTasksGenerateByConversationId from './utils/funcTaskGenerateByConversationId';
 import funcGetTaskAiSuggestionByTaskId from './utils/funcGetTaskAiSuggestionByTaskId';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { ModelTaskComments } from '../../schema/SchemaTaskComments.schema';
+import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.schema';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 
