@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 
 export interface tsTaskList extends Document{
     // Todo specific fields
@@ -18,8 +18,8 @@ export interface tsTaskList extends Document{
     labelsAi: string[];
 
     // identification
-    boardName: string;
-    taskStatus: string;
+    taskWorkspaceId: mongoose.Types.ObjectId | null;
+    taskStatusId: mongoose.Types.ObjectId | null;
 
     // auth
     username: string;

@@ -17,11 +17,11 @@ import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCru
 
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
-import routesTaskBoard from './task/taskBoard.route';
-import routesTaskBoardList from './task/taskBoardList.route';
+import routesTaskStatusList from './task/taskStatusList.route';
 import routeTaskAiGenerated from './task/taskAiGenerated.route';
 import routesTaskSub from './task/routesTaskSub.route';
 import routesTaskComments from './task/routesTaskComments.route';
+import routesTaskWorkspaceCrud from './task/taskWorkspaceCrud.route';
 
 // page -> notes
 import routesNotesCrud from './notes/notesCrud.route';
@@ -71,9 +71,9 @@ router.use('/chat-llm/threads-crud', routesChatLlmThreadsCrud);
 router.use('/task/crud', routesTaskCrud);
 router.use('/task/ai-generated', routeTaskAiGenerated);
 router.use('/task-sub/crud', routesTaskSub);
-router.use('/task-board/crud', routesTaskBoard);
-router.use('/task-board-list/crud', routesTaskBoardList);
+router.use('/task-status-list/crud', routesTaskStatusList);
 router.use('/task-comments/crud', routesTaskComments);
+router.use('/task-workspace/crud', routesTaskWorkspaceCrud);
 
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);

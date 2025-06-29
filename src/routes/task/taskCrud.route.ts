@@ -4,9 +4,168 @@ import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
+import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
+import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.schema';
+import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusList.schema';
 
 // Router
 const router = Router();
+
+const getMongodbObjectOrNull = (id: string | null) => {
+    if (!id) {
+        return null;
+    }
+    if (typeof id !== 'string') {
+        return null;
+    }
+    if (id.length !== 24) {
+        return null;
+    }
+    return mongoose.Types.ObjectId.createFromHexString(id) || null;
+}
+
+const doesTaskWorkspaceExistAndBelongToUser = async ({
+    taskWorkspaceId,
+    auth_username
+}: {
+    taskWorkspaceId: string;
+    auth_username: string;
+}) => {
+    try {
+        const taskWorkspaceIdObj = mongoose.Types.ObjectId.createFromHexString(taskWorkspaceId) || null;
+        if (!taskWorkspaceIdObj) {
+            return false;
+        }
+
+        const workspace = await ModelTaskWorkspace.findOne({
+            _id: taskWorkspaceIdObj,
+            username: auth_username,
+        });
+
+        if (workspace) {
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+}
+
+const doesTaskStatusExistAndBelongToUser = async ({
+    taskStatusId,
+    auth_username
+}: {
+    taskStatusId: string;
+    auth_username: string;
+}) => {
+    try {
+        const taskStatusIdObj = mongoose.Types.ObjectId.createFromHexString(taskStatusId) || null;
+        if (!taskStatusIdObj) {
+            return false;
+        }
+
+        const taskStatus = await ModelTaskStatusList.findOne({
+            _id: taskStatusIdObj,
+            username: auth_username,
+        });
+
+        if (taskStatus) {
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+}
+
+const assignTaskWorkspaceByTaskId = async ({
+    _id,
+    auth_username,
+}: {
+    _id: mongoose.Types.ObjectId;
+    auth_username: string;
+}) => {
+    try {
+        // Find or create "unassigned" task status
+        let unassignedTaskWorkspace = await ModelTaskWorkspace.findOne({
+            title: 'Unassigned',
+            username: auth_username,
+        });
+
+        if (!unassignedTaskWorkspace) {
+            // Create "unassigned" task status if it doesn't exist
+            unassignedTaskWorkspace = await ModelTaskWorkspace.create({
+                title: 'Unassigned',
+                username: auth_username,
+            });
+        }
+
+        // Update the task with the unassigned task status
+        await ModelTask.findOneAndUpdate(
+            {
+                _id: _id,
+                username: auth_username,
+            },
+            {
+                taskWorkspaceId: unassignedTaskWorkspace._id,
+            }
+        );
+
+        return unassignedTaskWorkspace._id as mongoose.Types.ObjectId;
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+}
+
+const assignTaskStatusByTaskId = async ({
+    _id,
+    auth_username,
+    taskWorkspaceId
+}: {
+    _id: mongoose.Types.ObjectId;
+    auth_username: string;
+    taskWorkspaceId: mongoose.Types.ObjectId;
+}) => {
+    try {
+        // Find or create "unassigned" task status
+        let unassignedTaskStatus = await ModelTaskStatusList.findOne({
+            taskWorkspaceId: taskWorkspaceId,
+            username: auth_username,
+            statusTitle: 'Unassigned',
+        });
+
+        if (!unassignedTaskStatus) {
+            // Create "unassigned" task status if it doesn't exist
+            unassignedTaskStatus = await ModelTaskStatusList.create({
+                taskWorkspaceId: taskWorkspaceId,
+                username: auth_username,
+                statusTitle: 'Unassigned',
+            });
+        }
+
+        console.log('unassignedTaskStatus: ', unassignedTaskStatus);
+
+        // Update the task with the unassigned task status
+        await ModelTask.findOneAndUpdate(
+            {
+                _id: _id,
+                username: auth_username,
+            },
+            {
+                taskWorkspaceId: taskWorkspaceId,
+                taskStatusId: unassignedTaskStatus._id,
+            }
+        );
+
+    } catch (error) {
+        console.error(error);
+    }
+}
 
 // taskAdd
 router.post(
@@ -15,12 +174,28 @@ router.post(
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
         try {
-            const { title, description } = req.body;
+            const auth_username = res.locals.auth_username;
+
+            const { title, description, taskWorkspaceId } = req.body;
+
+            const taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId);
+            if (!taskWorkspaceIdObj) {
+                return res.status(400).json({ message: 'Task workspace ID is required' });
+            }
+            const resultDoesBelongToUser = await doesTaskWorkspaceExistAndBelongToUser({
+                taskWorkspaceId: taskWorkspaceId,
+                auth_username: auth_username,
+            });
+            if (!resultDoesBelongToUser) {
+                return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
+            }
 
             const actionDatetimeObj = normalizeDateTimeIpAddress(
                 res.locals.actionDatetime
             );
-            console.log(actionDatetimeObj);
+
+            const taskStatusId = '';
+
 
             const newTask = await ModelTask.create({
                 // 
@@ -29,8 +204,9 @@ router.post(
                 priority: 'very-low',
                 dueDate: null,
 
-                // current
-                taskStatus: 'Todo',
+                // identification
+                taskWorkspaceId: taskWorkspaceIdObj,
+                taskStatusId: null,
 
                 // auth
                 username: res.locals.auth_username,
@@ -79,7 +255,18 @@ router.post(
                 priority?: string;
                 isArchived?: boolean;
                 isCompleted?: boolean;
+                taskWorkspaceId?: mongoose.Types.ObjectId;
             };
+
+            // Filter by task workspace id
+            if (typeof req.body?.taskWorkspaceId === 'string') {
+                if (req.body?.taskWorkspaceId.length === 24) {
+                    let tempWorkspaceId = mongoose.Types.ObjectId.createFromHexString(req.body?.taskWorkspaceId);
+                    if (tempWorkspaceId) {
+                        tempStageMatch.taskWorkspaceId = tempWorkspaceId;
+                    }
+                }
+            }
 
             // Filter by priority
             if (req.body?.priority) {
@@ -137,8 +324,88 @@ router.post(
             }
             stateDocument.push(tempStage);
 
+            // stateDocument -> lookup task status list
+            tempStage = {
+                $lookup: {
+                    from: 'taskStatusList',
+                    let: {
+                        let_taskStatusId: '$taskStatusId',
+                        let_taskWorkspaceId: '$taskWorkspaceId',
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        {
+                                            $eq: ['$username', res.locals.auth_username]
+                                        },
+                                        {
+                                            $eq: ['$_id', '$$let_taskStatusId']
+                                        },
+                                        {
+                                            $eq: ['$taskWorkspaceId', '$$let_taskWorkspaceId']
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'taskStatusList',
+                }
+            }
+            stateDocument.push(tempStage);
+
+            // stateDocument -> lookup task workspace
+            tempStage = {
+                $lookup: {
+                    from: 'taskWorkspace',
+                    localField: 'taskWorkspaceId',
+                    foreignField: '_id',
+                    as: 'taskWorkspace',
+                }
+            }
+            stateDocument.push(tempStage);
+
             // pipeline
             const resultTasks = await ModelTask.aggregate(stateDocument);
+
+            // revalidate task workspace and status
+            for (let index = 0; index < resultTasks.length; index++) {
+                const element = resultTasks[index];
+
+                let shouldRevalidateWorkspace = false;
+                let shouldRevalidateStatus = false;
+
+                if (element.taskWorkspace.length === 0) {
+                    shouldRevalidateWorkspace = true;
+                    shouldRevalidateStatus = true;
+                } else if (element.taskStatusList.length === 0) {
+                    shouldRevalidateStatus = true;
+                }
+                
+
+                let taskWorkspaceId = null as mongoose.Types.ObjectId | null;
+
+                if (shouldRevalidateWorkspace) {
+                    taskWorkspaceId = await assignTaskWorkspaceByTaskId({
+                        _id: element._id,
+                        auth_username: res.locals.auth_username,
+                    });
+                } else {
+                    taskWorkspaceId = element.taskWorkspace[0]._id;
+                }
+
+                if (shouldRevalidateStatus) {
+                    if (taskWorkspaceId) {
+                        await assignTaskStatusByTaskId({
+                            _id: element._id,
+                            auth_username: res.locals.auth_username,
+                            taskWorkspaceId: taskWorkspaceId,
+                        });
+                    }
+                }
+            }
 
             return res.json({
                 message: 'Tasks retrieved successfully',
@@ -165,11 +432,58 @@ router.post(
                 res.locals.actionDatetime
             );
 
-            const { id, title, description, taskStatus, labels, isArchived, isCompleted, priority } = req.body;
-            
+            const {
+                id,
+                title,
+                description,
+                taskStatus,
+                labels,
+                isArchived,
+                isCompleted,
+                priority,
+                taskWorkspaceId,
+                taskStatusId,
+            } = req.body;
+
+            let final_taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
+
+            let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId);
+            if (!taskWorkspaceIdObj) {
+                return res.status(400).json({ message: 'Task workspace ID is required' });
+            }
+            const resultDoesBelongToUser = await doesTaskWorkspaceExistAndBelongToUser({
+                taskWorkspaceId: taskWorkspaceId,
+                auth_username: auth_username,
+            });
+            if (!resultDoesBelongToUser) {
+                return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
+            }
+
+            let final_taskStatusId = null as mongoose.Types.ObjectId | null;
+            if (taskStatusId) {
+                const taskStatusIdObj = getMongodbObjectOrNull(taskStatusId);
+                if (!taskStatusIdObj) {
+                    return res.status(400).json({ message: 'Task status ID is required' });
+                }
+                const resultDoesBelongToUserTaskStatus = await doesTaskStatusExistAndBelongToUser({
+                    taskStatusId: taskStatusId,
+                    auth_username: auth_username,
+                });
+                if (!resultDoesBelongToUserTaskStatus) {
+                    return res.status(400).json({ message: 'Task status not found or unauthorized' });
+                }
+                final_taskStatusId = taskStatusIdObj;
+            }
+
+            const updateObj = {} as Partial<tsTaskList>;
+            updateObj.taskWorkspaceId = taskWorkspaceIdObj;
+            if(final_taskStatusId) {
+                updateObj.taskStatusId = final_taskStatusId;
+            }
+
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
-                    _id: id,
+                    _id: getMongodbObjectOrNull(id),
                     username: auth_username,
                 },
                 {
@@ -187,6 +501,9 @@ router.post(
                     updatedAtUtc: actionDatetimeObj.updatedAtUtc,
                     updatedAtIpAddress: actionDatetimeObj.updatedAtIpAddress,
                     updatedAtUserAgent: actionDatetimeObj.updatedAtUserAgent,
+
+                    // identification
+                    ...updateObj,
                 },
                 {
                     new: true,

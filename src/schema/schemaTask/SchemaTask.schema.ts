@@ -33,18 +33,13 @@ const taskSchema = new Schema<tsTaskList>({
     },
 
     // identification
-    boardName: {
-        type: String,
-        default: 'Task List',
-        trim: true,
+    taskWorkspaceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
     },
-    taskStatus: {
-        type: String,
-        default: 'To Do',
-        trim: true,
-        /*
-        Values are: 'To Do', 'In Progress', 'Done'
-        */
+    taskStatusId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
     },
 
     // status
