@@ -112,6 +112,14 @@ router.post('/taskWorkspaceGet', middlewareUserAuth, async (req: Request, res: R
             }
         }
 
+        // stage -> sort -> title
+        tempStage = {
+            $sort: {
+                title: 1,
+            },
+        };
+        pipelineDocument.push(tempStage);
+
         // stage -> skip
         tempStage = {
             $skip: (page - 1) * perPage,
