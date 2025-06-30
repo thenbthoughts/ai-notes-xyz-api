@@ -16,7 +16,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
 
         // args
         let page = 1;
-        let perPage = 10;
+        let perPage = 1000;
 
         // set arg -> page
         if (typeof req.body?.page === 'number') {
