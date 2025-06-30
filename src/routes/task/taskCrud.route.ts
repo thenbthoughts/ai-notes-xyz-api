@@ -167,6 +167,74 @@ const assignTaskStatusByTaskId = async ({
     }
 }
 
+const revalidateAllTaskWorkspace = async ({
+    auth_username,
+}: {
+    auth_username: string;
+}) => {
+    try {
+        const pipeline = [
+            {
+                $match: {
+                    username: auth_username,
+                }
+            },
+            {
+                $lookup: {
+                    from: 'taskWorkspace',
+                    let: {
+                        let_username: '$username',
+                        let_taskWorkspaceId: '$taskWorkspaceId',
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        {
+                                            $eq: ['$username', '$$let_username'],
+                                        },
+                                        {
+                                            $eq: ['$_id', '$$let_taskWorkspaceId'],
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'taskWorkspace',
+                }
+            },
+            {
+                $addFields: {
+                    taskWorkspaceSize: {
+                        $size: '$taskWorkspace',
+                    },
+                }
+            },
+            {
+                $match: {
+                    taskWorkspaceSize: 0,
+                }
+            }
+        ];
+
+        const taskArr = await ModelTask.aggregate(pipeline);
+
+        for (let index = 0; index < taskArr.length; index++) {
+            const element = taskArr[index];
+            if (element.taskWorkspaceSize === 0) {
+                await assignTaskWorkspaceByTaskId({
+                    _id: element._id,
+                    auth_username: auth_username,
+                });
+            }
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 // taskAdd
 router.post(
     '/taskAdd',
@@ -232,6 +300,13 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
+            const auth_username = res.locals.auth_username;
+
+            // revalidate task workspace
+            await revalidateAllTaskWorkspace({
+                auth_username: auth_username,
+            });
+
             let recordId = '';
             if (req.body?.recordId) {
                 if (typeof req.body?.recordId === 'string') {
@@ -383,7 +458,7 @@ router.post(
                 } else if (element.taskStatusList.length === 0) {
                     shouldRevalidateStatus = true;
                 }
-                
+
 
                 let taskWorkspaceId = null as mongoose.Types.ObjectId | null;
 
@@ -477,7 +552,7 @@ router.post(
 
             const updateObj = {} as Partial<tsTaskList>;
             updateObj.taskWorkspaceId = taskWorkspaceIdObj;
-            if(final_taskStatusId) {
+            if (final_taskStatusId) {
                 updateObj.taskStatusId = final_taskStatusId;
             }
 
