@@ -16,6 +16,12 @@ const llmPendingTaskTypes = {
             generateLifeEventAiTagsById: 'pageLifeEvents_generateLifeEventAiTagsById',
             generateLifeEventAiCategoryById: 'pageLifeEvents_generateLifeEventAiCategoryById',
         },
+
+        // notes
+        notes: {
+            generateNoteAiSummaryById: 'pageNotes_generateNoteAiSummaryById',
+            generateNoteAiTagsById: 'pageNotes_generateNoteAiTagsById',
+        },
     }
 };
 

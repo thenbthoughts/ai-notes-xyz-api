@@ -4,6 +4,8 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
 import { ModelNotesWorkspace } from '../../schema/schemaNotes/SchemaNotesWorkspace.schema';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 
 const router = Router();
 
@@ -309,6 +311,20 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
                 }
             );
         }
+
+        // generate ai tags by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
+            targetRecordId: _id,
+        });
+
+        // generate ai summary by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+            targetRecordId: _id,
+        });
 
         return res.json({
             message: 'Note edited successfully',
