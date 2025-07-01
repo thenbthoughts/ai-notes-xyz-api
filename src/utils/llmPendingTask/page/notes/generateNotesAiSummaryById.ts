@@ -3,7 +3,8 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import htmlToMarkdown from '@wcj/html-to-markdown';
+// import htmlToMarkdown from '@wcj/html-to-markdown';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
 import openrouterMarketing from "../../../../config/openrouterMarketing";
 import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
@@ -151,9 +152,7 @@ const  generateNotesAiSummaryById = async ({
 
         let argContent = `Title: ${notesFirst.title}`;
         if(notesFirst.description.length >= 1) {
-            const markdownContent = await htmlToMarkdown({
-                html: notesFirst.description,
-            });
+            const markdownContent = NodeHtmlMarkdown.translate(notesFirst.description);
             argContent += `Description: ${markdownContent}\n`;
         }
         if(notesFirst.isStar) {
