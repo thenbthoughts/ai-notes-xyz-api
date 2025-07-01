@@ -6,6 +6,7 @@ import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
 import { ModelNotesWorkspace } from '../../schema/schemaNotes/SchemaNotesWorkspace.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 
 const router = Router();
 
@@ -328,6 +329,41 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
 
         return res.json({
             message: 'Note edited successfully',
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Trigger LLM AI Task API
+router.post('/notesAiRevalidate', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+
+        // find all notes that have aiSummary or aiTags is null
+        const notes = await ModelNotes.find({
+            username: res.locals.auth_username,
+        }) as INotes[];
+        
+        for (let index = 0; index < notes.length; index++) {
+            const element = notes[index];
+            // generate ai tags by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
+                targetRecordId: element._id,
+            });
+            
+            // generate ai summary by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+                targetRecordId: element._id,
+            });
+        }
+
+        return res.json({
+            message: 'LLM AI tasks triggered successfully',
         });
     } catch (error) {
         console.error(error);
