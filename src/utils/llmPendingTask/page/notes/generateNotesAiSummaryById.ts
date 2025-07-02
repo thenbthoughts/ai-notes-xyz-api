@@ -54,12 +54,11 @@ const fetchLlmTags = async ({
             modelName = 'meta-llama/llama-4-scout-17b-16e-instruct';
         }
 
-        let systemPrompt = `From the below content, generate a detailed summary in simple language.
+        let systemPrompt = `From the below content, generate a very detailed summary in simple language.
         Only output the summary, no other text. No markdown.
-        Also give few suggestions for the note.
-        Also suggest out of the box ideas.
-        Also suggest few actions that can be taken.
-        Also suggest few questions that can be asked to the user.`;
+        Suggest out of the box ideas.
+        Suggest few actions that can be taken.
+        Suggest few thoughtful questions that can be asked to the user to gather more information, uncover hidden needs, or improve the contents relevance and impact.`;
 
         const data: tsRequestData = {
             messages: [
