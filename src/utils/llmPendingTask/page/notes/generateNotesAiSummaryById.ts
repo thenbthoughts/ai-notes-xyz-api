@@ -58,6 +58,7 @@ const fetchLlmTags = async ({
         Only output the summary, no other text. No markdown.
         Suggest out of the box ideas.
         Suggest few actions that can be taken.
+        Suggestions for life events.
         Suggest few thoughtful questions that can be asked to the user to gather more information, uncover hidden needs, or improve the contents relevance and impact.`;
 
         const data: tsRequestData = {
