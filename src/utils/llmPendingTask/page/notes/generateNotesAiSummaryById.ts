@@ -56,8 +56,10 @@ const fetchLlmTags = async ({
 
         let systemPrompt = `From the below content, generate a detailed summary in simple language.
         Only output the summary, no other text. No markdown.
-        Also give few suggestions for the life event.
-        Also suggest out of the box ideas.`;
+        Also give few suggestions for the note.
+        Also suggest out of the box ideas.
+        Also suggest few actions that can be taken.
+        Also suggest few questions that can be asked to the user.`;
 
         const data: tsRequestData = {
             messages: [
