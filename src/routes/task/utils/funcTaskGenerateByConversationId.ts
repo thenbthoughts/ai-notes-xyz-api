@@ -1,7 +1,7 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
-import { ModelChatOne } from '../../../schema/SchemaChatOne.schema';
+import { ModelChatLlm } from '../../../schema/SchemaChatLlm.schema';
 import envKeys from "../../../config/envKeys";
 import { ModelUser } from '../../../schema/SchemaUser.schema';
 import openrouterMarketing from '../../../config/openrouterMarketing';
@@ -49,17 +49,14 @@ const getAConversationByNotesId = async ({
     _id: string,
     username: string,
 }): Promise<Message[]> => {
-    const conversations = await ModelChatOne
-        .find({
-            _id: new Types.ObjectId(_id),
-            username,
-            type: "text",
-        })
-        .exec();
+    const conversations = await ModelChatLlm.find({
+        _id: mongoose.Types.ObjectId.createFromHexString(_id),
+        username,
+    });
 
     return conversations.map((convo: { content: string; }) => ({
         role: 'user',
-        content: convo.content
+        content: convo?.content
     }));
 }
 
@@ -119,7 +116,6 @@ const fetchLlmGroq = async ({
 
         const response: AxiosResponse = await axios.request(config);
         const taskListStr = response.data.choices[0].message.content;
-        console.log('taskListStr: ', taskListStr);
         return taskListStr;
     } catch (error) {
         if (isAxiosError(error)) {
