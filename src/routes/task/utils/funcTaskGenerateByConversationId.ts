@@ -1,7 +1,7 @@
 import mongoose, { Types } from 'mongoose';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
-import { ModelChatLlm } from '../../../schema/SchemaChatLlm.schema';
+import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import envKeys from "../../../config/envKeys";
 import { ModelUser } from '../../../schema/SchemaUser.schema';
 import openrouterMarketing from '../../../config/openrouterMarketing';

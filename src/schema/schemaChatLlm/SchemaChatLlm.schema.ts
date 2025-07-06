@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-import { IChatLlm } from '../types/typesSchema/SchemaChatLlm.types';
+import { IChatLlm } from '../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
 
 // Chat Schema
 const chatLlmSchema = new Schema<IChatLlm>({

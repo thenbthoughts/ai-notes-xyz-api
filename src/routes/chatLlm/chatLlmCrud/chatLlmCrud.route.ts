@@ -1,7 +1,7 @@
 import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
-import { ModelChatLlm } from '../../../schema/SchemaChatLlm.schema';
+import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 
 // Router

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ModelChatLlm } from '../../../schema/SchemaChatLlm.schema';
+import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import fetchLlmGroqVision from './utils/callLlmGroqVision';
 import { getFileFromS3R2 } from '../../../utils/files/s3R2GetFile';
@@ -13,6 +13,7 @@ import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTime
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 
 // Router
 const router = Router();
@@ -56,6 +57,16 @@ router.post(
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
             }
 
+            // get thread info
+            const threadInfo = await ModelChatLlmThread.findOne({
+                _id: threadId,
+                username: auth_username,
+            });
+            if (!threadInfo) {
+                return res.status(400).json({ message: 'Thread not found' });
+            }
+
+            // does thread have personal context enabled?
             const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
 
             let provider = '';
@@ -144,6 +155,7 @@ router.post(
                                 const nextMessage = await getNextMessageFromLast30Conversation({
                                     // identification
                                     threadId,
+                                    threadInfo,
                                     username: res.locals.auth_username,
 
                                     userApiKey: apiKeys,
@@ -271,6 +283,7 @@ router.post(
                                 const nextMessage = await getNextMessageFromLast30Conversation({
                                     // identification
                                     threadId,
+                                    threadInfo,
                                     username: res.locals.auth_username,
 
                                     userApiKey: apiKeys,
@@ -328,6 +341,7 @@ router.post(
                     const nextMessage = await getNextMessageFromLast30Conversation({
                         // identification
                         threadId,
+                        threadInfo,
                         username: res.locals.auth_username,
 
                         userApiKey: apiKeys,

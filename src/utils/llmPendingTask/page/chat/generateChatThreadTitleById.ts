@@ -4,10 +4,10 @@ import axios, {
     isAxiosError,
 } from "axios";
 import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelChatLlmThread } from "../../../../schema/SchemaChatLlmThread.schema";
-import { ModelChatLlm } from "../../../../schema/SchemaChatLlm.schema";
+import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
-import { IChatLlm } from "../../../../types/typesSchema/SchemaChatLlm.types";
+import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 interface tsMessage {
     role: string;

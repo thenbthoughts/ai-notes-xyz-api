@@ -4,9 +4,9 @@ import axios, {
     isAxiosError,
 } from "axios";
 import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelChatLlm } from "../../../../schema/SchemaChatLlm.schema";
+import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
-import { IChatLlm } from "../../../../types/typesSchema/SchemaChatLlm.types";
+import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 interface tsMessage {
     role: string;
