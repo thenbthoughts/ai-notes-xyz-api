@@ -107,25 +107,35 @@ router.post(
 
             const threadTitle = actionDatetimeObj.createdAtUtc?.toUTCString() || new Date().toString();
 
+            const {
+                isAutoAiContextSelectEnabled,
+                isPersonalContextEnabled,
+            } = req.body;
+
+            const addData = {
+                threadTitle: threadTitle.trim(),
+                isAutoAiContextSelectEnabled: false,
+                isPersonalContextEnabled: false,
+            };
+
+            if (typeof isAutoAiContextSelectEnabled === 'boolean') {
+                addData.isAutoAiContextSelectEnabled = isAutoAiContextSelectEnabled;
+            };
+
+            if (typeof isPersonalContextEnabled === 'boolean') {
+                addData.isPersonalContextEnabled = isPersonalContextEnabled;
+            };
+
             const newThread = await ModelChatLlmThread.create({
                 // fields
-                threadTitle: threadTitle.trim(),
-                isAutoAiContextSelectEnabled: true,
-                isPersonalContextEnabled: true,
+                ...addData,
 
                 // auth
                 username: res.locals.auth_username,
 
-                // ai
-                tagsAutoAi: [],
-                aiSummary: '',
-                aiTasks: [],
-
                 // created at
                 ...actionDatetimeObj,
             });
-
-            console.log(newThread);
 
             return res.status(201).json({ message: 'Thread created successfully', thread: newThread });
         } catch (error) {
@@ -155,7 +165,6 @@ router.post(
             }
 
             // Extract fields to update
-            console.log(req.body);
             const { threadTitle, isAutoAiContextSelectEnabled, isPersonalContextEnabled } = req.body;
 
             // Build update object
