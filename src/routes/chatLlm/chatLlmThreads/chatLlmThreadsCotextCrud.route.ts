@@ -12,7 +12,7 @@ import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTime
 const router = Router();
 
 // Get Note API
-router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Response) => {
+router.post('/threadsContextGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         let tempStage = {} as PipelineStage;
         const stateDocument = [] as PipelineStage[];
@@ -48,6 +48,15 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
             stateDocument.push(tempStage);
         }
 
+        tempStage = {
+            $project: {
+                _id: 1,
+                threadTitle: 1,
+                isAutoAiContextSelectEnabled: 1,
+            }
+        }
+        stateDocument.push(tempStage);
+
         // pipeline
         const resultNotes = await ModelChatLlmThread.aggregate(stateDocument);
 
@@ -63,7 +72,7 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
 });
 
 // Delete Note API
-router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: Response) => {
+router.post('/threadsContextDeleteById', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         // variable -> threadId
         let threadId = null as mongoose.Types.ObjectId | null;
@@ -98,7 +107,7 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
 
 // Create Thread API
 router.post(
-    '/threadsAdd',
+    '/threadsContextAdd',
     middlewareUserAuth,
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
@@ -112,7 +121,6 @@ router.post(
                 threadTitle: threadTitle.trim(),
                 isAutoAiContextSelectEnabled: true,
                 isPersonalContextEnabled: true,
-
                 // auth
                 username: res.locals.auth_username,
 
@@ -137,7 +145,7 @@ router.post(
 
 // Edit Thread API
 router.post(
-    '/threadsEditById',
+    '/threadsContextEditById',
     middlewareUserAuth,
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
@@ -155,7 +163,6 @@ router.post(
             }
 
             // Extract fields to update
-            console.log(req.body);
             const { threadTitle, isAutoAiContextSelectEnabled, isPersonalContextEnabled } = req.body;
 
             // Build update object

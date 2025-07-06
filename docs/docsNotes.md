@@ -37,3 +37,48 @@
 - updatedAt
 - updatedAtIpAddress
 
+-----
+
+Contenxt Options:
+
+isAutoContextSelectEnabled: boolean
+    if true, additional stuff would be selected automatically
+
+contextNotes:
+    contextNotesAuto: boolean
+    contextNotesByIds: Array
+contextTask:
+    contextTaskAuto: boolean
+    contextTaskByIds: Array
+contextMemo:
+    contextMemoAuto: boolean
+    contextMemoByIds: Array
+contextLifeEvents:
+    contextLifeEventsAuto: boolean
+    contextLifeEventsByIds: Array
+contextInfoVault:
+    contextInfoVaultAuto: boolean
+    contextInfoVaultByIds: Array
+contextChat:
+    contextChatAuto: boolean
+    contextChatByIds: Array
+
+-----
+
+Contenxt Options:
+
+isContextAutoSelect: boolean
+    if true, additional stuff would be selected automatically
+
+contextNotes:
+    contextNotesByIds: Array
+contextTask:
+    contextTaskByIds: Array
+contextMemo:
+    contextMemoByIds: Array
+contextLifeEvents:
+    contextLifeEventsByIds: Array
+contextInfoVault:
+    contextInfoVaultByIds: Array
+contextChat:
+    contextChatByIds: Array

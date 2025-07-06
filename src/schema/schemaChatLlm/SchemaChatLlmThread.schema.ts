@@ -1,12 +1,20 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { IChatLlmThread } from '../types/typesSchema/SchemaChatLlmThread.types';
+import { IChatLlmThread } from '../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types';
 
 // Chat Schema
 const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     // fields
     threadTitle: {
         type: String, default: ''
+    },
+    isPersonalContextEnabled: {
+        type: Boolean,
+        default: true,
+    },
+    isAutoAiContextSelectEnabled: {
+        type: Boolean,
+        default: true,
     },
 
     // ai

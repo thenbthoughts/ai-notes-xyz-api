@@ -3,6 +3,7 @@ import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import getNextQuestionsFromLast30Conversation from './utils/getNextQuestionsFromLast30Conversation';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import mongoose from 'mongoose';
+import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 
 // Router
 const router = Router();
@@ -18,6 +19,15 @@ router.post('/notesNextQuestionGenerateByLast30Conversation', middlewareUserAuth
         }
         if (threadId === null) {
             return res.status(400).json({ message: 'Thread ID cannot be null' });
+        }
+
+        // get thread info
+        const threadInfo = await ModelChatLlmThread.findOne({
+            _id: threadId,
+            username: res.locals.auth_username,
+        });
+        if (!threadInfo) {
+            return res.status(400).json({ message: 'Thread not found' });
         }
 
         const apiKeys = getApiKeyByObject(res.locals.apiKey);
@@ -36,9 +46,7 @@ router.post('/notesNextQuestionGenerateByLast30Conversation', middlewareUserAuth
         if (provider === 'groq' || provider === 'openrouter') {
             taskList = await getNextQuestionsFromLast30Conversation({
                 threadId,
-
                 username: res.locals.auth_username,
-
                 llmAuthToken,
                 provider,
             });

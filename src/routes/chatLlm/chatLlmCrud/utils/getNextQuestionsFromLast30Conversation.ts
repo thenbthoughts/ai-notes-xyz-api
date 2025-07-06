@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 import mongoose from "mongoose";
 
-import { ModelChatLlm } from '../../../../schema/SchemaChatLlm.schema';
+import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import openrouterMarketing from "../../../../config/openrouterMarketing";
 
 interface Message {
