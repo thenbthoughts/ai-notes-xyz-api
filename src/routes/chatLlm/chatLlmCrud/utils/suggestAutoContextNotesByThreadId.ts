@@ -79,7 +79,7 @@ const fetchLlmForNotesAnalysis = async ({
         let modelName = '';
         if (provider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.1-8b-instruct';
+            modelName = 'meta-llama/llama-3.2-11b-vision-instruct';
         } else if (provider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
             modelName = 'llama-3.1-8b-instant';
@@ -231,11 +231,14 @@ const analyzeConversationWithLlm = async ({
         const notesSummary = notes.map(note => ({
             id: (note._id as mongoose.Types.ObjectId).toString(),
             title: note.title,
-            description: note.description.substring(0, 500), // Limit description length
-            aiSummary: note.aiSummary,
             tags: note.tags,
             aiTags: note.aiTags,
         }));
+
+        let notesStr = '';
+        for (const note of notesSummary) {
+            notesStr += `ID: ${note.id}\nTitle: ${note.title}\nTags: ${note.tags.join(', ')}\nAI Tags: ${note.aiTags.join(', ')}\n\n`;
+        }
 
         const messages: Message[] = [
             {
@@ -244,7 +247,7 @@ const analyzeConversationWithLlm = async ({
             },
             {
                 role: "user",
-                content: `CONVERSATION CONTEXT:\n${conversationContext}\n\nAVAILABLE NOTES:\n${JSON.stringify(notesSummary, null, 2)}`
+                content: `CONVERSATION CONTEXT:\n${conversationContext}\n\nAVAILABLE NOTES:\n${notesStr}`
             }
         ];
 
@@ -253,6 +256,8 @@ const analyzeConversationWithLlm = async ({
             llmAuthToken,
             provider,
         });
+
+        console.log('llmResponse: ', llmResponse);
 
         // Parse LLM response with validation
         let parsedResponse: RelevantNotesResponse;
