@@ -225,16 +225,16 @@ const getTasks = async ({
             $addFields: {
                 updatedAtUtcLast3DaysSortPoint: {
                     $cond: {
-                        if: { $lt: ['$updatedAtUtc', currentDateFromLast3DaysDate] },
-                        then: 10,
-                        else: 0,
+                        if: { $gte: ['$updatedAtUtc', currentDateFromLast3DaysDate] },
+                        then: 50,
+                        else: 5,
                     }
                 },
                 updatedAtUtcLast15DaysSortPoint: {
                     $cond: {
-                        if: { $lt: ['$updatedAtUtc', currentDateFromLast15DaysDate] },
-                        then: 5,
-                        else: 0,
+                        if: { $gte: ['$updatedAtUtc', currentDateFromLast15DaysDate] },
+                        then: 25,
+                        else: 5,
                     }
                 },
                 isCompletedSortPoint: {
@@ -247,8 +247,8 @@ const getTasks = async ({
                 isArchivedSortPoint: {
                     $cond: {
                         if: { $eq: ['$isArchived', true] },
-                        then: 1,
-                        else: -1000,
+                        then: -1000,
+                        else: 0,
                     }
                 },
             }
@@ -271,7 +271,7 @@ const getTasks = async ({
             }
         },
         {
-            $limit: 20,
+            $limit: 25,
         }
     ]);
 
