@@ -225,30 +225,30 @@ const getTasks = async ({
             $addFields: {
                 updatedAtUtcLast3DaysSortPoint: {
                     $cond: {
-                        if: { $lt: ['$updatedAtUtc', currentDateFromLast3DaysDate] },
-                        then: 10,
-                        else: 0,
+                        if: { $gte: ['$updatedAtUtc', currentDateFromLast3DaysDate] },
+                        then: 50,
+                        else: 5,
                     }
                 },
                 updatedAtUtcLast15DaysSortPoint: {
                     $cond: {
-                        if: { $lt: ['$updatedAtUtc', currentDateFromLast15DaysDate] },
-                        then: 5,
-                        else: 0,
+                        if: { $gte: ['$updatedAtUtc', currentDateFromLast15DaysDate] },
+                        then: 25,
+                        else: 5,
                     }
                 },
                 isCompletedSortPoint: {
                     $cond: {
                         if: { $eq: ['$isCompleted', true] },
-                        then: -50,
+                        then: -1000,
                         else: 5,
                     }
                 },
                 isArchivedSortPoint: {
                     $cond: {
                         if: { $eq: ['$isArchived', true] },
-                        then: 1,
-                        else: -100,
+                        then: -1000,
+                        else: 0,
                     }
                 },
             }
@@ -271,9 +271,10 @@ const getTasks = async ({
             }
         },
         {
-            $limit: 15,
+            $limit: 25,
         }
     ]);
+
     if (resultTasks.length >= 1) {
         taskStr = 'Below are task list added by user.\n\n'
         for (let index = 0; index < resultTasks.length; index++) {
