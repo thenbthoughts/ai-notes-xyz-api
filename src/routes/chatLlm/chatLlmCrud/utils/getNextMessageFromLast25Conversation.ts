@@ -240,7 +240,7 @@ const getTasks = async ({
                 isCompletedSortPoint: {
                     $cond: {
                         if: { $eq: ['$isCompleted', true] },
-                        then: -50,
+                        then: -1000,
                         else: 5,
                     }
                 },
@@ -248,7 +248,7 @@ const getTasks = async ({
                     $cond: {
                         if: { $eq: ['$isArchived', true] },
                         then: 1,
-                        else: -100,
+                        else: -1000,
                     }
                 },
             }
@@ -271,9 +271,10 @@ const getTasks = async ({
             }
         },
         {
-            $limit: 15,
+            $limit: 20,
         }
     ]);
+
     if (resultTasks.length >= 1) {
         taskStr = 'Below are task list added by user.\n\n'
         for (let index = 0; index < resultTasks.length; index++) {
