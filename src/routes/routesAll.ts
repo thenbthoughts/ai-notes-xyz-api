@@ -14,6 +14,7 @@ import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
 import routesChatLlmAddChat from './chatLlm/chatLlmCrud/chatLlmAdd.route';
 import routesChatLlmAiGeneratedNextQuestion from './chatLlm/chatLlmCrud/chatLlmAiGeneratedNextQuestion.route';
 import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCrud.route';
+import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThreadsContextCrud.route';
 
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
@@ -66,6 +67,7 @@ router.use('/chat-llm/crud', routesChatLlmCrud);
 router.use('/chat-llm/chat-add', routesChatLlmAddChat);
 router.use('/chat-llm/ai-generated-next-questions', routesChatLlmAiGeneratedNextQuestion);
 router.use('/chat-llm/threads-crud', routesChatLlmThreadsCrud);
+router.use('/chat-llm/threads-context-crud', routesChatLlmThreadsContextCrud);
 
 // routes -> task
 router.use('/task/crud', routesTaskCrud);

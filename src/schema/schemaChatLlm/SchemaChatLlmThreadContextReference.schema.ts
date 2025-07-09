@@ -5,13 +5,22 @@ import { IChatLlmThreadContextReference } from '../../types/typesSchema/typesCha
 // Chat Schema
 const chatLlmThreadContextReferenceSchema = new Schema<IChatLlmThreadContextReference>({
     // fields
+    threadId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
     referenceFrom: {
         type: String,
         default: '',
+        // note, task, chat, memo, life-event, info-vault etc.
     },
     referenceId: {
         type: mongoose.Schema.Types.ObjectId,
         default: null,
+    },
+    isAddedByAi: {
+        type: Boolean,
+        default: false,
     },
 
     // auth

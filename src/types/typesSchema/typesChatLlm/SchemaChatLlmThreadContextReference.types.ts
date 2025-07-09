@@ -3,8 +3,10 @@ import mongoose, { Document } from 'mongoose';
 // Chat Interface
 export interface IChatLlmThreadContextReference extends Document {
     // fields
+    threadId: mongoose.Types.ObjectId | null;
     referenceFrom: string;
-    referenceId: mongoose.Schema.Types.ObjectId | null;
+    referenceId: mongoose.Types.ObjectId | null;
+    isAddedByAi: boolean;
 
     // auth
     username: string;
