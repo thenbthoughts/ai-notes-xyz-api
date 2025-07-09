@@ -14,6 +14,7 @@ import middlewareActionDatetime from '../../../middleware/middlewareActionDateti
 import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
+import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
 // Router
 const router = Router();
@@ -48,11 +49,7 @@ router.post(
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
             // variable -> threadId
-            let threadId = null as mongoose.Types.ObjectId | null;
-            const arg_threadId = req.body.threadId;
-            if (typeof req.body?.threadId === 'string') {
-                threadId = req.body?.threadId ? mongoose.Types.ObjectId.createFromHexString(arg_threadId) : null;
-            }
+            let threadId = getMongodbObjectOrNull(req.body.threadId);
             if (threadId === null) {
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
             }

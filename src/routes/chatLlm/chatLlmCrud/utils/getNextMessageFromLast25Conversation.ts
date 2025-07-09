@@ -1,13 +1,23 @@
 import mongoose from "mongoose";
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
+import { NodeHtmlMarkdown } from "node-html-markdown";
+
+import openrouterMarketing from "../../../../config/openrouterMarketing";
 
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelUser } from '../../../../schema/SchemaUser.schema';
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelMemo } from "../../../../schema/SchemaMemoQuickAi.schema";
+import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
+import {
+    ModelChatLlmThreadContextReference
+} from "../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema";
+
 import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
+
+import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
+import { IChatLlmThreadContextReference } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThreadContextReference.types";
 
 interface Message {
     role: string;
@@ -291,7 +301,6 @@ const getTasks = async ({
                 taskStr += `Task ${index + 1} -> workspace -> ${element.taskWorkspace[0].title}.\n`;
             }
             if (element.taskStatusList.length >= 1) {
-                console.log('element.taskStatusList', element.taskStatusList[0].statusTitle);
                 taskStr += `Task ${index + 1} -> status -> ${element.taskStatusList[0].statusTitle}.\n`;
             }
 
@@ -301,6 +310,71 @@ const getTasks = async ({
     }
 
     return taskStr;
+}
+
+const getNotes = async ({
+    username,
+    threadId,
+}: {
+    username: string,
+    threadId: mongoose.Types.ObjectId,
+}) => {
+    let noteStr = '';
+
+    const contextIds = [] as mongoose.Types.ObjectId[];
+
+    const resultContexts = await ModelChatLlmThreadContextReference.aggregate([
+        {
+            $match: {
+                username: username,
+                referenceFrom: 'note',
+                referenceId: { $ne: null },
+                threadId: threadId,
+            }
+        }
+    ]) as IChatLlmThreadContextReference[];
+
+    for (let index = 0; index < resultContexts.length; index++) {
+        const element = resultContexts[index];
+        if (element.referenceId) {
+            contextIds.push(element.referenceId);
+        }
+    }
+
+    if (contextIds.length >= 1) {
+        const resultNotes = await ModelNotes.aggregate([
+            {
+                $match: {
+                    username: username,
+                    _id: {
+                        $in: contextIds
+                    },
+                }
+            }
+        ]) as INotes[];
+        if (resultNotes.length >= 1) {
+            noteStr = 'Below are the notes added by the user:\n\n';
+            for (let index = 0; index < resultNotes.length; index++) {
+                const element = resultNotes[index];
+                if (element.title.length >= 1) {
+                    noteStr += `Note ${index + 1} -> title: ${element.title}.\n`;
+                }
+                if (element.description.length >= 1) {
+                    const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                    noteStr += `Note ${index + 1} -> description: ${markdownContent}.\n`;
+                }
+                if (element.isStar) {
+                    noteStr += `Note ${index + 1} -> isStar: Starred notes.\n`;
+                }
+                if (Array.isArray(element.tags) && element.tags.length > 0) {
+                    noteStr += `Note ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
+                }
+                noteStr += '\n';
+            }
+            noteStr += '\n\n';
+        }
+    }
+    return noteStr;
 }
 
 const getNextMessageFromLast30Conversation = async ({
@@ -359,11 +433,24 @@ const getNextMessageFromLast30Conversation = async ({
         const taskStr = await getTasks({
             username,
         });
-        console.log('taskStr', taskStr);
         if (taskStr.length > 0) {
             messages.push({
                 role: "user",
                 content: taskStr,
+            });
+        }
+    }
+
+    // notes list
+    if (threadInfo.isAutoAiContextSelectEnabled) {
+        const noteStr = await getNotes({
+            username,
+            threadId,
+        });
+        if (noteStr.length > 0) {
+            messages.push({
+                role: "user",
+                content: noteStr,
             });
         }
     }
@@ -416,8 +503,6 @@ const getNextMessageFromLast30Conversation = async ({
             }
         }
     }
-
-    console.log('messages length: ', JSON.stringify(messages).length);
 
     if (preferredModelProvider === 'groq') {
         resultNextMessage = await fetchLlm({
