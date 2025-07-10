@@ -197,8 +197,10 @@ const getMemos = async ({
 
 const getTasks = async ({
     username,
+    threadId,
 }: {
     username: string,
+    threadId: mongoose.Types.ObjectId,
 }) => {
     let taskStr = '';
 
@@ -209,10 +211,33 @@ const getTasks = async ({
     const currentDateFromLast15Days = currentDate.getTime() - 24 * 60 * 60 * 1000 * 15;
     const currentDateFromLast15DaysDate = new Date(currentDateFromLast15Days);
 
+    const contextIds = [] as mongoose.Types.ObjectId[];
+
+    const resultContexts = await ModelChatLlmThreadContextReference.aggregate([
+        {
+            $match: {
+                username: username,
+                referenceFrom: 'task',
+                referenceId: { $ne: null },
+                threadId: threadId,
+            }
+        }
+    ]) as IChatLlmThreadContextReference[];
+
+    for (let index = 0; index < resultContexts.length; index++) {
+        const element = resultContexts[index];
+        if (element.referenceId) {
+            contextIds.push(element.referenceId);
+        }
+    }
+
     const resultTasks = await ModelTask.aggregate([
         {
             $match: {
                 username: username,
+                _id: {
+                    $in: contextIds
+                },
             }
         },
         {
@@ -432,6 +457,7 @@ const getNextMessageFromLast30Conversation = async ({
     if (threadInfo.isAutoAiContextSelectEnabled) {
         const taskStr = await getTasks({
             username,
+            threadId,
         });
         if (taskStr.length > 0) {
             messages.push({

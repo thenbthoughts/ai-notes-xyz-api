@@ -12,7 +12,7 @@ const chatLlmThreadContextReferenceSchema = new Schema<IChatLlmThreadContextRefe
     referenceFrom: {
         type: String,
         default: '',
-        // note, task, chat, memo, life-event, info-vault etc.
+        // note, task, chat, lifeEvent, infoVault etc.
     },
     referenceId: {
         type: mongoose.Schema.Types.ObjectId,
