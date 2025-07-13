@@ -60,16 +60,6 @@ router.post(
             // does thread have personal context enabled?
             const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
 
-            let provider = '';
-            let llmAuthToken = '';
-            if (apiKeys.apiKeyGroqValid) {
-                provider = 'groq';
-                llmAuthToken = apiKeys.apiKeyGroq;
-            } else if (apiKeys.apiKeyOpenrouterValid) {
-                provider = 'openrouter';
-                llmAuthToken = apiKeys.apiKeyOpenrouter;
-            }
-
             // update title
             await ModelLlmPendingTaskCron.create({
                 username: auth_username,
@@ -77,14 +67,26 @@ router.post(
                 targetRecordId: threadId,
             });
 
+            let aiModelProvider = threadInfo.aiModelProvider as 'groq' | 'openrouter';
+            let aiModelName = threadInfo.aiModelName;
+            let llmAuthToken = '';
+            if (aiModelProvider === 'groq') {
+                llmAuthToken = apiKeys.apiKeyGroq;
+            } else if (aiModelProvider === 'openrouter') {
+                llmAuthToken = apiKeys.apiKeyOpenrouter;
+            }
+
             // process message
-            if (provider === 'groq' || provider === 'openrouter') {
+            if (aiModelProvider === 'groq' || aiModelProvider === 'openrouter') {
                 const nextMessage = await getNextMessageFromLast30Conversation({
                     // identification
                     threadId,
                     threadInfo,
                     username: res.locals.auth_username,
 
+                    // model name
+                    aiModelProvider: aiModelProvider,
+                    aiModelName: aiModelName,
                     userApiKey: apiKeys,
                 });
                 const resultFromLastConversation = await ModelChatLlm.create({

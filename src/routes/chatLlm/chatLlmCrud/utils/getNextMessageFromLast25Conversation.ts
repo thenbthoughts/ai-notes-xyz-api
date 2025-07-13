@@ -412,11 +412,19 @@ const getNextMessageFromLast30Conversation = async ({
 
     // api key
     userApiKey,
+
+    // model name
+    aiModelProvider,
+    aiModelName,
 }: {
     threadId: mongoose.Types.ObjectId,
     threadInfo: IChatLlmThread,
     username: string;
     userApiKey: tsUserApiKey;
+
+    // model name
+    aiModelProvider: 'groq' | 'openrouter';
+    aiModelName: string;
 }) => {
     const messages = [];
 
@@ -503,55 +511,46 @@ const getNextMessageFromLast30Conversation = async ({
         }
     }
 
+    // result
     let resultNextMessage = '';
 
-    let preferredModelProvider = '';
-    let preferredModelName = '';
+    // llm auth token
     let llmAuthToken = '';
 
     // select preference model
     if (userInfo) {
-        if (userInfo.preferredModelProvider === 'openrouter' && userApiKey.apiKeyOpenrouterValid) {
-            preferredModelProvider = 'openrouter';
+        if (aiModelProvider === 'openrouter' && userApiKey.apiKeyOpenrouterValid) {
             llmAuthToken = userApiKey.apiKeyOpenrouter;
-            if (userInfo.preferredModelName.length >= 1) {
-                preferredModelName = userInfo.preferredModelName;
-            } else {
-                preferredModelName = 'openrouter/auto'
-            }
-        } else if (userInfo.preferredModelProvider === 'groq' && userApiKey.apiKeyGroqValid) {
-            preferredModelProvider = 'groq';
+        } else if (aiModelProvider === 'groq' && userApiKey.apiKeyGroqValid) {
             llmAuthToken = userApiKey.apiKeyGroq;
-            if (userInfo.preferredModelName.length >= 1) {
-                preferredModelName = userInfo.preferredModelName;
-            } else {
-                preferredModelName = 'meta-llama/llama-4-scout-17b-16e-instruct'
-            }
         }
     }
 
-    if (preferredModelProvider === 'groq') {
-        resultNextMessage = await fetchLlm({
-            argMessages: messages,
-            modelName: preferredModelName,
+    // fetch llm
+    if (llmAuthToken.length >= 1) {
+        if (aiModelProvider === 'groq') {
+            resultNextMessage = await fetchLlm({
+                argMessages: messages,
+                modelName: aiModelName,
 
-            provider: 'groq',
-            llmAuthToken,
-        });
-    } else if (preferredModelProvider === 'openrouter') {
-        resultNextMessage = await fetchLlm({
-            argMessages: messages,
-            modelName: preferredModelName,
+                provider: 'groq',
+                llmAuthToken,
+            });
+        } else if (aiModelProvider === 'openrouter') {
+            resultNextMessage = await fetchLlm({
+                argMessages: messages,
+                modelName: aiModelName,
 
-            provider: 'openrouter',
-            llmAuthToken,
-        });
+                provider: 'openrouter',
+                llmAuthToken,
+            });
+        }
     }
 
     return {
         nextMessage: resultNextMessage,
-        aiModelProvider: preferredModelProvider,
-        aiModelName: preferredModelName,
+        aiModelProvider: aiModelProvider,
+        aiModelName: aiModelName,
     };
 }
 

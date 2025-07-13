@@ -6,12 +6,12 @@ import { ModelLlmPendingTaskCron } from "../../../../schema/SchemaLlmPendingTask
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
 
 
-const  openRouterModelGet = async () => {
+const openRouterModelGet = async () => {
     try {
         // Check if task was already completed today
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         const existingTask = await ModelLlmPendingTaskCron.findOne({
             taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
             taskStatus: {
@@ -36,10 +36,24 @@ const  openRouterModelGet = async () => {
 
         const data = response.data.data;
 
-        if(data.length >= 1) {
+        if (data.length >= 1) {
+            let filterDoc = data.filter((item: any) => {
+                let isValid = true;
+
+                // exclude free models as the output may be stored in the database
+                if (
+                    item.id.toLowerCase().includes('free') ||
+                    item.name.toLowerCase().includes('free')
+                ) {
+                    isValid = false;
+                }
+
+                return isValid;
+            });
+
             // delete all and insert new
             await ModelAiListOpenrouter.deleteMany({});
-            await ModelAiListOpenrouter.insertMany(data);
+            await ModelAiListOpenrouter.insertMany(filterDoc);
         }
 
         return true;
