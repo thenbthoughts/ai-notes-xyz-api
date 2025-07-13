@@ -1,14 +1,25 @@
 import mongoose from "mongoose";
+
+// Schema
 import { ModelLlmPendingTaskCron } from "../../schema/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
+
+// Chat tasks
 import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById";
 import generateChatTagsById from "./page/chat/generateChatTagsById";
+
+// Life Events tasks
 import generateLifeEventAiTagsById from "./page/lifeEvents/generateLifeEventAiTagsById";
 import generateLifeEventAiSummaryById from "./page/lifeEvents/generateLifeEventAiSummaryById";
 import generateLifeEventAiCategoryById from "./page/lifeEvents/generateLifeEventAiCategoryById";
+
+// Notes tasks
 import generateNotesAiSummaryById from "./page/notes/generateNotesAiSummaryById";
 import generateNotesAiTagsById from "./page/notes/generateNotesAiTagsById";
+
+// Settings tasks
 import openRouterModelGet from "./page/settings/openRouterModelGet";
+import groqModelGet from "./page/settings/groqModelGet";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -85,6 +96,12 @@ const llmPendingTaskProcessFunc = async ({
             // Settings tasks
             case llmPendingTaskTypes.page.settings.openRouterModelGet:
                 isTaskDone = await openRouterModelGet();
+                break;
+            
+            case llmPendingTaskTypes.page.settings.groqModelGet:
+                isTaskDone = await groqModelGet({
+                    username: resultTask.username,
+                });
                 break;
                 
             default:

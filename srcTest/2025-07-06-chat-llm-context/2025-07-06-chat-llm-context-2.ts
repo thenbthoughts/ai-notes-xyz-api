@@ -10,8 +10,8 @@ const init = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
         
         const llmPendingTask = await ModelLlmPendingTaskCron.create({
-            taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
-            username: 'ai-notes-xyz',
+            taskType: llmPendingTaskTypes.page.settings.groqModelGet,
+            username: 'example',
 
             createdAtUtc: new Date(),
         });

@@ -26,6 +26,7 @@ const llmPendingTaskTypes = {
         // settings
         settings: {
             openRouterModelGet: 'pageSettings_openRouterModelGet',
+            groqModelGet: 'pageSettings_groqModelGet',
         },
     }
 };

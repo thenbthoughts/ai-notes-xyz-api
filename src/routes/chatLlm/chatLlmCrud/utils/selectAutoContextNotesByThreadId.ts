@@ -381,7 +381,7 @@ const selectAutoContextNotesByThreadId = async ({
 
         return true;
     } catch (error) {
-        console.error('Error in suggestAutoContextByThreadId:', error);
+        console.error('Error in selectAutoContextNotesByThreadId:', error);
         return false;
     }
 }
