@@ -7,7 +7,6 @@ import openrouterMarketing from "../../../../config/openrouterMarketing";
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelUser } from '../../../../schema/SchemaUser.schema';
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
-import { ModelMemo } from "../../../../schema/SchemaMemoQuickAi.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
 import {
     ModelChatLlmThreadContextReference
@@ -167,32 +166,6 @@ const getPersonalContext = async ({
         return '';
     }
 
-}
-
-const getMemos = async ({
-    username,
-}: {
-    username: string,
-}) => {
-    let memoStr = '';
-    const resultMemos = await ModelMemo.aggregate([
-        {
-            $match: {
-                username: username
-            }
-        }
-    ]);
-    if (resultMemos.length >= 1) {
-        memoStr = 'Below are the memos added by the user:\n\n';
-        for (let index = 0; index < resultMemos.length; index++) {
-            const element = resultMemos[index];
-            memoStr += `Memo ${index + 1} -> title: ${element.title}.\n`;
-            memoStr += `Memo ${index + 1} -> content: ${element.content}.\n`;
-            memoStr += '\n';
-        }
-        memoStr += '\n\n';
-    }
-    return memoStr;
 }
 
 const getTasks = async ({
@@ -431,7 +404,7 @@ const getNextMessageFromLast30Conversation = async ({
     let systemPrompt = "You are a helpful chatbot assistant. ";
     systemPrompt += "Your role is to provide concise, informative and engaging responses to user inquiries based on the context of previous conversations. "
 
-    systemPrompt += "Memos and Tasks are included in the LLM context; use them to inform responses when only relevant. ";
+    systemPrompt += "Notes or Tasks are included in the LLM context; use them to inform responses when only relevant. ";
     systemPrompt += "First respond with greeting then response with message. ";
     systemPrompt += "First, respond with a greeting, then you may response with an out-of-the-box idea.";
 
@@ -447,19 +420,6 @@ const getNextMessageFromLast30Conversation = async ({
     })
 
     const userInfo = await ModelUser.findOne({ username }).exec();
-
-    // memo list
-    if (threadInfo.isAutoAiContextSelectEnabled) {
-        const memoStr = await getMemos({
-            username,
-        });
-        if (memoStr.length > 0) {
-            messages.push({
-                role: "user",
-                content: memoStr,
-            });
-        }
-    }
 
     // tasks list
     if (threadInfo.isAutoAiContextSelectEnabled) {

@@ -41,8 +41,6 @@ import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsC
 import routesLifeEventFileUploadCrud from './lifeEvents/lifeEventsCrud/lifeEventsFileUploadCrud.route';
 import routesLifeEventsAiCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsAiCategoryCrud.route';
 
-import routesMemoCrud from './memo/memoCrud.route';
-
 import uploadFileS3 from './upload/uploadFileS3';
 
 import apiKeyDefault from './apiKeyDefault/apiKeyDefault.route';
@@ -94,9 +92,6 @@ router.use('/life-events/crud', routesLifeEventsCrud);
 router.use('/life-events/category-crud', routesLifeEventCategoryCrud);
 router.use('/life-events/file-upload-crud', routesLifeEventFileUploadCrud);
 router.use('/life-events/ai-category-crud', routesLifeEventsAiCategoryCrud);
-
-// memo -> 
-router.use('/memos/crud', routesMemoCrud);
 
 // uploads
 router.use('/uploads/crudS3', uploadFileS3);
