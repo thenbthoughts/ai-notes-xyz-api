@@ -110,12 +110,20 @@ router.post(
             const {
                 isAutoAiContextSelectEnabled,
                 isPersonalContextEnabled,
+
+                // model settings
+                aiModelName,
+                aiModelProvider,
             } = req.body;
 
             const addData = {
                 threadTitle: threadTitle.trim(),
                 isAutoAiContextSelectEnabled: false,
                 isPersonalContextEnabled: false,
+
+                // model settings
+                aiModelName: '',
+                aiModelProvider: '',
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -124,6 +132,14 @@ router.post(
 
             if (typeof isPersonalContextEnabled === 'boolean') {
                 addData.isPersonalContextEnabled = isPersonalContextEnabled;
+            };
+
+            if (typeof aiModelName === 'string') {
+                addData.aiModelName = aiModelName;
+            };
+
+            if (typeof aiModelProvider === 'string') {
+                addData.aiModelProvider = aiModelProvider;
             };
 
             const newThread = await ModelChatLlmThread.create({
@@ -165,7 +181,15 @@ router.post(
             }
 
             // Extract fields to update
-            const { threadTitle, isAutoAiContextSelectEnabled, isPersonalContextEnabled } = req.body;
+            const {
+                threadTitle,
+                isAutoAiContextSelectEnabled,
+                isPersonalContextEnabled,
+
+                // model settings
+                aiModelName,
+                aiModelProvider,
+            } = req.body;
 
             // Build update object
             const updateData: any = {};
@@ -183,6 +207,14 @@ router.post(
 
             if (typeof isPersonalContextEnabled === 'boolean') {
                 updateData.isPersonalContextEnabled = isPersonalContextEnabled;
+            };
+
+            if (typeof aiModelName === 'string') {
+                updateData.aiModelName = aiModelName;
+            };
+
+            if (typeof aiModelProvider === 'string') {
+                updateData.aiModelProvider = aiModelProvider;
             };
 
             // Update timestamps and user agent info

@@ -17,6 +17,18 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: true,
     },
 
+    // selected model
+    aiModelName: {
+        type: String,
+        default: '',
+        // model name
+    },
+    aiModelProvider: {
+        type: String,
+        default: '',
+        // model provider like openrouter, groq, ollama, jan etc
+    },
+
     // ai
     tagsAi: { type: [String], default: [] },
     aiSummary: {

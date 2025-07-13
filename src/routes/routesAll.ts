@@ -16,6 +16,9 @@ import routesChatLlmAiGeneratedNextQuestion from './chatLlm/chatLlmCrud/chatLlmA
 import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCrud.route';
 import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThreadsContextCrud.route';
 
+// dynamic data
+import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
+
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
 import routesTaskStatusList from './task/taskStatusList.route';
@@ -101,6 +104,9 @@ router.use('/apiKeyDefault/crud', apiKeyDefault);
 
 // llm task background process
 router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRouter);
+
+// dynamic data
+router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
 
 /*
 Example:
