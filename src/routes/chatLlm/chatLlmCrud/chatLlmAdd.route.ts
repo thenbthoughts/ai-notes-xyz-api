@@ -6,8 +6,7 @@ import { getFileFromS3R2 } from '../../../utils/files/s3R2GetFile';
 import fetchLlmGroqAudio from './utils/callLlmGroqAudio';
 import { GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import mongoose, { ObjectId } from 'mongoose';
-import getNextMessageFromLast30Conversation from './utils/getNextMessageFromLast25Conversation';
+import { ObjectId } from 'mongoose';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
@@ -76,13 +75,6 @@ router.post(
                 llmAuthToken = apiKeys.apiKeyOpenrouter;
             }
 
-            // update title
-            await ModelLlmPendingTaskCron.create({
-                username: auth_username,
-                taskType: llmPendingTaskTypes.page.chat.generateChatThreadTitleById,
-                targetRecordId: threadId,
-            });
-
             // get date utc str as YYYY-MM
             if (type === 'image') {
                 const result = await ModelChatLlm.create({
@@ -148,6 +140,7 @@ router.post(
                             });
 
                             // add notes from last 25 conversations
+                            /*
                             if (provider === 'groq' || provider === 'openrouter') {
                                 const nextMessage = await getNextMessageFromLast30Conversation({
                                     // identification
@@ -180,6 +173,7 @@ router.post(
                                     auth_username,
                                 });
                             }
+                            */
                         }
                     }
                 }
@@ -275,6 +269,7 @@ router.post(
                                 auth_username,
                             });
 
+                            /*
                             // add notes from last 25 conversations
                             if (provider === 'groq' || provider === 'openrouter') {
                                 const nextMessage = await getNextMessageFromLast30Conversation({
@@ -308,6 +303,7 @@ router.post(
                                     auth_username,
                                 });
                             }
+                            */
                         }
                     }
                 }
@@ -333,6 +329,7 @@ router.post(
                     auth_username,
                 });
 
+                /*
                 // add notes
                 if (provider === 'groq' || provider === 'openrouter') {
                     const nextMessage = await getNextMessageFromLast30Conversation({
@@ -365,6 +362,7 @@ router.post(
                         auth_username,
                     });
                 }
+                */
                 return res.status(201).json(newNote);
             }
 
