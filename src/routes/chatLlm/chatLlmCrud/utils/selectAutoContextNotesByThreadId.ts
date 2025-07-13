@@ -305,7 +305,7 @@ const analyzeConversationWithLlm = async ({
     }
 };
 
-const suggestAutoContextNotesByThreadId = async ({
+const selectAutoContextNotesByThreadId = async ({
     threadId,
     username,
     llmAuthToken,
@@ -386,4 +386,4 @@ const suggestAutoContextNotesByThreadId = async ({
     }
 }
 
-export default suggestAutoContextNotesByThreadId;
+export default selectAutoContextNotesByThreadId;
