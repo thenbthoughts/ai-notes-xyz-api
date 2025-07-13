@@ -22,6 +22,11 @@ const llmPendingTaskTypes = {
             generateNoteAiSummaryById: 'pageNotes_generateNoteAiSummaryById',
             generateNoteAiTagsById: 'pageNotes_generateNoteAiTagsById',
         },
+
+        // settings
+        settings: {
+            openRouterModelGet: 'pageSettings_openRouterModelGet',
+        },
     }
 };
 

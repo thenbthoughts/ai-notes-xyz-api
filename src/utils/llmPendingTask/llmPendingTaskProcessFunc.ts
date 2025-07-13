@@ -8,6 +8,7 @@ import generateLifeEventAiSummaryById from "./page/lifeEvents/generateLifeEventA
 import generateLifeEventAiCategoryById from "./page/lifeEvents/generateLifeEventAiCategoryById";
 import generateNotesAiSummaryById from "./page/notes/generateNotesAiSummaryById";
 import generateNotesAiTagsById from "./page/notes/generateNotesAiTagsById";
+import openRouterModelGet from "./page/settings/openRouterModelGet";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -80,7 +81,12 @@ const llmPendingTaskProcessFunc = async ({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;
-            
+
+            // Settings tasks
+            case llmPendingTaskTypes.page.settings.openRouterModelGet:
+                isTaskDone = await openRouterModelGet();
+                break;
+                
             default:
                 console.warn('Unknown task type:', resultTask.taskType);
                 break;

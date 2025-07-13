@@ -9,6 +9,10 @@ export interface IChatLlmThread extends Document {
     isPersonalContextEnabled: boolean,
     isAutoAiContextSelectEnabled: boolean,
 
+    // selected model
+    aiModelName: string,
+    aiModelProvider: string,
+
     // model info
     aiSummary: string;
     aiTasks: object[];
