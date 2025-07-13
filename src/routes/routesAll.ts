@@ -19,6 +19,7 @@ import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAut
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
+import routesDynamicDataModelGroq from './dynamicData/modelGroq.route';
 
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
@@ -104,6 +105,7 @@ router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRout
 
 // dynamic data
 router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
+router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
 
 /*
 Example:
