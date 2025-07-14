@@ -40,7 +40,7 @@ mongoose.connect(envKeys.MONGODB_URI);
 // Use morgan to log requests
 app.use(morgan('dev'));
 
-app.use('/', express.static('dist'));
 app.use('/api', routesAll);
+app.use('/', express.static('dist'));
 
 export default app;
