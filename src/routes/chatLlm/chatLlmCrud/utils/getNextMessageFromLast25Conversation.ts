@@ -17,6 +17,7 @@ import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
 import { IChatLlmThreadContextReference } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThreadContextReference.types";
+import { INotesWorkspace } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
 
 interface Message {
     role: string;
@@ -113,7 +114,7 @@ const fetchLlm = async ({
         if (isAxiosError(error)) {
             console.error(error.message);
         }
-        console.log(error);
+        console.error(error);
         return '';
     }
 };
@@ -230,6 +231,22 @@ const getTasks = async ({
             }
         },
         {
+            $lookup: {
+                from: 'taskComments',
+                localField: '_id',
+                foreignField: 'taskId',
+                as: 'taskComments',
+            }
+        },
+        {
+            $lookup: {
+                from: 'tasksSub',
+                localField: '_id',
+                foreignField: 'parentTaskId',
+                as: 'tasksSub',
+            }
+        },
+        {
             $addFields: {
                 updatedAtUtcLast3DaysSortPoint: {
                     $cond: {
@@ -302,6 +319,22 @@ const getTasks = async ({
                 taskStr += `Task ${index + 1} -> status -> ${element.taskStatusList[0].statusTitle}.\n`;
             }
 
+            if (element.taskComments.length >= 1) {
+                taskStr += `Task ${index + 1} -> comments: \n`;
+                for (let commentIndex = 0; commentIndex < element.taskComments.length; commentIndex++) {
+                    const comment = element.taskComments[commentIndex];
+                    taskStr += `Task ${index + 1} -> comments ${commentIndex + 1} -> ${comment.commentText} ${comment.isAi ? ' (AI)' : ''} \n`;
+                }
+            }
+
+            if (element.tasksSub.length >= 1) {
+                taskStr += `Task ${index + 1} -> subtasks: \n`;
+                for (let subIndex = 0; subIndex < element.tasksSub.length; subIndex++) {
+                    const subtask = element.tasksSub[subIndex];
+                    taskStr += `Task ${index + 1} -> subtasks ${subIndex + 1} -> ${subtask.title} (${subtask.taskCompletedStatus ? 'completed' : 'pending'}) \n`;
+                }
+            }
+
             taskStr += '\n';
         }
         taskStr += '\n\n';
@@ -340,6 +373,10 @@ const getNotes = async ({
     }
 
     if (contextIds.length >= 1) {
+        interface INotesAggregate extends INotes {
+            notesWorkspaceArr: INotesWorkspace[];
+        }
+
         const resultNotes = await ModelNotes.aggregate([
             {
                 $match: {
@@ -348,8 +385,16 @@ const getNotes = async ({
                         $in: contextIds
                     },
                 }
+            },
+            {
+                $lookup: {
+                    from: 'notesWorkspace',
+                    localField: 'notesWorkspaceId',
+                    foreignField: '_id',
+                    as: 'notesWorkspaceArr',
+                }
             }
-        ]) as INotes[];
+        ]) as INotesAggregate[];
         if (resultNotes.length >= 1) {
             noteStr = 'Below are the notes added by the user:\n\n';
             for (let index = 0; index < resultNotes.length; index++) {
@@ -367,6 +412,10 @@ const getNotes = async ({
                 if (Array.isArray(element.tags) && element.tags.length > 0) {
                     noteStr += `Note ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
                 }
+                if (element.notesWorkspaceArr.length >= 1) {
+                    noteStr += `Note ${index + 1} -> workspace: ${element.notesWorkspaceArr[0].title}.\n`;
+                }
+
                 noteStr += '\n';
             }
             noteStr += '\n\n';
