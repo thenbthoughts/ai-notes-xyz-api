@@ -10,6 +10,7 @@ import middlewareActionDatetime from '../../../middleware/middlewareActionDateti
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 import selectAutoContextNotesByThreadId from './utils/selectAutoContextNotesByThreadId';
+import selectAutoTaskNotesByThreadId from './utils/selectAutoTaskNotesByThreadId';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 
 // Router
@@ -281,6 +282,59 @@ router.post(
 
             return res.json({
                 message: 'Contexts selected successfully',
+                result,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
+// Select Auto Context Tasks by Thread ID API
+router.post(
+    '/contextSelectAutoContextTasks',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        try {
+            const { threadId } = req.body;
+
+            const auth_username = res.locals.auth_username;
+            const apiKeys = getApiKeyByObject(res.locals.apiKey);
+            
+            let aiModelProvider = '' as "groq" | "openrouter";
+            let llmAuthToken = '';
+            if (apiKeys.apiKeyOpenrouterValid) {
+                aiModelProvider = 'openrouter';
+                llmAuthToken = apiKeys.apiKeyOpenrouter;
+            } else if (apiKeys.apiKeyGroqValid) {
+                aiModelProvider = 'groq';
+                llmAuthToken = apiKeys.apiKeyGroq;
+            } else {
+                return res.status(400).json({
+                    message: 'No API key found',
+                });
+            }
+
+            const threadIdObj = getMongodbObjectOrNull(threadId);
+            if (threadIdObj === null) {
+                return res.status(400).json({
+                    message: 'Thread ID is invalid',
+                });
+            }
+
+            const result = await selectAutoTaskNotesByThreadId({
+                threadId: threadIdObj,
+                username: auth_username,
+                llmAuthToken,
+                provider: aiModelProvider,
+            });
+
+            return res.json({
+                message: 'Task contexts selected successfully',
                 result,
             });
         } catch (error) {
