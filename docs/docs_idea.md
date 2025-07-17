@@ -10,3 +10,32 @@
         1. Images -> user stories -> to vector
         2. Audio -> user stories -> to vector
         3. LLM generated to Text to Audio.
+
+-----
+
+How to break a problem into various layers?
+
+1. Overall summary
+2. Topic and sub topics
+3. FAQ
+4. User stories
+5. Out of the box ideas
+6. 
+
+! ! -> FAQ -> 
+! ! -> FAQ
+! ! -> FAQ
+! ! -> FAQ
+! ! -> FAQ
+
+Reliable:
+AI summary ->
+AI FAQ ->
+
+Not reliable:
+AI user stories
+
+
+
+-----
+

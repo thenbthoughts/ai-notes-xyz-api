@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import suggestAutoContextNotesByThreadId from "../../src/routes/chatLlm/chatLlmCrud/utils/selectAutoContextNotesByThreadId";
+import suggestAutoContextNotesByThreadId from "../../src/routes/chatLlm/chatLlmThreads/utils/selectAutoContextNotesByThreadId";
 import { ModelUserApiKey } from "../../src/schema/SchemaUserApiKey.schema";
 import envKeys from "../../src/config/envKeys";
 
