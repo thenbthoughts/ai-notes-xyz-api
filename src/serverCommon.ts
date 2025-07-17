@@ -43,4 +43,12 @@ app.use(morgan('dev'));
 app.use('/api', routesAll);
 app.use('/', express.static('dist'));
 
+// Catch-all handler to serve index.html for client-side routing
+app.get('*', (req: Request, res: Response) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile('index.html', { root: 'dist' });
+    }
+});
+
+
 export default app;
