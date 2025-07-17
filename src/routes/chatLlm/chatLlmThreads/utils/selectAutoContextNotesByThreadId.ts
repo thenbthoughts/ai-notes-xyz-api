@@ -85,6 +85,9 @@ const fetchLlmForNotesAnalysis = async ({
             modelName = 'llama-3.1-8b-instant';
         }
 
+        console.log('length of argMessages: ', JSON.stringify(argMessages).length);
+        console.log('length of argMessages: ', JSON.stringify(argMessages).length/4);
+
         const data: RequestData = {
             messages: argMessages,
             model: modelName,
@@ -157,6 +160,7 @@ const getTop5RelevantNotes = ({
 const insertTop5ContextReferences = async ({
     top5Results,
     username,
+    threadId,
 }: {
     top5Results: Array<{
         note: INotes;
@@ -164,6 +168,7 @@ const insertTop5ContextReferences = async ({
         relevanceReason: string;
     }>;
     username: string;
+    threadId: mongoose.Types.ObjectId;
 }) => {
     try {
         if (top5Results.length > 0) {
@@ -175,9 +180,11 @@ const insertTop5ContextReferences = async ({
                 });
 
                 if (!existingReference) {
+                    console.log('inserting reference: ', item.note._id);
                     await ModelChatLlmThreadContextReference.create({
-                        referenceFrom: 'notes',
+                        referenceFrom: 'note',
                         referenceId: item.note._id,
+                        threadId,
                         username,
                     });
                 }
@@ -231,13 +238,18 @@ const analyzeConversationWithLlm = async ({
         const notesSummary = notes.map(note => ({
             id: (note._id as mongoose.Types.ObjectId).toString(),
             title: note.title,
+            description: note.description,
             tags: note.tags,
             aiTags: note.aiTags,
         }));
 
         let notesStr = '';
         for (const note of notesSummary) {
-            notesStr += `ID: ${note.id}\nTitle: ${note.title}\nTags: ${note.tags.join(', ')}\nAI Tags: ${note.aiTags.join(', ')}\n\n`;
+            notesStr += `ID: ${note.id}\n
+            Title: ${note.title}\n
+            Description: ${note.description}\n
+            Tags: ${note.tags.join(', ')}\n
+            AI Tags: ${note.aiTags.join(', ')}\n\n`;
         }
 
         const messages: Message[] = [
@@ -322,6 +334,8 @@ const selectAutoContextNotesByThreadId = async ({
             username,
         });
 
+        console.log('last20Conversations: ', last20Conversations);
+
         if (last20Conversations.length === 0) {
             return false;
         }
@@ -372,6 +386,7 @@ const selectAutoContextNotesByThreadId = async ({
         const insertSuccess = await insertTop5ContextReferences({
             top5Results,
             username,
+            threadId,
         });
 
         if (!insertSuccess) {
