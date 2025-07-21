@@ -471,31 +471,27 @@ const getNextMessageFromLast30Conversation = async ({
     const userInfo = await ModelUser.findOne({ username }).exec();
 
     // tasks list
-    if (threadInfo.isAutoAiContextSelectEnabled) {
-        const taskStr = await getTasks({
-            username,
-            threadId,
+    const taskStr = await getTasks({
+        username,
+        threadId,
+    });
+    if (taskStr.length > 0) {
+        messages.push({
+            role: "user",
+            content: taskStr,
         });
-        if (taskStr.length > 0) {
-            messages.push({
-                role: "user",
-                content: taskStr,
-            });
-        }
     }
 
     // notes list
-    if (threadInfo.isAutoAiContextSelectEnabled) {
-        const noteStr = await getNotes({
-            username,
-            threadId,
+    const noteStr = await getNotes({
+        username,
+        threadId,
+    });
+    if (noteStr.length > 0) {
+        messages.push({
+            role: "user",
+            content: noteStr,
         });
-        if (noteStr.length > 0) {
-            messages.push({
-                role: "user",
-                content: noteStr,
-            });
-        }
     }
 
     // last 20 conversations
