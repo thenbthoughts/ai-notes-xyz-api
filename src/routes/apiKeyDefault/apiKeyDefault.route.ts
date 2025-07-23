@@ -35,6 +35,15 @@ router.post('/updateApiKeyDefault', middlewareUserAuth, async (req: Request, res
             apiKeyS3AccessKeyId: '',
             apiKeyS3SecretAccessKey: '',
             apiKeyS3BucketName: '',
+
+            // apikey - ollama
+            apiKeyOllamaValid: false,
+            apiKeyOllamaEndpoint: '',
+
+            // apikey - qdrant
+            apiKeyQdrantValid: false,
+            apiKeyQdrantEndpoint: '',
+            apiKeyQdrantPassword: '',
         }
 
         if (envKeys.DEFAULT_ENV_GROQ_API_KEY.length >= 1) {

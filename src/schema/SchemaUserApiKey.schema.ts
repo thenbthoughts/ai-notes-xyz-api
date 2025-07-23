@@ -20,6 +20,15 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyS3AccessKeyId: { type: String, default: '' },
     apiKeyS3SecretAccessKey: { type: String, default: '' },
     apiKeyS3BucketName: { type: String, default: '' },
+
+    // apikey - ollama
+    apiKeyOllamaValid: { type: Boolean, default: false },
+    apiKeyOllamaEndpoint: { type: String, default: '' },
+
+    // apikey - qdrant
+    apiKeyQdrantValid: { type: Boolean, default: false },
+    apiKeyQdrantEndpoint: { type: String, default: '' },
+    apiKeyQdrantPassword: { type: String, default: '' },
 });
 
 // User Model

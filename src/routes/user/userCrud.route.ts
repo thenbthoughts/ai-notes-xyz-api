@@ -25,6 +25,8 @@ router.post(
                 apiKeyGroqValid: false,
                 apiKeyOpenrouterValid: false,
                 apiKeyS3Valid: false,
+                apiKeyOllamaValid: false,
+                apiKeyQdrantValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -52,6 +54,8 @@ router.post(
                             apiKeyGroqValid: false,
                             apiKeyOpenrouterValid: false,
                             apiKeyS3Valid: false,
+                            apiKeyOllamaValid: false,
+                            apiKeyQdrantValid: false,
                         }
                     },
                     {
@@ -79,6 +83,20 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.apiKeyS3Valid === 'boolean') {
                     resultApiKey.apiKeyS3Valid = resultUserInfoApi.apiKeyS3Valid;
+                }
+            }
+
+            // api key ollama
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyOllamaValid === 'boolean') {
+                    resultApiKey.apiKeyOllamaValid = resultUserInfoApi.apiKeyOllamaValid;
+                }
+            }
+
+            // api key qdrant
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyQdrantValid === 'boolean') {
+                    resultApiKey.apiKeyQdrantValid = resultUserInfoApi.apiKeyQdrantValid;
                 }
             }
 

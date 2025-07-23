@@ -18,6 +18,15 @@ interface IUserApiKey extends Document {
     apiKeyS3AccessKeyId: string,
     apiKeyS3SecretAccessKey: string,
     apiKeyS3BucketName: string,
+
+    // apikey - ollama
+    apiKeyOllamaValid: boolean;
+    apiKeyOllamaEndpoint: string;
+
+    // apikey - qdrant
+    apiKeyQdrantValid: boolean;
+    apiKeyQdrantEndpoint: string;
+    apiKeyQdrantPassword: string;
 };
 
 export default IUserApiKey;
