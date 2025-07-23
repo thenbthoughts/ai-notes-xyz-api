@@ -21,6 +21,9 @@ const llmPendingTaskTypes = {
         notes: {
             generateNoteAiSummaryById: 'pageNotes_generateNoteAiSummaryById',
             generateNoteAiTagsById: 'pageNotes_generateNoteAiTagsById',
+
+            // vector db index by notes id
+            generateEmbeddingById: 'pageNotes_pageNotes_generateEmbeddingById',
         },
 
         // settings
