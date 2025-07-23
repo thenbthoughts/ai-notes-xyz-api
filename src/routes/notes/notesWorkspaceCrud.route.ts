@@ -111,6 +111,14 @@ router.post('/notesWorkspaceGet', middlewareUserAuth, async (req: Request, res: 
             }
         }
 
+        // stage -> sort
+        tempStage = {
+            $sort: {
+                title: 1,
+            }
+        };
+        pipelineDocument.push(tempStage);
+
         // stage -> skip
         tempStage = {
             $skip: (page - 1) * perPage,
