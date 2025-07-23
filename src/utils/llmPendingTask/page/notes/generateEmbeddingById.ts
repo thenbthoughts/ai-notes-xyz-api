@@ -91,15 +91,15 @@ const generateEmbeddingById = async ({
         const collectionName = `index-user-${notesFirst.username}`;
 
         // create collection if not exists
-        const resultGetCollection = await qdrantClient.getCollection(collectionName);
-        if (resultGetCollection.status !== 'green') {
-            const resultCreateCollection = await qdrantClient.createCollection(collectionName, {
+        try {
+            await qdrantClient.createCollection(collectionName, {
                 vectors: {
                     size: embedding.length,
-                    distance: 'Cosine',
-                },
+                    distance: 'Cosine' // Cosine similarity works well with text embeddings
+                }
             });
-            console.log('resultCreateCollection: ', resultCreateCollection);
+        } catch (error) {
+            console.log('error create collection: ', error);
         }
 
         const result = await qdrantClient.upsert(collectionName, {
