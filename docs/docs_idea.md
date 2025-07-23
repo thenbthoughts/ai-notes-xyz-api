@@ -15,12 +15,13 @@
 
 How to break a problem into various layers?
 
-1. Overall summary
-2. Topic and sub topics
-3. FAQ
-4. User stories
-5. Out of the box ideas
-6. 
+1. Notes
+2. Overall summary
+3. Topic and sub topics
+4. FAQ
+5. User stories
+6. Out of the box ideas
+7. 
 
 ! ! -> FAQ -> 
 ! ! -> FAQ

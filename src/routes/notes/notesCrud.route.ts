@@ -195,6 +195,8 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
             username: res.locals.auth_username,
         });
 
+        // TODO delete notes from vector db
+
         if (!note) {
             return res.status(404).json({ message: 'Note not found or unauthorized' });
         }
@@ -327,6 +329,13 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
             targetRecordId: _id,
         });
 
+        // generate embedding by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.notes.generateEmbeddingById,
+            targetRecordId: _id,
+        });
+
         return res.json({
             message: 'Note edited successfully',
         });
@@ -358,6 +367,13 @@ router.post('/notesAiRevalidate', middlewareUserAuth, async (req: Request, res: 
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+                targetRecordId: element._id,
+            });
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.notes.generateEmbeddingById,
                 targetRecordId: element._id,
             });
         }
