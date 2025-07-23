@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { Ollama } from 'ollama';
+import { QdrantClient } from '@qdrant/js-client-rest';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
@@ -264,6 +266,165 @@ router.post(
 
             return res.json({
                 success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API Ollama
+router.post(
+    '/updateUserApiOllama',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyOllamaEndpoint } = req.body;
+
+            let apiKeyOllamaValid = false;
+
+            const ollamaClient = new Ollama({
+                host: apiKeyOllamaEndpoint,
+            });
+
+            const resultOllama = await ollamaClient.list();
+            console.log(resultOllama);
+
+            if (resultOllama.models.length >= 1) {
+                apiKeyOllamaValid = true;
+            }
+
+            if (!apiKeyOllamaValid) {
+                return res.status(400).json({ message: 'Invalid API Key' });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyOllamaValid: apiKeyOllamaValid,
+                    apiKeyOllamaEndpoint: apiKeyOllamaEndpoint,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({   
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API Qdrant
+router.post(
+    '/updateUserApiQdrant',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        let resWhatIsWorking = '';
+
+        try {
+            const { apiKeyQdrantEndpoint, apiKeyQdrantPassword } = req.body;
+
+            let apiKeyQdrantValid = false;
+
+            const qdrantUrl = new URL(apiKeyQdrantEndpoint);
+            const config = {
+                qdrant: {
+                    url: apiKeyQdrantEndpoint,
+                    port: parseInt(qdrantUrl.port || (qdrantUrl.protocol === 'https:' ? '443' : '80')),
+                    apiKey: apiKeyQdrantPassword,
+                }
+            };
+
+            const qdrantClient = new QdrantClient({
+                url: config.qdrant.url,
+                port: config.qdrant.port,
+                apiKey: config.qdrant.apiKey,
+            });
+
+            try {
+                const resultQdrant = await qdrantClient.versionInfo();
+                console.log('resultQdrant: ', resultQdrant);
+            } catch (error) {
+                console.error('Qdrant connection failed:', error);
+                resWhatIsWorking += 'Failed to connect to Qdrant. ';
+
+                return res.status(400).json({
+                    success: '',
+                    error: `Invalid API Key. Error: ${resWhatIsWorking}`
+                });
+            }
+
+            // Test creating a collection to verify write permissions
+            try {
+                const testCollectionName = `test_collection_${new Date().valueOf()}`;
+                await qdrantClient.createCollection(testCollectionName, {
+                    vectors: {
+                        size: 128,
+                        distance: 'Cosine'
+                    }
+                });
+                
+                // Insert a test record
+                await qdrantClient.upsert(testCollectionName, {
+                    points: [{
+                        id: 1,
+                        vector: Array(128).fill(0.1),
+                        payload: { test: true }
+                    }]
+                });
+                
+                // Clean up test collection
+                await qdrantClient.deleteCollection(testCollectionName);
+                
+                apiKeyQdrantValid = true;
+                resWhatIsWorking += 'Successfully inserted test record. ';
+            } catch (testError) {
+                console.error('Qdrant test record insertion failed:', testError);
+                resWhatIsWorking += 'Failed to insert test record. ';
+
+                return res.status(400).json({
+                    success: '',
+                    error: `Invalid API Key. Error: ${resWhatIsWorking}`
+                });
+            }
+
+            if (!apiKeyQdrantValid) {
+                return res.status(400).json({
+                    success: '',
+                    error: `Invalid API Key. Error: ${resWhatIsWorking}`
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyQdrantValid: apiKeyQdrantValid,
+                    apiKeyQdrantEndpoint: apiKeyQdrantEndpoint,
+                    apiKeyQdrantPassword: apiKeyQdrantPassword,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated', 
                 error: '',
             });
         } catch (error) {
