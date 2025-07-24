@@ -7,6 +7,8 @@ import middlewareActionDatetime from '../../middleware/middlewareActionDatetime'
 import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.schema';
 import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusList.schema';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 
 // Router
 const router = Router();
@@ -284,6 +286,13 @@ router.post(
 
                 // date time ip
                 ...actionDatetimeObj,
+            });
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: newTask._id,
             });
 
             return res.status(201).json(newTask);
@@ -587,6 +596,14 @@ router.post(
             if (!updatedTask) {
                 return res.status(404).json({ message: 'Task not found' });
             }
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: updatedTask._id,
+            });
+
             return res.json(updatedTask);
         } catch (error) {
             console.error(error);

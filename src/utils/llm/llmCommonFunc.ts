@@ -14,6 +14,15 @@ export interface tsUserApiKey {
     apiKeyS3AccessKeyId: string;
     apiKeyS3SecretAccessKey: string;
     apiKeyS3BucketName: string;
+
+    // api key ollama
+    apiKeyOllamaValid: boolean;
+    apiKeyOllamaEndpoint: string;
+
+    // api key qdrant
+    apiKeyQdrantValid: boolean;
+    apiKeyQdrantEndpoint: string;
+    apiKeyQdrantPassword: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -33,6 +42,15 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         apiKeyS3AccessKeyId: '',
         apiKeyS3SecretAccessKey: '',
         apiKeyS3BucketName: '',
+
+        // api key ollama
+        apiKeyOllamaValid: false,
+        apiKeyOllamaEndpoint: '',
+
+        // api key qdrant
+        apiKeyQdrantValid: false,
+        apiKeyQdrantEndpoint: '',
+        apiKeyQdrantPassword: '',
     } as tsUserApiKey;
 
     try {
@@ -78,6 +96,29 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyS3BucketName === 'string') {
                 apiKey.apiKeyS3BucketName = apiKeyObject.apiKeyS3BucketName;
+            }
+
+            // api key ollama
+            if (typeof apiKeyObject.apiKeyOllamaValid === 'boolean') {
+                if(apiKeyObject.apiKeyOllamaValid) {
+                    apiKey.apiKeyOllamaValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyOllamaEndpoint === 'string') {
+                apiKey.apiKeyOllamaEndpoint = apiKeyObject.apiKeyOllamaEndpoint;
+            }
+
+            // api key qdrant
+            if (typeof apiKeyObject.apiKeyQdrantValid === 'boolean') {
+                if(apiKeyObject.apiKeyQdrantValid) {
+                    apiKey.apiKeyQdrantValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyQdrantEndpoint === 'string') {
+                apiKey.apiKeyQdrantEndpoint = apiKeyObject.apiKeyQdrantEndpoint;
+            }
+            if (typeof apiKeyObject.apiKeyQdrantPassword === 'string') {
+                apiKey.apiKeyQdrantPassword = apiKeyObject.apiKeyQdrantPassword;
             }
         }
         return apiKey;
