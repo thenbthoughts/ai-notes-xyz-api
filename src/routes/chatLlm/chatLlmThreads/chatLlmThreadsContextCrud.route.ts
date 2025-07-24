@@ -295,9 +295,11 @@ router.post(
                 provider: aiModelProvider,
             });
 
-            console.time(`selectAutoContextByThreadId-${threadId}`);
-            await resultVectorDbPromise;
-            console.timeEnd(`selectAutoContextByThreadId-${threadId}`);
+            if (resultVectorDbPromise) {
+                console.time(`selectAutoContextByThreadId-${threadId}`);
+                await resultVectorDbPromise;
+                console.timeEnd(`selectAutoContextByThreadId-${threadId}`);
+            }
 
             console.time(`selectAutoContextNotesByThreadId-${threadId}`);
             await resultNotePromise;
