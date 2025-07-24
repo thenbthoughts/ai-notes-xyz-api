@@ -16,7 +16,7 @@ import generateLifeEventAiCategoryById from "./page/lifeEvents/generateLifeEvent
 // Notes tasks
 import generateNotesAiSummaryById from "./page/notes/generateNotesAiSummaryById";
 import generateNotesAiTagsById from "./page/notes/generateNotesAiTagsById";
-import generateEmbeddingById from "./page/notes/generateEmbeddingById";
+import generateEmbeddingByNotesId from "./page/notes/generateEmbeddingByNotesId";
 
 // Settings tasks
 import openRouterModelGet from "./page/settings/openRouterModelGet";
@@ -94,8 +94,8 @@ const llmPendingTaskProcessFunc = async ({
                 });
                 break;
 
-            case llmPendingTaskTypes.page.notes.generateEmbeddingById:
-                isTaskDone = await generateEmbeddingById({
+            case llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId:
+                isTaskDone = await generateEmbeddingByNotesId({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

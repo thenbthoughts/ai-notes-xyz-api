@@ -342,6 +342,8 @@ const selectAutoContextNotesByThreadId = async ({
 
         const last20ConversationsDesc = last20Conversations.reverse();
 
+
+
         // Get all notes by username
         const resultNotes = await ModelNotes.aggregate([
             {

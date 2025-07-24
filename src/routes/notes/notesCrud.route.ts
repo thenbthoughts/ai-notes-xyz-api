@@ -332,7 +332,7 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
         // generate embedding by id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.notes.generateEmbeddingById,
+            taskType: llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId,
             targetRecordId: _id,
         });
 
@@ -373,7 +373,7 @@ router.post('/notesAiRevalidate', middlewareUserAuth, async (req: Request, res: 
             // generate embedding by id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.notes.generateEmbeddingById,
+                taskType: llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId,
                 targetRecordId: element._id,
             });
         }

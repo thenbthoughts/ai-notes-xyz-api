@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
+import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
@@ -7,9 +8,10 @@ import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNot
 
 import { getQdrantClient } from '../../../../config/qdrantConfig';
 import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../llm/ollamaCommonFunc';
-import { v5 as uuidv5 } from 'uuid';
 
-const generateEmbeddingById = async ({
+
+
+const generateEmbeddingByNotesId = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
@@ -116,4 +118,4 @@ const generateEmbeddingById = async ({
     }
 };
 
-export default generateEmbeddingById;
+export default generateEmbeddingByNotesId;
