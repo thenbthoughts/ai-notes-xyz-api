@@ -4,6 +4,8 @@ import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.sc
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 
 // Router
 const router = Router();
@@ -45,6 +47,13 @@ router.post(
 
                 // date time ip
                 ...actionDatetimeObj,
+            });
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: mongoose.Types.ObjectId.createFromHexString(taskId),
             });
 
             return res.status(201).json(newComment);
@@ -114,6 +123,13 @@ router.post(
                 return res.status(404).json({ message: 'Task comment not found' });
             }
 
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: updatedComment.taskId,
+            });
+
             return res.json(updatedComment);
         } catch (error) {
             console.error(error);
@@ -136,6 +152,13 @@ router.post('/taskCommentDelete', middlewareUserAuth, async (req: Request, res: 
         if (!deletedComment) {
             return res.status(404).json({ message: 'Task comment not found' });
         }
+
+        // generate embedding by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+            targetRecordId: deletedComment.taskId,
+        });
 
         return res.json({ message: 'Task comment deleted successfully' });
     } catch (error) {

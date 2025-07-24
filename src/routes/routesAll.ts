@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
+
+// user
 import routeUserAuth from './user/userAuth.route';
 import routeUserCrud from './user/userCrud.route';
 import routeUserApiKey from './user/userApiKey.route';
 import routeUserTimezoneRevalidate from './user/userTimezoneRevalidate.route';
+import routeUserRevalidate from './user/userRevalidate.route';
 
 // chat
 import routesChatOneCrud from './chatOne/chatOneCrud.route';
@@ -59,6 +62,7 @@ router.use('/user/auth', routeUserAuth);
 router.use('/user/crud', routeUserCrud);
 router.use('/user/api-keys', routeUserApiKey);
 router.use('/user/timezone-revalidate', routeUserTimezoneRevalidate);
+router.use('/user/revalidate', routeUserRevalidate);
 
 // routes -> chat
 router.use('/chat-one/crud', routesChatOneCrud);

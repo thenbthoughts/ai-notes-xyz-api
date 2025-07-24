@@ -18,6 +18,9 @@ import generateNotesAiSummaryById from "./page/notes/generateNotesAiSummaryById"
 import generateNotesAiTagsById from "./page/notes/generateNotesAiTagsById";
 import generateEmbeddingByNotesId from "./page/notes/generateEmbeddingByNotesId";
 
+// Task tasks
+import generateEmbeddingByTaskId from "./page/task/generateEmbeddingByTaskId";
+
 // Settings tasks
 import openRouterModelGet from "./page/settings/openRouterModelGet";
 import groqModelGet from "./page/settings/groqModelGet";
@@ -96,6 +99,13 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId:
                 isTaskDone = await generateEmbeddingByNotesId({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            // Task tasks
+            case llmPendingTaskTypes.page.task.generateEmbeddingByTaskId:
+                isTaskDone = await generateEmbeddingByTaskId({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

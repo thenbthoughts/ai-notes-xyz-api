@@ -9,78 +9,162 @@ import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNot
 import { getQdrantClient } from '../../../../config/qdrantConfig';
 import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../llm/ollamaCommonFunc';
 
+/**
+ * Find and validate notes record by ID
+ */
+const findNotesRecord = async (targetRecordId: string | null): Promise<INotes | null> => {
+    if (!targetRecordId) {
+        console.log('Target record ID is null');
+        return null;
+    }
 
+    const notesRecords = await ModelNotes.find({
+        _id: targetRecordId,
+    }) as INotes[];
 
+    if (!notesRecords || notesRecords.length !== 1) {
+        console.log('notesRecords not found');
+        return null;
+    }
+
+    return notesRecords[0];
+};
+
+/**
+ * Validate user API keys for Ollama and Qdrant
+ */
+const validateApiKeys = async (username: string) => {
+    const apiKeys = await ModelUserApiKey.findOne({
+        username: username,
+        apiKeyOllamaValid: true,
+        apiKeyQdrantValid: true,
+    });
+
+    return apiKeys;
+};
+
+/**
+ * Build content string from notes data
+ */
+const buildContentFromNotes = (notesRecord: INotes): string => {
+    let content = `Title: ${notesRecord.title}\n`;
+    
+    if (notesRecord.description.length >= 1) {
+        const markdownContent = NodeHtmlMarkdown.translate(notesRecord.description);
+        content += `Description: ${markdownContent}\n`;
+    }
+    
+    if (notesRecord.isStar) {
+        content += `Is Star: Starred\n`;
+    }
+    
+    if (notesRecord.tags.length >= 1) {
+        content += `Tags: ${notesRecord.tags.join(', ')}\n`;
+    }
+
+    return content;
+};
+
+/**
+ * Generate embedding vector from content
+ */
+const generateEmbeddingVector = async (content: string, apiKeyOllamaEndpoint: string) => {
+    const result = await generateEmbedding({
+        apiKeyOllamaEndpoint: apiKeyOllamaEndpoint,
+        text: content,
+    });
+
+    console.log('resultGenerateEmbedding: ', result);
+
+    if (result.error !== '') {
+        throw new Error(`Failed to generate embedding: ${result.error}`);
+    }
+
+    return result.data.embedding;
+};
+
+/**
+ * Create vector point with UUID
+ */
+const createVectorPoint = (notesId: ObjectId, embedding: number[], content: string) => {
+    const uuid = uuidv5(`notes-record-${notesId.toString()}`, generateUuidNamespaceDefaultDomain());
+    console.log('uuid: ', uuid);
+
+    return {
+        id: uuid,
+        vector: embedding,
+        payload: {
+            text: content,
+            collectionName: 'notes',
+            recordId: notesId.toString(),
+            recordType: 'notes-record',
+        }
+    };
+};
+
+/**
+ * Ensure Qdrant collection exists
+ */
+const ensureQdrantCollection = async (qdrantClient: any, collectionName: string, embeddingSize: number) => {
+    try {
+        await qdrantClient.createCollection(collectionName, {
+            vectors: {
+                size: embeddingSize,
+                distance: 'Cosine' // Cosine similarity works well with text embeddings
+            }
+        });
+    } catch (error) {
+        console.log('error create collection: ', error);
+    }
+};
+
+/**
+ * Upsert points to vector database
+ */
+const upsertToVectorDb = async (qdrantClient: any, collectionName: string, points: any[]) => {
+    const result = await qdrantClient.upsert(collectionName, {
+        wait: true,
+        points: points,
+    });
+
+    console.log('result: ', result);
+    return result;
+};
+
+/**
+ * Main function to generate embedding by notes ID
+ */
 const generateEmbeddingByNotesId = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const notesRecords = await ModelNotes.find({
-            _id: targetRecordId,
-        }) as INotes[];
-
-        if (!notesRecords || notesRecords.length !== 1) {
+        // Step 1: Find and validate notes record
+        const notesRecord = await findNotesRecord(targetRecordId);
+        if (!notesRecord) {
             // TODO delete notes from vector db
-            console.log('notesRecords not found');
             return true;
         }
 
-        const notesFirst = notesRecords[0];
-        const notesFirstId = notesFirst._id as ObjectId;
+        const notesId = notesRecord._id as ObjectId;
 
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: notesFirst.username,
-            apiKeyOllamaValid: true,
-            apiKeyQdrantValid: true,
-        });
+        // Step 2: Validate API keys
+        const apiKeys = await validateApiKeys(notesRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        let argContent = `Title: ${notesFirst.title}\n`;
-        if (notesFirst.description.length >= 1) {
-            const markdownContent = NodeHtmlMarkdown.translate(notesFirst.description);
-            argContent += `Description: ${markdownContent}\n`;
-        }
-        if (notesFirst.isStar) {
-            argContent += `Is Star: Starred\n`;
-        }
-        if (notesFirst.tags.length >= 1) {
-            argContent += `Tags: ${notesFirst.tags.join(', ')}\n`;
-        }
+        // Step 3: Build content from notes
+        const content = buildContentFromNotes(notesRecord);
 
-        const resultGenerateEmbedding = await generateEmbedding({
-            apiKeyOllamaEndpoint: apiKeys.apiKeyOllamaEndpoint,
-            text: argContent,
-        });
+        // Step 4: Generate embedding vector
+        const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
-        console.log('resultGenerateEmbedding: ', resultGenerateEmbedding);
+        // Step 5: Create vector point
+        const point = createVectorPoint(notesId, embedding, content);
 
-        if (resultGenerateEmbedding.error !== '') {
-            return false;
-        }
-
-        const embedding = resultGenerateEmbedding.data.embedding;
-
-        const uuid = uuidv5(`notes-record-${notesFirstId.toString()}`, generateUuidNamespaceDefaultDomain());
-        console.log('uuid: ', uuid);
-
-        // Prepare points for insertion
-        const points = [
-            {
-                id: uuid,
-                vector: embedding,
-                payload: {
-                    text: argContent,
-                    collectionName: 'notes',
-                    recordId: notesFirstId.toString(),
-                    recordType: 'notes-record',
-                }
-            }
-        ];
-
+        // Step 6: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
             apiKeyQdrantEndpoint: apiKeys.apiKeyQdrantEndpoint,
             apiKeyQdrantPassword: apiKeys.apiKeyQdrantPassword,
@@ -90,26 +174,14 @@ const generateEmbeddingByNotesId = async ({
             return false;
         }
 
-        const collectionName = `index-user-${notesFirst.username}`;
+        // collection name
+        const collectionName = `index-user-${notesRecord.username}`;
 
-        // create collection if not exists
-        try {
-            await qdrantClient.createCollection(collectionName, {
-                vectors: {
-                    size: embedding.length,
-                    distance: 'Cosine' // Cosine similarity works well with text embeddings
-                }
-            });
-        } catch (error) {
-            console.log('error create collection: ', error);
-        }
+        // Step 7: Ensure collection exists
+        await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
 
-        const result = await qdrantClient.upsert(collectionName, {
-            wait: true,
-            points: points,
-        });
-
-        console.log('result: ', result);
+        // Step 8: Upsert to vector database
+        await upsertToVectorDb(qdrantClient, collectionName, [point]);
 
         return true;
     } catch (error) {

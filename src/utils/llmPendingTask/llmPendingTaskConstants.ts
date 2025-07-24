@@ -26,6 +26,11 @@ const llmPendingTaskTypes = {
             generateEmbeddingByNotesId: 'pageNotes_generateEmbeddingByNotesId',
         },
 
+        // task
+        task: {
+            generateEmbeddingByTaskId: 'pageTask_generateEmbeddingByTaskId',
+        },
+
         // settings
         settings: {
             openRouterModelGet: 'pageSettings_openRouterModelGet',

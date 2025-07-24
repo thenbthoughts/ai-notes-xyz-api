@@ -4,6 +4,8 @@ import { ModelTaskSubList } from '../../schema/schemaTask/SchemaTaskSub.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 
 // Router
 const router = Router();
@@ -27,6 +29,13 @@ router.post(
                 username: res.locals.auth_username,
 
                 ...actionDatetimeObj,
+            });
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: mongoose.Types.ObjectId.createFromHexString(parentTaskId),
             });
 
             return res.status(201).json(newSubtask);
@@ -108,6 +117,14 @@ router.post(
             if (!updatedSubtask) {
                 return res.status(404).json({ message: 'Subtask not found' });
             }
+
+            // generate embedding by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: updatedSubtask.parentTaskId,
+            });
+
             return res.json(updatedSubtask);
         } catch (error) {
             console.error(error);
