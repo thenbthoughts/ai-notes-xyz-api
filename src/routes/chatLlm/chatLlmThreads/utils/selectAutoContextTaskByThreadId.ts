@@ -313,7 +313,7 @@ const getRelevantTasks = async ({
                             {
                                 $cond: {
                                     if: { $eq: ['$isCompleted', true] },
-                                    then: -20,
+                                    then: -100,
                                     else: 0
                                 }
                             },
@@ -321,7 +321,7 @@ const getRelevantTasks = async ({
                             {
                                 $cond: {
                                     if: { $eq: ['$isArchived', true] },
-                                    then: -15,
+                                    then: -500,
                                     else: 0
                                 }
                             }
@@ -591,7 +591,7 @@ const analyzeConversationWithLlm = async ({
     }
 };
 
-const selectAutoTaskNotesByThreadId = async ({
+const selectAutoContextTaskByThreadId = async ({
     threadId,
     username,
     llmAuthToken,
@@ -685,4 +685,4 @@ const selectAutoTaskNotesByThreadId = async ({
     }
 }
 
-export default selectAutoTaskNotesByThreadId;
+export default selectAutoContextTaskByThreadId;
