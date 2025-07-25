@@ -1,8 +1,5 @@
-import { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
-import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import getTaskListByLast30Conversation from './utils/getTaskListByLast30Conversation';
 import funcTasksGenerateByConversationId from './utils/funcTaskGenerateByConversationId';
 import funcGetTaskAiSuggestionByTaskId from './utils/funcGetTaskAiSuggestionByTaskId';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
@@ -12,45 +9,6 @@ import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpA
 
 // Router
 const router = Router();
-
-// taskGenerateByLast30Conversation
-router.post('/taskGenerateByLast30Conversation', middlewareUserAuth, async (req: Request, res: Response) => {
-    try {
-        const apiKeys = getApiKeyByObject(res.locals.apiKey);
-
-        let provider = '';
-        let llmAuthToken = '';
-        if (apiKeys.apiKeyGroqValid) {
-            provider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
-        } else if (apiKeys.apiKeyOpenrouterValid) {
-            provider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        }
-
-        let taskList = [] as object[];
-        if (provider === 'groq' || provider === 'openrouter') {
-            taskList = await getTaskListByLast30Conversation({
-                username: res.locals.auth_username,
-
-                provider,
-                llmAuthToken,
-            });
-        }
-
-        return res.status(201).json({
-            success: 'Success',
-            error: '',
-            data: {
-                count: taskList.length,
-                docs: taskList,
-            }
-        });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ message: 'Server error' });
-    }
-});
 
 // taskGenerateByConversationId
 router.post('/taskGenerateByConversationId', middlewareUserAuth, async (req: Request, res: Response) => {

@@ -1,11 +1,9 @@
 import express from 'express';
-import { ModelChatOne } from '../../schema/SchemaChatOne.schema';
-import { DateTime } from 'luxon';
 
 const router = express.Router();
 
 /**
- * POST /chatOne/revalidate
+ * POST /user/timezone-revalidate
  * Body params:
  *   - region: string (IANA timezone, e.g. "Asia/Kolkata") required
  * 
@@ -14,7 +12,6 @@ const router = express.Router();
  */
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUser } from '../../schema/SchemaUser.schema';
-import { IChatOne } from '../../types/typesSchema/SchemaChatOne.types';
 
 router.post(
   '/revalidate',
@@ -54,53 +51,12 @@ router.post(
         }
       )
 
-      // Use aggregation pipeline to project _id and createdAtUtc for this user
-      const docs = await ModelChatOne.aggregate([
-        { $match: { createdAtUtc: { $ne: null }, username } },
-      ]) as IChatOne[];
-
-      if (!docs.length) {
-        return res.json({ success: 'No documents with createdAtUtc found for user', error: '', });
-      }
-
-      // Prepare bulk update operations using aggregation results
-      const bulkOps = docs.map(doc => {
-        const createdAtUtc = doc.createdAtUtc;
-        if (!createdAtUtc) return null;
-
-        // Convert createdAtUtc to specified region timezone using luxon
-        const localDate = DateTime.fromISO(createdAtUtc.toISOString()).plus({
-          minutes: timeZoneUtcOffset
-        }).toUTC();
-
-        const paginationDateLocalYearMonthStr = localDate.toFormat('yyyy-MM');
-        const paginationDateLocalYearMonthDateStr = localDate.toFormat('yyyy-MM-dd');
-
-        return {
-          updateOne: {
-            filter: { _id: doc._id },
-            update: {
-              $set: {
-                paginationDateLocalYearMonthStr,
-                paginationDateLocalYearMonthDateStr,
-              },
-            },
-          },
-        };
-      }).filter(op => op !== null);
-
-      if (!bulkOps.length) {
-        return res.json({ success: 'No valid documents to update', error: '' });
-      }
-
-      const bulkWriteResult = await ModelChatOne.bulkWrite(bulkOps);
-
       return res.json({
         success: 'Updated successfully',
         error: '',
         data: {
-          matchedCount: bulkWriteResult.matchedCount,
-          modifiedCount: bulkWriteResult.modifiedCount,
+          timeZoneRegion,
+          timeZoneUtcOffset,
         }
       });
     } catch (error) {
