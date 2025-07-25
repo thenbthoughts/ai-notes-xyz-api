@@ -8,7 +8,7 @@ import middlewareActionDatetime from '../../../middleware/middlewareActionDateti
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 import selectAutoContextNotesByThreadId from './utils/selectAutoContextNotesByThreadId';
-import selectAutoTaskNotesByThreadId from './utils/selectAutoTaskNotesByThreadId';
+import selectAutoContextTaskByThreadId from './utils/selectAutoContextTaskByThreadId';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import selectAutoContextByThreadId from './utils/selectAutoContextByThreadId';
 
@@ -288,7 +288,7 @@ router.post(
                 provider: aiModelProvider,
             });
 
-            const resultTaskPromise = selectAutoTaskNotesByThreadId({
+            const resultTaskPromise = selectAutoContextTaskByThreadId({
                 threadId: threadIdObj,
                 username: auth_username,
                 llmAuthToken,

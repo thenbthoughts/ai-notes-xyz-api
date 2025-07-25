@@ -350,6 +350,14 @@ const selectAutoContextNotesByThreadId = async ({
                 $match: {
                     username,
                 }
+            },
+            {
+                $sort: {
+                    updatedAtUtc: -1,
+                }
+            },
+            {
+                $limit: 35,
             }
         ]) as INotes[];
         if (resultNotes.length === 0) {
