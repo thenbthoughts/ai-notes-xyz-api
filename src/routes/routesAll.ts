@@ -7,11 +7,6 @@ import routeUserApiKey from './user/userApiKey.route';
 import routeUserTimezoneRevalidate from './user/userTimezoneRevalidate.route';
 import routeUserRevalidate from './user/userRevalidate.route';
 
-// chat
-import routesChatOneCrud from './chatOne/chatOneCrud.route';
-import routesChatOneAddChat from './chatOne/chatOneAdd.route';
-import routesChatOneAiGeneratedNextQuestion from './chatOne/chatOneAiGeneratedNextQuestion.route';
-
 // chat llm
 import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
 import routesChatLlmAddChat from './chatLlm/chatLlmCrud/chatLlmAdd.route';
@@ -63,11 +58,6 @@ router.use('/user/crud', routeUserCrud);
 router.use('/user/api-keys', routeUserApiKey);
 router.use('/user/timezone-revalidate', routeUserTimezoneRevalidate);
 router.use('/user/revalidate', routeUserRevalidate);
-
-// routes -> chat
-router.use('/chat-one/crud', routesChatOneCrud);
-router.use('/chat-one/chat-add', routesChatOneAddChat);
-router.use('/chat-one/ai-generated-next-questions', routesChatOneAiGeneratedNextQuestion);
 
 // routes -> chat llm
 router.use('/chat-llm/crud', routesChatLlmCrud);

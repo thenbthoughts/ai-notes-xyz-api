@@ -1,8 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { ModelChatOne } from '../../schema/SchemaChatOne.schema';
 import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { PipelineStage } from 'mongoose';
 import llmPendingTaskProcessFunc from '../../utils/llmPendingTask/llmPendingTaskProcessFunc';
 
 // Router
