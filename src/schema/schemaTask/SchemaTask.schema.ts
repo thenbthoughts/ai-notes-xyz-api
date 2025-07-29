@@ -69,6 +69,12 @@ const taskSchema = new Schema<tsTaskList>({
         index: true,
     },
 
+    // task homepage pinned
+    isTaskPinned: {
+        type: Boolean,
+        default: false,
+    },
+
     // auto
     createdAtUtc: {
         type: Date,

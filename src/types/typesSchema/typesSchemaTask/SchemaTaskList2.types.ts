@@ -21,6 +21,9 @@ export interface tsTaskList extends Document{
     taskWorkspaceId: mongoose.Types.ObjectId | null;
     taskStatusId: mongoose.Types.ObjectId | null;
 
+    // task homepage pinned
+    isTaskPinned: boolean;
+
     // auth
     username: string;
 
