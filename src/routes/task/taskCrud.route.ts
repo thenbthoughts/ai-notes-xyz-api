@@ -527,6 +527,9 @@ router.post(
                 priority,
                 taskWorkspaceId,
                 taskStatusId,
+
+                // task homepage pinned
+                isTaskPinned,
             } = req.body;
 
             let final_taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
@@ -565,6 +568,25 @@ router.post(
                 updateObj.taskStatusId = final_taskStatusId;
             }
 
+            const dateNow = new Date();
+
+            // if task is pinned, update all other task pinned to false
+            if(isTaskPinned) {
+                await ModelTask.updateMany(
+                    {
+                        _id: { $ne: getMongodbObjectOrNull(id) },
+                        username: auth_username,
+                        isTaskPinned: true,
+                    },
+                    {
+                        $set: {
+                            isTaskPinned: false,
+                            taskPinnedDate: null,
+                        }
+                    }
+                );
+            }
+ 
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
                     _id: getMongodbObjectOrNull(id),
@@ -580,6 +602,10 @@ router.post(
                     isArchived,
                     isCompleted,
                     priority: priority || 'very-low',
+
+                    // task homepage pinned
+                    isTaskPinned: isTaskPinned || false,
+                    taskPinnedDate: isTaskPinned ? dateNow : null,
 
                     // datetime ip
                     updatedAtUtc: actionDatetimeObj.updatedAtUtc,

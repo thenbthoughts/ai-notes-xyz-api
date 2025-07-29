@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
 
+// dashboard
+import routesDashboardSuggestTasks from './dashboard/dashboardSuggestTasks.route';
+
 // user
 import routeUserAuth from './user/userAuth.route';
 import routeUserCrud from './user/userCrud.route';
@@ -100,6 +103,9 @@ router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRout
 // dynamic data
 router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
 router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
+
+// dashboard
+router.use('/dashboard/suggest-tasks', routesDashboardSuggestTasks);
 
 /*
 Example:
