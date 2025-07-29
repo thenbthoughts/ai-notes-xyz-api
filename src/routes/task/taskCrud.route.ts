@@ -581,7 +581,6 @@ router.post(
                     {
                         $set: {
                             isTaskPinned: false,
-                            taskPinnedDate: null,
                         }
                     }
                 );
@@ -605,7 +604,6 @@ router.post(
 
                     // task homepage pinned
                     isTaskPinned: isTaskPinned || false,
-                    taskPinnedDate: isTaskPinned ? dateNow : null,
 
                     // datetime ip
                     updatedAtUtc: actionDatetimeObj.updatedAtUtc,
