@@ -246,8 +246,9 @@ router.post(
         try {
             const auth_username = res.locals.auth_username;
 
-            const { title, description, taskWorkspaceId } = req.body;
+            const { title, description, taskWorkspaceId, taskStatusId } = req.body;
 
+            // does task workspace exist and belong to user
             const taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId);
             if (!taskWorkspaceIdObj) {
                 return res.status(400).json({ message: 'Task workspace ID is required' });
@@ -264,8 +265,19 @@ router.post(
                 res.locals.actionDatetime
             );
 
-            const taskStatusId = '';
-
+            // does task status exist and belong to user (optional)
+            let taskStatusIdObj = getMongodbObjectOrNull(taskStatusId);
+            if (!taskStatusIdObj) {
+                taskStatusIdObj = null;
+            } else {
+                const resultDoesBelongToUserTaskStatus = await doesTaskStatusExistAndBelongToUser({
+                    taskStatusId: taskStatusId,
+                    auth_username: auth_username,
+                });
+                if (!resultDoesBelongToUserTaskStatus) {
+                    taskStatusIdObj = null;
+                }
+            }
 
             const newTask = await ModelTask.create({
                 // 
@@ -276,7 +288,7 @@ router.post(
 
                 // identification
                 taskWorkspaceId: taskWorkspaceIdObj,
-                taskStatusId: null,
+                taskStatusId: taskStatusIdObj,
 
                 // auth
                 username: res.locals.auth_username,
