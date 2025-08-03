@@ -159,6 +159,17 @@ router.get(
             }
             stateDocument.push(tempStage);
 
+            // stateDocument -> sub task
+            tempStage = {
+                $lookup: {
+                    from: 'tasksSub',
+                    localField: '_id',
+                    foreignField: 'parentTaskId',
+                    as: 'subTaskArr',
+                }
+            }
+            stateDocument.push(tempStage);
+
             console.log(
                 JSON.stringify(stateDocument, null, 2)
             );
