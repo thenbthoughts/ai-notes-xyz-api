@@ -27,6 +27,18 @@ interface IUserApiKey extends Document {
     apiKeyQdrantValid: boolean;
     apiKeyQdrantEndpoint: string;
     apiKeyQdrantPassword: string;
+
+    // smtp
+    smtpValid: boolean;
+    smtpHost: string;
+    smtpPort: number;
+    smtpUser: string;
+    smtpPassword: string;
+    smtpFrom: string;
+
+    // user-email-verify
+    userEmailVerifyOtp: number;
+    userEmailVerifyEmail: string;
 };
 
 export default IUserApiKey;

@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser'; // Import cookie-parser
 
 import routesAll from './routes/routesAll';
 import envKeys from './config/envKeys';
+import initCron from './srcCron/indexCron';
 
 const app = express();
 app.use(express.json());
@@ -35,7 +36,16 @@ app.use((req: Request, res: Response, next) => {
 });
 
 // Connect to MongoDB
-mongoose.connect(envKeys.MONGODB_URI);
+mongoose
+    .connect(envKeys.MONGODB_URI)
+    .then(() => {
+        console.log('Connected to MongoDB');
+        initCron();
+    })
+    .catch((err) => {
+        console.log('Error connecting to MongoDB', err);
+        process.exit(1);
+    });
 
 // Use morgan to log requests
 app.use(morgan('dev'));

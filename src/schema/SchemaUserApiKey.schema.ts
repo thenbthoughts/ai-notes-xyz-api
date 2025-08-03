@@ -29,6 +29,18 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyQdrantValid: { type: Boolean, default: false },
     apiKeyQdrantEndpoint: { type: String, default: '' },
     apiKeyQdrantPassword: { type: String, default: '' },
+
+    // smtp
+    smtpValid: { type: Boolean, default: false },
+    smtpHost: { type: String, default: '' },
+    smtpPort: { type: Number, default: 0 },
+    smtpUser: { type: String, default: '' },
+    smtpPassword: { type: String, default: '' },
+    smtpFrom: { type: String, default: '' },
+
+    // user-email-verify
+    userEmailVerifyOtp: { type: Number, default: 0 },
+    userEmailVerifyEmail: { type: String, default: '' },
 });
 
 // User Model

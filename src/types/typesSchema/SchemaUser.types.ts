@@ -17,8 +17,11 @@ interface IUser extends Document {
     country: string;
     zipCode: string;
 
-    // 
+    // email
     email: string;
+    emailVerified: boolean;
+
+    // 
     phoneNumber: string;
     address: string;
     website: string;
