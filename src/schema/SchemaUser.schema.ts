@@ -25,6 +25,16 @@ const userSchema = new Schema<IUser>({
         default: ''
     },
 
+    // email
+    email: {
+        type: String,
+        default: ''
+    },
+    emailVerified: {
+        type: Boolean,
+        default: false
+    },
+
     // location
     city: {
         type: String,
@@ -63,6 +73,7 @@ const userSchema = new Schema<IUser>({
     timeZoneUtcOffset: {
         type: Number,
         default: 330,
+        // in minutes
     },
 });
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Ollama } from 'ollama';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import nodemailer from 'nodemailer';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
@@ -9,6 +10,8 @@ import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { putFileToS3 } from '../../utils/files/s3PutFile';
 import { getFileFromS3R2 } from '../../utils/files/s3R2GetFile';
 import openrouterMarketing from '../../config/openrouterMarketing';
+import { ModelUser } from '../../schema/SchemaUser.schema';
+import { funcSendMail } from '../../utils/files/funcSendMail';
 
 // Router
 const router = Router();
@@ -315,7 +318,7 @@ router.post(
                 }
             );
 
-            return res.json({   
+            return res.json({
                 success: 'Updated',
                 error: '',
             });
@@ -377,7 +380,7 @@ router.post(
                         distance: 'Cosine'
                     }
                 });
-                
+
                 // Insert a test record
                 await qdrantClient.upsert(testCollectionName, {
                     points: [{
@@ -386,10 +389,10 @@ router.post(
                         payload: { test: true }
                     }]
                 });
-                
+
                 // Clean up test collection
                 await qdrantClient.deleteCollection(testCollectionName);
-                
+
                 apiKeyQdrantValid = true;
                 resWhatIsWorking += 'Successfully inserted test record. ';
             } catch (testError) {
@@ -424,7 +427,7 @@ router.post(
             );
 
             return res.json({
-                success: 'Updated', 
+                success: 'Updated',
                 error: '',
             });
         } catch (error) {
@@ -434,4 +437,244 @@ router.post(
     }
 );
 
+// Update User API SMTP
+router.post(
+    '/updateUserApiSmtp',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const {
+                // required - api key
+                smtpHost,
+                smtpPort,
+                smtpUser,
+                smtpPassword,
+
+                // fields send from email
+                smtpFrom,
+
+                // fields send to email
+                smtpTo,
+            } = req.body;
+
+            let smtpValid = false;
+
+            const transporter = nodemailer.createTransport({
+                host: smtpHost,
+                port: smtpPort,
+                auth: {
+                    user: smtpUser,
+                    pass: smtpPassword,
+                },
+            });
+
+            const info = await transporter.sendMail({
+                from: smtpFrom,
+                to: smtpTo,
+                subject: 'Test Email',
+                text: 'This is a test email send from ai-notes.xyz',
+            });
+
+            console.log('info: ', info);
+
+            if (info.accepted.length > 0) {
+                smtpValid = true;
+            } else {
+                smtpValid = false;
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    // api key
+                    smtpValid: smtpValid,
+                    smtpHost: smtpHost,
+                    smtpPort: smtpPort,
+                    smtpUser: smtpUser,
+                    smtpPassword: smtpPassword,
+
+                    // fields send from email
+                    smtpFrom: smtpFrom,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
+// User Email Verify Send OTP
+router.post(
+    '/userEmailVerifySendOtp',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { email } = req.body;
+
+            const otp = Math.floor(100000 + Math.random() * 900000);
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    userEmailVerifyOtp: otp,
+                    userEmailVerifyEmail: email,
+                },
+                {
+                    new: true
+                }
+            );
+
+            const sendStatus = await funcSendMail({
+                username: res.locals.auth_username,
+                smtpTo: email,
+                subject: 'AI Notes XYZ - Email Verification',
+                text: `Hello from AI Notes XYZ. Your verification code is: ${otp}. Please do not share this code with anyone.`,
+            });
+
+            if (!sendStatus) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Failed to send email',
+                });
+            }
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
+// User Email Verify Verify OTP
+router.post(
+    '/userEmailVerifyVerifyOtp',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { otp } = req.body;
+
+            console.log('otp: ', otp, typeof otp);
+
+            if (typeof otp !== 'number') {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid OTP',
+                });
+            }
+
+            const user = await ModelUserApiKey.findOne({
+                username: res.locals.auth_username
+            });
+
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            if (user.userEmailVerifyOtp !== otp) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid OTP',
+                });
+            }
+
+            await ModelUser.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username  
+                },
+                {
+                    emailVerified: true,
+                    email: user.userEmailVerifyEmail,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
+// User Email Verify Clear
+router.post(
+    '/userEmailVerifyClear',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    // api key
+                    userEmailVerifyOtp: 0,
+                    userEmailVerifyEmail: '',
+                },
+                {
+                    new: true
+                }
+            );
+
+            await ModelUser.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    email: '',
+                    emailVerified: false,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
 export default router;

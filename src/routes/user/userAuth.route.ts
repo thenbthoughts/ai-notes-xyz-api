@@ -8,6 +8,8 @@ import {
 import {
     ModelUserDeviceList
 } from '../../schema/SchemaUserDeviceList.schema';
+import { funcSendMail } from '../../utils/files/funcSendMail';
+import { DateTime } from 'luxon';
 
 // Router
 const router = Router();
@@ -44,6 +46,36 @@ router.post('/login', async (req: Request, res: Response) => {
             updatedAt: new Date(),
             updatedAtIpAddress: req?.ip || '',
         });
+
+        // send email verification - you have successfully logged in to your account
+        try {
+            if (user.emailVerified) {
+                let currentTime = new Date();
+                let text = `Hello from AI Notes XYZ.  \n`;
+                text += `You have successfully logged in to your account from ${req?.ip} IP address at time ${currentTime.toISOString()} UTC.  \n`;
+                if (user.timeZoneUtcOffset) {
+                    const luxonDate = DateTime.now().toUTC().plus({ minutes: user.timeZoneUtcOffset });
+                    const formattedDate = luxonDate.toFormat('EEE MMM dd yyyy HH:mm:ss');
+                    text += `Logged in time in your timezone ${user.timeZoneRegion} is ${formattedDate}. \n`;
+                }
+                text += `If this was not you, please secure your account immediately.  \n`;
+                text += `Thank you for using AI Notes XYZ.`;
+
+                console.log('text send sms: ', text);
+
+                const sendStatus = await funcSendMail({
+                    username: user.username,
+                    smtpTo: user.email,
+                    subject: 'AI Notes XYZ - Login Successfully',
+                    text,
+                });
+                if (!sendStatus) {
+                    console.error('Failed to send email verification');
+                }
+            }
+        } catch (error) {
+            console.error(error);
+        }
 
         // cookie
         res.cookie(

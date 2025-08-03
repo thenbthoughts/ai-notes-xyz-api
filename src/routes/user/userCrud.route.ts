@@ -27,6 +27,7 @@ router.post(
                 apiKeyS3Valid: false,
                 apiKeyOllamaValid: false,
                 apiKeyQdrantValid: false,
+                smtpValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -56,6 +57,7 @@ router.post(
                             apiKeyS3Valid: false,
                             apiKeyOllamaValid: false,
                             apiKeyQdrantValid: false,
+                            smtpValid: false,
                         }
                     },
                     {
@@ -97,6 +99,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.apiKeyQdrantValid === 'boolean') {
                     resultApiKey.apiKeyQdrantValid = resultUserInfoApi.apiKeyQdrantValid;
+                }
+            }
+
+            // smtp
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.smtpValid === 'boolean') {
+                    resultApiKey.smtpValid = resultUserInfoApi.smtpValid;
                 }
             }
 
@@ -165,6 +174,7 @@ router.post(
                 },
                 {
                     name: updateData.name || '',
+                    email: updateData.email || '',
                     dateOfBirth: updateData.dateOfBirth || '',
                     profilePictureLink: updateData.profilePictureLink || '',
                     bio: updateData.bio || '',
