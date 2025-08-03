@@ -10,15 +10,20 @@ import {
 } from '../../schema/SchemaUserDeviceList.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
 import { DateTime } from 'luxon';
+import { middlewareActionDatetime } from '../../middleware/middlewareActionDatetime';
+import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 
 // Router
 const router = Router();
 
 // Login API
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', middlewareActionDatetime, async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
     try {
+        const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
+        console.log(actionDatetimeObj);
+
         // Find user by username
         const user = await ModelUser.findOne({ username });
         if (!user) {
@@ -40,11 +45,11 @@ router.post('/login', async (req: Request, res: Response) => {
             randomDeviceId,
             isExpired: false,
 
-            userAgent: req?.headers['user-agent'] || '',
-            createdAt: new Date(),
-            createdAtIpAddress: req?.ip || '',
-            updatedAt: new Date(),
-            updatedAtIpAddress: req?.ip || '',
+            userAgent: actionDatetimeObj.createdAtUserAgent,
+            createdAt: actionDatetimeObj.createdAtUtc,
+            createdAtIpAddress: actionDatetimeObj.createdAtIpAddress,
+            updatedAt: actionDatetimeObj.updatedAtUtc,
+            updatedAtIpAddress: actionDatetimeObj.updatedAtIpAddress,
         });
 
         // send email verification - you have successfully logged in to your account
@@ -52,11 +57,14 @@ router.post('/login', async (req: Request, res: Response) => {
             if (user.emailVerified) {
                 let currentTime = new Date();
                 let text = `Hello from AI Notes XYZ.  \n`;
-                text += `You have successfully logged in to your account from ${req?.ip} IP address at time ${currentTime.toISOString()} UTC.  \n`;
+                text += `You have successfully logged in to your account.  \n`;
+                text += `Ip address: ${actionDatetimeObj.createdAtIpAddress}  \n`;
+                text += `User agent: ${actionDatetimeObj.createdAtUserAgent}  \n`;
+                text += `Time: ${currentTime.toISOString()} UTC.  \n`;
                 if (user.timeZoneUtcOffset) {
                     const luxonDate = DateTime.now().toUTC().plus({ minutes: user.timeZoneUtcOffset });
                     const formattedDate = luxonDate.toFormat('EEE MMM dd yyyy HH:mm:ss');
-                    text += `Logged in time in your timezone ${user.timeZoneRegion} is ${formattedDate}. \n`;
+                    text += `Time (${user.timeZoneRegion}): ${formattedDate}. \n`;
                 }
                 text += `If this was not you, please secure your account immediately.  \n`;
                 text += `Thank you for using AI Notes XYZ.`;
