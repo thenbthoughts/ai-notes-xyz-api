@@ -9,6 +9,7 @@ import routeUserCrud from './user/userCrud.route';
 import routeUserApiKey from './user/userApiKey.route';
 import routeUserTimezoneRevalidate from './user/userTimezoneRevalidate.route';
 import routeUserRevalidate from './user/userRevalidate.route';
+import routeUserLoginHistory from './user/userLoginHistory';
 
 // chat llm
 import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
@@ -61,6 +62,7 @@ router.use('/user/crud', routeUserCrud);
 router.use('/user/api-keys', routeUserApiKey);
 router.use('/user/timezone-revalidate', routeUserTimezoneRevalidate);
 router.use('/user/revalidate', routeUserRevalidate);
+router.use('/user/login-history', routeUserLoginHistory);
 
 // routes -> chat llm
 router.use('/chat-llm/crud', routesChatLlmCrud);
