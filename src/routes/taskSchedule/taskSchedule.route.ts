@@ -87,48 +87,49 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             }
         ]);
 
-
-        for (let index = 0; index < resultTaskSchedule.length; index++) {
-            const scheduleExecutionTimeArr: Date[] = [];
-            const element = resultTaskSchedule[index];
-
-            // step 1: cron expressions
-            if (element.cronExpressionArr && element.cronExpressionArr.length > 0) {
-                for (const cronExpression of element.cronExpressionArr) {
-                    try {
-                        const interval = CronExpressionParser.parse(cronExpression, {
-                            currentDate: new Date(),
-                            tz: 'UTC'
-                        });
-
-                        // Get next 100 occurrences for this cron expression
-                        for (let i = 0; i < 1000; i++) {
-                            const nextDate = interval.next().toDate();
-                            scheduleExecutionTimeArr.push(nextDate);
-                        }
-                    } catch (err: any) {
-                        console.error(`Error parsing cron expression ${cronExpression}:`, err.message);
-                    }
-                }
-
-                // Sort all dates chronologically
-                scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
-
-                // Take first 100 dates across all cron expressions
-                scheduleExecutionTimeArr.push(...scheduleExecutionTimeArr.slice(0, 1000));
-            }
-
-            // step 2: scheduleTimeArr
-            if (element.scheduleTimeArr && element.scheduleTimeArr.length > 0) {
-                scheduleExecutionTimeArr.push(...element.scheduleTimeArr);
-            }
-
-            // step 3: update scheduleExecutionTimeArr
-            await ModelTaskSchedule.updateOne(
-                { _id: element._id },
-                { $set: { scheduleExecutionTimeArr: scheduleExecutionTimeArr } }
-            );
+        if (resultTaskSchedule.length === 0) {
+            return;
         }
+
+        const scheduleExecutionTimeArr: Date[] = [];
+        const itemTaskSchedule = resultTaskSchedule[0];
+
+        // step 1: cron expressions
+        if (itemTaskSchedule.cronExpressionArr && itemTaskSchedule.cronExpressionArr.length > 0) {
+            for (const cronExpression of itemTaskSchedule.cronExpressionArr) {
+                try {
+                    const interval = CronExpressionParser.parse(cronExpression, {
+                        currentDate: new Date(),
+                        tz: 'UTC'
+                    });
+
+                    // Get next 100 occurrences for this cron expression
+                    for (let i = 0; i < 1000; i++) {
+                        const nextDate = interval.next().toDate();
+                        scheduleExecutionTimeArr.push(nextDate);
+                    }
+                } catch (err: any) {
+                    console.error(`Error parsing cron expression ${cronExpression}:`, err.message);
+                }
+            }
+
+            // Sort all dates chronologically
+            scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
+
+            // Take first 100 dates across all cron expressions
+            scheduleExecutionTimeArr.push(...scheduleExecutionTimeArr.slice(0, 1000));
+        }
+
+        // step 2: scheduleTimeArr
+        if (itemTaskSchedule.scheduleTimeArr && itemTaskSchedule.scheduleTimeArr.length > 0) {
+            scheduleExecutionTimeArr.push(...itemTaskSchedule.scheduleTimeArr);
+        }
+
+        // step 3: update scheduleExecutionTimeArr
+        await ModelTaskSchedule.updateOne(
+            { _id: itemTaskSchedule._id },
+            { $set: { scheduleExecutionTimeArr: scheduleExecutionTimeArr } }
+        );
     } catch (error) {
         console.error(error);
     }
