@@ -13,8 +13,8 @@ export interface tsTaskListSchedule extends Document {
     - taskAdd
     - notesAdd
     - customRestApiCall
-    - customAiSummary
-    - customTaskList
+    - generatedDailySummaryByAi
+    - suggestDailyTasksByAi
     */
 
     // required
@@ -22,6 +22,8 @@ export interface tsTaskListSchedule extends Document {
     description: string;
 
     // schedule time
+    timezoneName: string;
+    timezoneOffset: number;
     scheduleTimeArr: Date[];
     cronExpressionArr: string[];
     scheduleExecutionTimeArr: Date[];

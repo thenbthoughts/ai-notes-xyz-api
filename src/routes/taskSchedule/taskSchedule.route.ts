@@ -41,8 +41,8 @@ const isValidTaskType = (taskType: string): boolean => {
         'taskAdd',
         'notesAdd',
         'customRestApiCall',
-        'customAiSummary',
-        'customAiTaskList'
+        'generatedDailySummaryByAi',
+        'suggestDailyTasksByAi'
     ];
     return validTaskTypes.includes(taskType);
 }
@@ -151,13 +151,15 @@ router.post(
                 isActive,
                 shouldSendEmail,
                 scheduleTimeArr,
-                cronExpressionArr
+                cronExpressionArr,
+                timezoneName,
+                timezoneOffset
             } = req.body;
 
             // Validate required fields
             if (!taskType || !isValidTaskType(taskType)) {
                 return res.status(400).json({
-                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, customAiSummary, customAiTaskList'
+                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, generatedDailySummaryByAi, suggestDailyTasksByAi'
                 });
             }
 
@@ -208,6 +210,10 @@ router.post(
 
                 // cron
                 cronExpressionArr: cronExpressionArr || [],
+
+                // timezone
+                timezoneName: timezoneName || 'Asia/Kolkata',
+                timezoneOffset: timezoneOffset || 330,
 
                 // date time ip
                 ...actionDatetimeObj,
@@ -391,18 +397,20 @@ router.post(
             );
 
             const {
-                id,
+                _id,
                 title,
                 description,
                 taskType,
                 isActive,
                 shouldSendEmail,
                 scheduleTimeArr,
-                cronExpressionArr
+                cronExpressionArr,
+                timezoneName,
+                timezoneOffset
             } = req.body;
 
             // Validate ID
-            const taskScheduleIdObj = getMongodbObjectOrNull(id);
+            const taskScheduleIdObj = getMongodbObjectOrNull(_id);
             if (!taskScheduleIdObj) {
                 return res.status(400).json({ message: 'Valid task schedule ID is required' });
             }
@@ -410,7 +418,7 @@ router.post(
             // Validate task type if provided
             if (taskType && !isValidTaskType(taskType)) {
                 return res.status(400).json({
-                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, customAiSummary, customAiTaskList'
+                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, generatedDailySummaryByAi, suggestDailyTasksByAi'
                 });
             }
 
@@ -451,6 +459,10 @@ router.post(
             if (validScheduleTimeArr !== undefined) updateObj.scheduleTimeArr = validScheduleTimeArr;
             if (cronExpressionArr !== undefined) updateObj.cronExpressionArr = cronExpressionArr;
 
+            // timezone
+            if (timezoneName !== undefined) updateObj.timezoneName = timezoneName;
+            if (timezoneOffset !== undefined) updateObj.timezoneOffset = timezoneOffset;
+
             // Add update datetime
             updateObj.updatedAtUtc = actionDatetimeObj.updatedAtUtc || undefined;
             updateObj.updatedAtIpAddress = actionDatetimeObj.updatedAtIpAddress;
@@ -473,7 +485,7 @@ router.post(
 
             // revalidate task schedule execution time
             await revalidateTaskScheduleExecutionTimeById({
-                _id: id,
+                _id: _id,
                 auth_username: auth_username,
             });
 
@@ -489,11 +501,11 @@ router.post(
 router.post('/taskScheduleDelete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const {
-            id
+            _id
         } = req.body;
         const auth_username = res.locals.auth_username;
 
-        const taskScheduleIdObj = getMongodbObjectOrNull(id);
+        const taskScheduleIdObj = getMongodbObjectOrNull(_id);
         if (!taskScheduleIdObj) {
             return res.status(400).json({ message: 'Valid task schedule ID is required' });
         }
@@ -521,9 +533,9 @@ router.post('/taskScheduleDelete', middlewareUserAuth, async (req: Request, res:
 router.post('/taskScheduleToggleActive', middlewareUserAuth, middlewareActionDatetime, async (req: Request, res: Response) => {
     try {
         const auth_username = res.locals.auth_username;
-        const { id } = req.body;
+        const { _id } = req.body;
 
-        const taskScheduleIdObj = getMongodbObjectOrNull(id);
+        const taskScheduleIdObj = getMongodbObjectOrNull(_id);
         if (!taskScheduleIdObj) {
             return res.status(400).json({ message: 'Valid task schedule ID is required' });
         }

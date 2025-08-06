@@ -27,8 +27,8 @@ const taskScheduleSchema = new Schema<tsTaskListSchedule>({
             'taskAdd',
             'notesAdd',
             'customRestApiCall', // future
-            'customAiSummary',
-            'customAiTaskList',
+            'generatedDailySummaryByAi',
+            'suggestDailyTasksByAi',
         ],
     },
 
@@ -42,6 +42,17 @@ const taskScheduleSchema = new Schema<tsTaskListSchedule>({
         type: String,
         default: '',
         trim: true,
+    },
+
+    // timezone
+    timezoneName: {
+        type: String,
+        default: 'Asia/Kolkata',
+    },
+    timezoneOffset: {
+        type: Number,
+        default: 330,
+        // timezone offset in minutes
     },
 
     // schedule time
