@@ -91,7 +91,7 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             return;
         }
 
-        const scheduleExecutionTimeArr: Date[] = [];
+        let scheduleExecutionTimeArr: Date[] = [];
         const itemTaskSchedule = resultTaskSchedule[0];
 
         // step 1: cron expressions
@@ -116,14 +116,23 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             // Sort all dates chronologically
             scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
 
-            // Take first 100 dates across all cron expressions
-            scheduleExecutionTimeArr.push(...scheduleExecutionTimeArr.slice(0, 1000));
+            // Take all dates across all cron expressions
+            scheduleExecutionTimeArr.push(...scheduleExecutionTimeArr);
         }
 
         // step 2: scheduleTimeArr
         if (itemTaskSchedule.scheduleTimeArr && itemTaskSchedule.scheduleTimeArr.length > 0) {
             scheduleExecutionTimeArr.push(...itemTaskSchedule.scheduleTimeArr);
         }
+
+        // remove duplicates
+        scheduleExecutionTimeArr = [...new Set(scheduleExecutionTimeArr)];
+
+        // sort by date
+        scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
+
+        // take first 100 dates
+        scheduleExecutionTimeArr = scheduleExecutionTimeArr.slice(0, 100);
 
         // step 3: update scheduleExecutionTimeArr
         await ModelTaskSchedule.updateOne(
