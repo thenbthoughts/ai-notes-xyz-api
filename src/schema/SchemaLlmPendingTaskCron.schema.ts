@@ -69,6 +69,12 @@ const llmPendingTaskCronSchema = new Schema<ILlmPendingTaskCron>({
         // 0 means no value
     },
 
+    // tags
+    tags: {
+        type: [String],
+        default: [],
+    },
+
     // auto
     createdAtUtc: {
         type: Date,

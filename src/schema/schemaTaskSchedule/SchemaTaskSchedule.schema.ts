@@ -72,6 +72,10 @@ const taskScheduleSchema = new Schema<tsTaskListSchedule>({
         type: [Date],
         default: [],
     },
+    scheduleExecutedTimeArr: {
+        type: [Date],
+        default: [],
+    },
 
     // auto
     createdAtUtc: {

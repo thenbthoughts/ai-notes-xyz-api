@@ -7,6 +7,8 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { tsTaskListSchedule } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
+import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { funcSendMail } from '../../utils/files/funcSendMail';
 
 // Router
 const router = Router();
@@ -55,6 +57,10 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
     _id: string;
     auth_username: string;
 }) => {
+    // get offset value
+    let SECOND_TO_MILLISECOND = 1000;
+    let SECOND_SIXTY = 60;
+
     try {
         const resultTaskSchedule = await ModelTaskSchedule.aggregate([
             {
@@ -85,7 +91,7 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
                     ]
                 }
             }
-        ]);
+        ]) as tsTaskListSchedule[];
 
         if (resultTaskSchedule.length === 0) {
             return;
@@ -100,29 +106,37 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
                 try {
                     const interval = CronExpressionParser.parse(cronExpression, {
                         currentDate: new Date(),
-                        tz: 'UTC'
+                        tz: itemTaskSchedule.timezoneName
                     });
 
-                    // Get next 100 occurrences for this cron expression
-                    for (let i = 0; i < 1000; i++) {
+                    // Get next 101 occurrences for this cron expression
+                    for (let i = 0; i < 101; i++) {
                         const nextDate = interval.next().toDate();
+
+                        // add date to scheduleExecutionTimeArr
                         scheduleExecutionTimeArr.push(nextDate);
                     }
                 } catch (err: any) {
                     console.error(`Error parsing cron expression ${cronExpression}:`, err.message);
                 }
             }
-
-            // Sort all dates chronologically
-            scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
-
-            // Take all dates across all cron expressions
-            scheduleExecutionTimeArr.push(...scheduleExecutionTimeArr);
         }
 
         // step 2: scheduleTimeArr
         if (itemTaskSchedule.scheduleTimeArr && itemTaskSchedule.scheduleTimeArr.length > 0) {
-            scheduleExecutionTimeArr.push(...itemTaskSchedule.scheduleTimeArr);
+            for (const scheduleTime of itemTaskSchedule.scheduleTimeArr) {
+                let date = new Date(scheduleTime);
+
+                // get offset value
+                let offsetValueOf = itemTaskSchedule.timezoneOffset * SECOND_SIXTY * SECOND_TO_MILLISECOND;
+
+                // get date utc execute
+                let dateUtcExecute = date.valueOf() - offsetValueOf;
+                let dateUtcExecuteDate = new Date(dateUtcExecute);
+
+                // add date to scheduleExecutionTimeArr
+                scheduleExecutionTimeArr.push(dateUtcExecuteDate);
+            }
         }
 
         // remove duplicates
@@ -131,14 +145,169 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
         // sort by date
         scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
 
-        // take first 100 dates
-        scheduleExecutionTimeArr = scheduleExecutionTimeArr.slice(0, 100);
+        // take first 101 dates
+        scheduleExecutionTimeArr = scheduleExecutionTimeArr.slice(0, 101);
 
         // step 3: update scheduleExecutionTimeArr
         await ModelTaskSchedule.updateOne(
             { _id: itemTaskSchedule._id },
             { $set: { scheduleExecutionTimeArr: scheduleExecutionTimeArr } }
         );
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+// execute task schedule
+export const executeTaskSchedule = async ({
+    auth_username,
+}: {
+    auth_username: string;
+}) => {
+    try {
+        const itemTaskSchedules = await ModelTaskSchedule.aggregate([
+            {
+                $match: {
+                    username: auth_username,
+                    isActive: true,
+                }
+            },
+            {
+                $addFields: {
+                    cronExpressionArrLen: {
+                        $size: '$cronExpressionArr'
+                    },
+                    scheduleTimeArrLen: {
+                        $size: '$scheduleTimeArr'
+                    },
+                    scheduleExecutionTimeArrLen: {
+                        $size: '$scheduleExecutionTimeArr'
+                    }
+                }
+            },
+            {
+                $match: {
+                    $or: [
+                        {
+                            cronExpressionArrLen: { $gt: 0 }
+                        },
+                        {
+                            scheduleTimeArrLen: { $gt: 0 }
+                        }
+                    ],
+                    scheduleExecutionTimeArrLen: { $gt: 0 }
+                }
+            }
+        ]) as tsTaskListSchedule[];
+
+        for (const itemTaskSchedule of itemTaskSchedules) {
+
+            const scheduleExecutionTimeArr = itemTaskSchedule.scheduleExecutionTimeArr;
+
+            if (scheduleExecutionTimeArr.length === 0) {
+                // revalidate
+                let recordId = (itemTaskSchedule._id as mongoose.Types.ObjectId).toString();
+                await revalidateTaskScheduleExecutionTimeById({
+                    _id: recordId,
+                    auth_username: auth_username,
+                });
+                continue;
+            }
+
+            for (const scheduleExecutionTime of scheduleExecutionTimeArr) {
+                let shouldExecute = true;
+
+                // is time less than current time
+                let dateUtcExecute = new Date(scheduleExecutionTime).valueOf();
+                let currentTimeValueOf = new Date().valueOf();
+
+                if ((currentTimeValueOf - dateUtcExecute) / 1000 >= 1) {
+                    // execute now
+                    console.log('execute now as time is greater than current time');
+                } else {
+                    // console.log('dont execute now as time is less than current time');
+                    shouldExecute = false;
+                    continue;
+                }
+
+                // check in scheduleExecutedTimeArr
+                if (Array.isArray(itemTaskSchedule.scheduleExecutedTimeArr)) {
+                    let doesExist = false;
+
+                    for (const scheduleExecutedTime of itemTaskSchedule.scheduleExecutedTimeArr) {
+                        if (scheduleExecutedTime.valueOf() === scheduleExecutionTime.valueOf()) {
+                            doesExist = true;
+                            break;
+                        }
+                    }
+
+                    if (doesExist) {
+                        // console.log('dont execute now as time is already executed');
+                        shouldExecute = false;
+                        continue;
+                    }
+                }
+
+                if (shouldExecute) {
+                    console.log('execute now as time is not executed');
+                    // update scheduleExecutedTimeArr
+                    await ModelTaskSchedule.updateOne(
+                        { _id: itemTaskSchedule._id },
+                        { $push: { scheduleExecutedTimeArr: scheduleExecutionTime } }
+                    );
+
+                    // insert record in llmPendingTaskCron
+                    // await ModelLlmPendingTaskCron.create({
+                    //     username: auth_username,
+                    //     taskType: itemTaskSchedule.taskType,
+                    //     targetRecordId: itemTaskSchedule._id,
+                    // });
+
+                    // send mail
+                    console.log(`Task Schedule ${itemTaskSchedule.taskType} executed at ${scheduleExecutionTime} recordId: ${itemTaskSchedule._id}`);
+                    // await funcSendMail({
+                    //     username: auth_username,
+                    //     smtpTo: auth_username,
+                    //     subject: 'Task Schedule Executed',
+                    //     text: `Task Schedule ${itemTaskSchedule.taskType} executed at ${scheduleExecutionTime} recordId: ${itemTaskSchedule._id}`,
+                    // });
+
+                    break;
+                }
+
+            }
+        }
+
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+export const executeTaskScheduleForAllUsers = async () => {
+    try {
+        // get all user task schedules
+        const itemTaskSchedules = await ModelTaskSchedule.aggregate([
+            {
+                $group: {
+                    _id: '$username',
+                    username: { $first: '$username' },
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    username: 1,
+                }
+            }
+        ]) as {
+            username: string;
+        }[];
+
+        for (const itemTaskSchedule of itemTaskSchedules) {
+            await executeTaskSchedule({
+                auth_username: itemTaskSchedule.username,
+            });
+        }
     } catch (error) {
         console.error(error);
     }
