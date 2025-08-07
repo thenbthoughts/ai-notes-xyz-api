@@ -28,6 +28,7 @@ export interface tsTaskListSchedule extends Document {
     cronExpressionArr: string[];
     scheduleExecutionTimeArr: Date[];
     scheduleExecutedTimeArr: Date[];
+    executedTimes: number;
 
     // auto
     createdAtUtc: Date;

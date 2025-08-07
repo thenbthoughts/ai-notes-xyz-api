@@ -8,6 +8,7 @@ import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpA
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { tsTaskListSchedule } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { funcSendMail } from '../../utils/files/funcSendMail';
 
 // Router
@@ -204,16 +205,6 @@ export const executeTaskSchedule = async ({
 
             const scheduleExecutionTimeArr = itemTaskSchedule.scheduleExecutionTimeArr;
 
-            if (scheduleExecutionTimeArr.length === 0) {
-                // revalidate
-                let recordId = (itemTaskSchedule._id as mongoose.Types.ObjectId).toString();
-                await revalidateTaskScheduleExecutionTimeById({
-                    _id: recordId,
-                    auth_username: auth_username,
-                });
-                continue;
-            }
-
             for (const scheduleExecutionTime of scheduleExecutionTimeArr) {
                 let shouldExecute = true;
 
@@ -253,24 +244,25 @@ export const executeTaskSchedule = async ({
                     // update scheduleExecutedTimeArr
                     await ModelTaskSchedule.updateOne(
                         { _id: itemTaskSchedule._id },
-                        { $push: { scheduleExecutedTimeArr: scheduleExecutionTime } }
+                        { $push: { scheduleExecutedTimeArr: scheduleExecutionTime } },
+                        { $inc: { executedTimes: 1 } }
                     );
 
-                    // insert record in llmPendingTaskCron
-                    // await ModelLlmPendingTaskCron.create({
-                    //     username: auth_username,
-                    //     taskType: itemTaskSchedule.taskType,
-                    //     targetRecordId: itemTaskSchedule._id,
-                    // });
+                    // revalidate
+                    let recordId = (itemTaskSchedule._id as mongoose.Types.ObjectId).toString();
+                    await revalidateTaskScheduleExecutionTimeById({
+                        _id: recordId,
+                        auth_username: auth_username,
+                    });
 
-                    // send mail
-                    console.log(`Task Schedule ${itemTaskSchedule.taskType} executed at ${scheduleExecutionTime} recordId: ${itemTaskSchedule._id}`);
-                    // await funcSendMail({
-                    //     username: auth_username,
-                    //     smtpTo: auth_username,
-                    //     subject: 'Task Schedule Executed',
-                    //     text: `Task Schedule ${itemTaskSchedule.taskType} executed at ${scheduleExecutionTime} recordId: ${itemTaskSchedule._id}`,
-                    // });
+                    // insert record in llmPendingTaskCron
+                    if(itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
+                        await ModelLlmPendingTaskCron.create({
+                            username: auth_username,
+                            taskType: llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi,
+                            targetRecordId: itemTaskSchedule._id,
+                        });
+                    }
 
                     break;
                 }

@@ -31,6 +31,15 @@ const llmPendingTaskTypes = {
             generateEmbeddingByTaskId: 'pageTask_generateEmbeddingByTaskId',
         },
 
+        // task schedule
+        taskSchedule: {
+            taskSchedule_taskAdd: 'pageTaskSchedule_taskAdd',
+            taskSchedule_notesAdd: 'pageTaskSchedule_notesAdd',
+            taskSchedule_restApiCall: 'pageTaskSchedule_restApiCall',
+            taskSchedule_generatedDailySummaryByAi: 'pageTaskSchedule_generatedDailySummaryByAi',
+            taskSchedule_suggestDailyTasksByAi: 'pageTaskSchedule_suggestDailyTasksByAi',
+        },
+
         // settings
         settings: {
             openRouterModelGet: 'pageSettings_openRouterModelGet',
