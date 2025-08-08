@@ -6,15 +6,17 @@ export const funcSendMail = async ({
     smtpTo,
     subject,
     text,
+    html,
 }: {
     username: string;
     smtpTo: string;
     subject: string;
     text: string;
+    html?: string;
 }): Promise<boolean> => {
     try {
         // validate
-        if (!username || !smtpTo || !subject || !text) {
+        if (!username || !smtpTo || !subject) {
             return false;
         }
 
@@ -44,14 +46,18 @@ export const funcSendMail = async ({
             },
         });
 
-        const info = await transporter.sendMail({
+        let mailOptions: any = {
             from: smtpFrom,
             to: smtpTo,
             subject: subject,
-            text: text,
-        });
+        };
+        if(typeof html === 'string' && html.length >= 1) {
+            mailOptions.html = html;
+        } else {
+            mailOptions.text = text;
+        }
 
-        console.log('info: ', info);
+        const info = await transporter.sendMail(mailOptions);
 
         if (info.accepted.length > 0) {
             sendStatus = true;

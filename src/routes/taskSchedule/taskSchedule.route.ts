@@ -213,10 +213,8 @@ export const executeTaskSchedule = async ({
                 let currentTimeValueOf = new Date().valueOf();
 
                 if ((currentTimeValueOf - dateUtcExecute) / 1000 >= 1) {
-                    // execute now
-                    console.log('execute now as time is greater than current time');
+                    // may execute now
                 } else {
-                    // console.log('dont execute now as time is less than current time');
                     shouldExecute = false;
                     continue;
                 }
@@ -233,14 +231,15 @@ export const executeTaskSchedule = async ({
                     }
 
                     if (doesExist) {
-                        // console.log('dont execute now as time is already executed');
+                        // dont execute now as time is already executed
                         shouldExecute = false;
                         continue;
                     }
                 }
 
                 if (shouldExecute) {
-                    console.log('execute now as time is not executed');
+                    // can execute now
+
                     // update scheduleExecutedTimeArr
                     await ModelTaskSchedule.updateOne(
                         { _id: itemTaskSchedule._id },
@@ -692,58 +691,6 @@ router.post('/taskScheduleDelete', middlewareUserAuth, async (req: Request, res:
         return res.json({
             message: 'Task schedule deleted successfully',
             deletedTaskSchedule: deletedTaskSchedule
-        });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// taskScheduleToggleActive - Additional utility endpoint to quickly toggle active status
-router.post('/taskScheduleToggleActive', middlewareUserAuth, middlewareActionDatetime, async (req: Request, res: Response) => {
-    try {
-        const auth_username = res.locals.auth_username;
-        const { _id } = req.body;
-
-        const taskScheduleIdObj = getMongodbObjectOrNull(_id);
-        if (!taskScheduleIdObj) {
-            return res.status(400).json({ message: 'Valid task schedule ID is required' });
-        }
-
-        const actionDatetimeObj = normalizeDateTimeIpAddress(
-            res.locals.actionDatetime
-        );
-
-        // Find current task schedule
-        const currentTaskSchedule = await ModelTaskSchedule.findOne({
-            _id: taskScheduleIdObj,
-            username: auth_username,
-        });
-
-        if (!currentTaskSchedule) {
-            return res.status(404).json({ message: 'Task schedule not found' });
-        }
-
-        // Toggle active status
-        const updatedTaskSchedule = await ModelTaskSchedule.findOneAndUpdate(
-            {
-                _id: taskScheduleIdObj,
-                username: auth_username,
-            },
-            {
-                isActive: !currentTaskSchedule.isActive,
-                updatedAtUtc: actionDatetimeObj.updatedAtUtc,
-                updatedAtIpAddress: actionDatetimeObj.updatedAtIpAddress,
-                updatedAtUserAgent: actionDatetimeObj.updatedAtUserAgent,
-            },
-            {
-                new: true,
-            }
-        );
-
-        return res.json({
-            message: `Task schedule ${updatedTaskSchedule?.isActive ? 'activated' : 'deactivated'} successfully`,
-            taskSchedule: updatedTaskSchedule
         });
     } catch (error) {
         console.error(error);
