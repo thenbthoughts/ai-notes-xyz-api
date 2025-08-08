@@ -31,6 +31,9 @@ import routesTaskSub from './task/routesTaskSub.route';
 import routesTaskComments from './task/routesTaskComments.route';
 import routesTaskWorkspaceCrud from './task/taskWorkspaceCrud.route';
 
+// page -> task schedule
+import routesTaskScheduleCrud from './taskSchedule/taskSchedule.route';
+
 // page -> notes
 import routesNotesCrud from './notes/notesCrud.route';
 import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
@@ -79,6 +82,9 @@ router.use('/task-sub/crud', routesTaskSub);
 router.use('/task-status-list/crud', routesTaskStatusList);
 router.use('/task-comments/crud', routesTaskComments);
 router.use('/task-workspace/crud', routesTaskWorkspaceCrud);
+
+// routes -> task schedule
+router.use('/task-schedule/crud', routesTaskScheduleCrud);
 
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);

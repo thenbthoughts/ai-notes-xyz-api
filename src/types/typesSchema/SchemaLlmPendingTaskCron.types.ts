@@ -22,6 +22,9 @@ export interface ILlmPendingTaskCron extends Document {
     taskStatusFailed: string;
     taskTimeTakenInMills: number;
 
+    // tags
+    tags: string[];
+
     // auto
     createdAtUtc: Date | null;
     updatedAtUtc: Date | null;

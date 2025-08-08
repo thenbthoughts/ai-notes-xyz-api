@@ -25,6 +25,9 @@ import generateEmbeddingByTaskId from "./page/task/generateEmbeddingByTaskId";
 import openRouterModelGet from "./page/settings/openRouterModelGet";
 import groqModelGet from "./page/settings/groqModelGet";
 
+// Task Schedule tasks
+import suggestDailyTasksByAi from "./page/taskSchedule/suggestDailyTasksByAi";
+
 const llmPendingTaskProcessFunc = async ({
     _id,
 }: {
@@ -120,7 +123,14 @@ const llmPendingTaskProcessFunc = async ({
                     username: resultTask.username,
                 });
                 break;
-                
+
+            // Task Schedule tasks
+            case llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi:
+                isTaskDone = await suggestDailyTasksByAi({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
             default:
                 console.warn('Unknown task type:', resultTask.taskType);
                 break;
