@@ -98,7 +98,8 @@ const taskScheduleAddTask = async ({
             username: taskInfo.username,
             smtpTo: userInfo.email,
             subject: `Task schedule - ${taskTitle} | AI Notes XYZ`,
-            text: mailContent,
+            text: '',
+            html: mailContent,
         });
 
         return true;
