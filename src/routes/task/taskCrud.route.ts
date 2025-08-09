@@ -415,7 +415,7 @@ router.post(
             // stateDocument -> sort
             tempStage = {
                 $sort: {
-                    dateTimeUtc: 1,
+                    title: 1,
                 }
             }
             stateDocument.push(tempStage);
@@ -464,7 +464,7 @@ router.post(
             stateDocument.push(tempStage);
 
             // pipeline
-            const resultTasks = await ModelTask.aggregate(stateDocument);
+            const resultTasks = await ModelTask.aggregate(stateDocument).collation({ locale: 'en', strength: 2 });
 
             // revalidate task workspace and status
             for (let index = 0; index < resultTasks.length; index++) {

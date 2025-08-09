@@ -2,15 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 
 import { ILlmPendingTaskCron } from '../types/typesSchema/SchemaLlmPendingTaskCron.types';
 
-const taskType = {
-    chat: {
-        generateChatTitleById: 'pageChat_generateChatTitleById',
-        generateChatTagsById: 'pageChat_generateChatTagsById',
-        generateAudioById: 'pageChat_generateAudioById',
-        generateNextResponseById: 'pageChat_generateNextResponseById',
-    },
-};
-
 // LlmPendingTaskCron Schema
 const llmPendingTaskCronSchema = new Schema<ILlmPendingTaskCron>({
     // identification

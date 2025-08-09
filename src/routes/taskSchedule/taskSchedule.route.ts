@@ -9,7 +9,8 @@ import middlewareActionDatetime from '../../middleware/middlewareActionDatetime'
 import { tsTaskListSchedule } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
-import { funcSendMail } from '../../utils/files/funcSendMail';
+import { ModelTaskScheduleAddTask } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleTaskAdd.schema';
+import { tsTaskListScheduleAddTask } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';
 
 // Router
 const router = Router();
@@ -255,12 +256,23 @@ export const executeTaskSchedule = async ({
                     });
 
                     // insert record in llmPendingTaskCron
-                    if(itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
-                        await ModelLlmPendingTaskCron.create({
-                            username: auth_username,
-                            taskType: llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi,
-                            targetRecordId: itemTaskSchedule._id,
-                        });
+                    if (
+                        itemTaskSchedule.taskType === 'suggestDailyTasksByAi' ||
+                        itemTaskSchedule.taskType === 'taskAdd'
+                    ) {
+                        let tempTaskType = '';
+                        if (itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
+                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi;
+                        } else if (itemTaskSchedule.taskType === 'taskAdd') {
+                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd;
+                        }
+                        if(tempTaskType !== '') {
+                            await ModelLlmPendingTaskCron.create({
+                                username: auth_username,
+                                taskType: tempTaskType,
+                                targetRecordId: itemTaskSchedule._id,
+                            });
+                        }
                     }
 
                     break;
@@ -412,15 +424,6 @@ router.post(
         try {
             const auth_username = res.locals.auth_username;
 
-            let recordId = '';
-            if (req.body?.recordId) {
-                if (typeof req.body?.recordId === 'string') {
-                    if (req.body?.recordId.trim() !== '') {
-                        recordId = req.body?.recordId;
-                    }
-                }
-            }
-
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
 
@@ -428,6 +431,7 @@ router.post(
             const tempStageMatch = {
                 username: auth_username,
             } as {
+                _id?: mongoose.Types.ObjectId;
                 username: string;
                 title?: RegExp;
                 description?: RegExp;
@@ -435,6 +439,18 @@ router.post(
                 isActive?: boolean;
                 shouldSendEmail?: boolean;
             };
+
+            // Filter by recordId
+            if (req.body?.recordId) {
+                if (typeof req.body?.recordId === 'string') {
+                    if (req.body?.recordId.trim() !== '') {
+                        const recordIdObj = getMongodbObjectOrNull(req.body?.recordId);
+                        if (recordIdObj) {
+                            tempStageMatch._id = recordIdObj;
+                        }
+                    }
+                }
+            }
 
             // Filter by task type
             if (req.body?.taskType) {
@@ -519,26 +535,22 @@ router.post(
             };
             stateDocument.push(tempStage);
 
+            // lookup task add
+            tempStage = {
+                $lookup: {
+                    from: 'taskScheduleAddTask',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'taskAddArr',
+                }
+            };
+            stateDocument.push(tempStage);
+
+
+            console.log(JSON.stringify(stateDocument, null, 2));
+
             // Execute aggregation
             const resultTaskSchedules = await ModelTaskSchedule.aggregate(stateDocument);
-
-            // If specific record ID requested, return only that record
-            if (recordId) {
-                const recordIdObj = getMongodbObjectOrNull(recordId);
-                if (recordIdObj) {
-                    const specificRecord = await ModelTaskSchedule.findOne({
-                        _id: recordIdObj,
-                        username: auth_username,
-                    });
-                    if (specificRecord) {
-                        return res.json({
-                            message: 'Task schedule retrieved successfully',
-                            count: 1,
-                            docs: [specificRecord],
-                        });
-                    }
-                }
-            }
 
             return res.json({
                 message: 'Task schedules retrieved successfully',
@@ -575,7 +587,10 @@ router.post(
                 scheduleTimeArr,
                 cronExpressionArr,
                 timezoneName,
-                timezoneOffset
+                timezoneOffset,
+
+                // 
+                taskAddObj: arg_taskAddObj,
             } = req.body;
 
             // Validate ID
@@ -647,6 +662,44 @@ router.post(
                     new: true,
                 }
             );
+
+            if (taskType === 'taskAdd') {
+                const taskAddObj = arg_taskAddObj as unknown as tsTaskListScheduleAddTask;
+                if (taskAddObj) {
+                    const taskAddObjId = new mongoose.Types.ObjectId();
+
+                    // delete existing task add
+                    await ModelTaskScheduleAddTask.deleteMany({
+                        $or: [
+                            {
+                                _id: taskScheduleIdObj,
+                            },
+                            {
+                                taskScheduleId: taskScheduleIdObj,
+                            },
+                        ]
+                    });
+
+                    // create new task add
+                    await ModelTaskScheduleAddTask.create({
+                        // identification
+                        _id: taskScheduleIdObj,
+                        taskScheduleId: taskScheduleIdObj,
+                        taskWorkspaceId: taskAddObj.taskWorkspaceId || null,
+                        taskStatusId: taskAddObj.taskStatusId || null,
+
+                        // auth
+                        username: auth_username,
+
+                        // fields
+                        taskTitle: taskAddObj.taskTitle,
+                        taskDatePrefix: taskAddObj.taskDatePrefix,
+                        taskDeadline: taskAddObj.taskDeadline,
+                        taskAiSummary: taskAddObj.taskAiSummary,
+                        taskAiContext: taskAddObj.taskAiContext,
+                    });
+                }
+            }
 
             if (!updatedTaskSchedule) {
                 return res.status(404).json({ message: 'Task schedule not found' });
