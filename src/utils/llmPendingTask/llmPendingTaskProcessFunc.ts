@@ -27,6 +27,7 @@ import groqModelGet from "./page/settings/groqModelGet";
 
 // Task Schedule tasks
 import suggestDailyTasksByAi from "./page/taskSchedule/suggestDailyTasksByAi";
+import taskScheduleAddTask from "./page/taskSchedule/taskScheduleAddTask";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -127,6 +128,12 @@ const llmPendingTaskProcessFunc = async ({
             // Task Schedule tasks
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi:
                 isTaskDone = await suggestDailyTasksByAi({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd:
+                isTaskDone = await taskScheduleAddTask({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;
