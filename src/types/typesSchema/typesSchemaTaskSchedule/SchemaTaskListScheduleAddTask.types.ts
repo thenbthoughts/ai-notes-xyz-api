@@ -9,9 +9,15 @@ export interface tsTaskListScheduleAddTask extends Document {
     taskWorkspaceId: mongoose.Types.ObjectId;
     taskStatusId: mongoose.Types.ObjectId;
 
+    // task fields
     taskTitle: string;
     taskDatePrefix: boolean;
-    taskDeadline: string;
+
+    // deadline enabled
+    taskDeadlineEnabled: boolean;
+    taskDeadlineDays: number;
+
+    // task ai fields
     taskAiSummary: boolean;
     taskAiContext: string;
 }

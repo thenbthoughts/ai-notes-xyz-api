@@ -691,10 +691,15 @@ router.post(
                         // auth
                         username: auth_username,
 
-                        // fields
+                        // task fields
                         taskTitle: taskAddObj.taskTitle,
                         taskDatePrefix: taskAddObj.taskDatePrefix,
-                        taskDeadline: taskAddObj.taskDeadline,
+
+                        // deadline enabled
+                        taskDeadlineEnabled: taskAddObj.taskDeadlineEnabled,
+                        taskDeadlineDays: taskAddObj.taskDeadlineDays,
+
+                        // task ai fields
                         taskAiSummary: taskAddObj.taskAiSummary,
                         taskAiContext: taskAddObj.taskAiContext,
                     });
