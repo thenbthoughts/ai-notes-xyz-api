@@ -76,6 +76,11 @@ router.post('/userLoginHistory', middlewareUserAuth, async (req: Request, res: R
             }
         }
 
+        for (let index = 0; index < userDeviceList.length; index++) {
+            const element = userDeviceList[index];
+            userDeviceList[index].randomDeviceId = element.randomDeviceId.substring(0, 10);
+        }
+
         return res.json({
             message: 'User device list retrieved successfully',
             count: totalCount,
@@ -86,5 +91,45 @@ router.post('/userLoginHistory', middlewareUserAuth, async (req: Request, res: R
         return res.status(500).json({ message: 'Server error' });
     }
 });
+
+// Clear All Records
+router.delete('/clear-all-records', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const { auth_username } = res.locals;
+
+        // Delete all user device list records for the authenticated user
+        const result = await ModelUserDeviceList.deleteMany({ username: auth_username });
+
+        return res.json({
+            message: 'All login history records cleared successfully',
+            deletedCount: result.deletedCount,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Logout All Devices
+router.post('/logout-all-devices', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const { auth_username } = res.locals;
+
+        // Mark all user device list records as expired for the authenticated user
+        const result = await ModelUserDeviceList.updateMany(
+            { username: auth_username },
+            { isExpired: true }
+        );
+
+        return res.json({
+            message: 'All devices logged out successfully',
+            modifiedCount: result.modifiedCount,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
 
 export default router;
