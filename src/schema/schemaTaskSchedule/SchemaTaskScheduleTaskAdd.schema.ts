@@ -25,10 +25,18 @@ const taskScheduleAddTaskSchema = new Schema<tsTaskListScheduleAddTask>({
         type: Boolean,
         default: false,
     },
-    taskDeadline: {
-        type: String,
-        default: '',
+
+    // deadline enabled
+    taskDeadlineEnabled: {
+        type: Boolean,
+        default: false,
     },
+    taskDeadlineDays: {
+        type: Number,
+        default: 0,
+    },
+
+    // task ai fields
     taskAiSummary: {
         type: Boolean,
         default: false,

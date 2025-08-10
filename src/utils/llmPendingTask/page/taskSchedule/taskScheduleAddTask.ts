@@ -11,6 +11,7 @@ import { funcSendMail } from '../../../files/funcSendMail';
 import { ModelTaskScheduleAddTask } from '../../../../schema/schemaTaskSchedule/SchemaTaskScheduleTaskAdd.schema';
 import { ModelTaskWorkspace } from '../../../../schema/schemaTask/SchemaTaskWorkspace.schema';
 import { ModelTaskStatusList } from '../../../../schema/schemaTask/SchemaTaskStatusList.schema';
+import { tsTaskStatusList } from '../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
 
 const taskScheduleAddTask = async ({
     targetRecordId,
@@ -47,7 +48,7 @@ const taskScheduleAddTask = async ({
         const taskStatusObj = await ModelTaskStatusList.findOne({
             _id: taskAddObj.taskStatusId,
             username: taskInfo.username,
-        }) as tsTaskListSchedule;
+        }) as tsTaskStatusList;
         if (!taskStatusObj) {
             return true;
         }
@@ -89,7 +90,7 @@ const taskScheduleAddTask = async ({
         <p>${taskAddObj.taskAiContext}</p>
         <p>Task ID: ${taskInsert._id}</p>
         <p>Task Workspace: ${taskWorkspaceObj.title}</p>
-        <p>Task Status: ${taskStatusObj.title}</p>
+        <p>Task Status: ${taskStatusObj.statusTitle}</p>
         <p><a href="https://demo.ai-notes.xyz/user/task?workspace=${taskWorkspaceObj._id}&edit-task-id=${taskInsert._id}">View Task in Workspace</a></p>
         `;
 
