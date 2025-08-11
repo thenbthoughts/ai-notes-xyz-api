@@ -170,10 +170,6 @@ router.get(
             }
             stateDocument.push(tempStage);
 
-            console.log(
-                JSON.stringify(stateDocument, null, 2)
-            );
-
             // pipeline
             const resultTasks = await ModelTask.aggregate(stateDocument);
 
