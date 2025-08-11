@@ -244,8 +244,10 @@ export const executeTaskSchedule = async ({
                     // update scheduleExecutedTimeArr
                     await ModelTaskSchedule.updateOne(
                         { _id: itemTaskSchedule._id },
-                        { $push: { scheduleExecutedTimeArr: scheduleExecutionTime } },
-                        { $inc: { executedTimes: 1 } }
+                        {
+                            $push: { scheduleExecutedTimeArr: scheduleExecutionTime },
+                            $inc: { executedTimes: 1 }
+                        }
                     );
 
                     // revalidate
