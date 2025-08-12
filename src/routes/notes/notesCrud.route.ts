@@ -43,6 +43,19 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
         pipelineDocument.push(tempStage);
         pipelineCount.push(tempStage);
 
+        // stage -> match -> openRandomNotes
+        if (typeof req.body?.openRandomNotes === 'string') {
+            if (req.body.openRandomNotes === 'true') {
+                tempStage = {
+                    $sample: {
+                        size: 1,
+                    }
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> match -> recordId
         const arg_recordId = req.body.recordId;
         if (typeof arg_recordId === 'string') {
