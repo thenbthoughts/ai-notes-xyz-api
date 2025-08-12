@@ -14,8 +14,26 @@ const router = Router();
 // Get Note API
 router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
+        // args
+        let page = 1;
+        let perPage = 20;
+
+        // set arg -> page
+        if (typeof req.body?.page === 'number') {
+            if (req.body.page >= 1) {
+                page = req.body.page;
+            }
+        }
+        // set arg -> perPage
+        if (typeof req.body?.perPage === 'number') {
+            if (req.body.perPage >= 1) {
+                perPage = req.body.perPage;
+            }
+        }
+
         let tempStage = {} as PipelineStage;
         const stateDocument = [] as PipelineStage[];
+        const stateCount = [] as PipelineStage[];
 
         // stateDocument -> match
         tempStage = {
@@ -24,14 +42,40 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
             }
         }
         stateDocument.push(tempStage);
+        stateCount.push(tempStage);
 
-        // stateDocument -> sort
-        tempStage = {
-            $sort: {
-                createdAtUtc: -1,
+        // stateDocument -> match -> search
+        if (typeof req.body?.search === 'string') {
+            if (req.body.search.length >= 1) {
+                let searchQuery = req.body.search as string;
+
+                let searchQueryArr = searchQuery
+                    .replace('-', ' ')
+                    .split(' ');
+
+                const matchAnd = [];
+                for (let index = 0; index < searchQueryArr.length; index++) {
+                    const elementStr = searchQueryArr[index];
+                    matchAnd.push({
+                        $or: [
+                            { threadTitle: { $regex: elementStr, $options: 'i' } },
+                            { tagsAi: { $regex: elementStr, $options: 'i' } },
+                            { aiSummary: { $regex: elementStr, $options: 'i' } },
+                        ]
+                    })
+                }
+
+                tempStage = {
+                    $match: {
+                        $and: [
+                            ...matchAnd,
+                        ],
+                    },
+                };
+                stateDocument.push(tempStage);
+                stateCount.push(tempStage);
             }
         }
-        stateDocument.push(tempStage);
 
         // stateDocument -> match -> _id
         let threadId = null as mongoose.Types.ObjectId | null;
@@ -48,13 +92,47 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
             stateDocument.push(tempStage);
         }
 
+        // stateDocument -> sort
+        tempStage = {
+            $sort: {
+                createdAtUtc: -1,
+            }
+        }
+        stateDocument.push(tempStage);
+        stateCount.push(tempStage);
+
+        // stage -> skip
+        tempStage = {
+            $skip: (page - 1) * perPage,
+        };
+        stateDocument.push(tempStage);
+
+        // stage -> limit
+        tempStage = {
+            $limit: perPage,
+        };
+        stateDocument.push(tempStage);
+
+        // stateCount -> count
+        stateCount.push({
+            $count: 'count'
+        });
+
         // pipeline
-        const resultNotes = await ModelChatLlmThread.aggregate(stateDocument);
+        const resultThreads = await ModelChatLlmThread.aggregate(stateDocument);
+        const resultCount = await ModelChatLlmThread.aggregate(stateCount);
+
+        let totalCount = 0;
+        if (resultCount.length === 1) {
+            if (resultCount[0].count) {
+                totalCount = resultCount[0].count;
+            }
+        }
 
         return res.json({
-            message: 'Notes retrieved successfully',
-            count: resultNotes.length,
-            docs: resultNotes,
+            message: 'Chat LLM Threads retrieved successfully',
+            docs: resultThreads,
+            count: totalCount,
         });
     } catch (error) {
         console.error(error);
