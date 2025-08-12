@@ -22,6 +22,7 @@ router.post(
 
             const resultApiKey = {
                 username: res.locals.auth_username,
+                clientFrontendUrl: '',
                 apiKeyGroqValid: false,
                 apiKeyOpenrouterValid: false,
                 apiKeyS3Valid: false,
@@ -52,6 +53,7 @@ router.post(
                     },
                     {
                         $set: {
+                            clientFrontendUrl: '',
                             apiKeyGroqValid: false,
                             apiKeyOpenrouterValid: false,
                             apiKeyS3Valid: false,
@@ -119,6 +121,13 @@ router.post(
                     if (typeof resultUserInfo.timeZoneUtcOffset === 'number') {
                         resultApiKey.timeZoneUtcOffset = resultUserInfo.timeZoneUtcOffset;
                     }
+                }
+            }
+
+            // client frontend url
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.clientFrontendUrl === 'string') {
+                    resultApiKey.clientFrontendUrl = resultUserInfoApi.clientFrontendUrl;
                 }
             }
 

@@ -3,6 +3,9 @@ import { Document } from 'mongoose';
 interface IUserApiKey extends Document {
     username: string;
 
+    // client frontend url
+    clientFrontendUrl: string;
+
     // apikey - groq
     apiKeyGroqValid: boolean;
     apiKeyGroq: string;

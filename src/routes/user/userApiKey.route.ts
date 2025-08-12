@@ -606,7 +606,7 @@ router.post(
 
             await ModelUser.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username  
+                    username: res.locals.auth_username
                 },
                 {
                     emailVerified: true,
@@ -677,4 +677,47 @@ router.post(
         }
     }
 );
+
+// Update User Client Frontend URL
+router.post(
+    '/updateUserApiClientFrontendUrl',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { clientFrontendUrl } = req.body;
+
+            if (typeof clientFrontendUrl !== 'string') {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid client frontend url',
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    clientFrontendUrl: clientFrontendUrl,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
 export default router;
