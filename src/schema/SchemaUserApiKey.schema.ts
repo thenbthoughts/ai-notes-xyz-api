@@ -5,6 +5,9 @@ import IUserApiKey from '../types/typesSchema/SchemaUserApiKey.types';
 const userApiKeySchema = new Schema<IUserApiKey>({
     username: { type: String, required: true, unique: true, lowercase: true },
 
+    // client frontend url
+    clientFrontendUrl: { type: String, default: '' },
+
     // apikey - groq
     apiKeyGroqValid: { type: Boolean, default: false },
     apiKeyGroq: { type: String, default: '' },
