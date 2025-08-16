@@ -42,7 +42,6 @@ const getLast20Conversations = async ({
             threadId: threadId,
         })
         .sort({ createdAtUtc: -1 })
-        .limit(20)
         .exec();
 
     return conversations.map((convo: { content: string; }) => ({
