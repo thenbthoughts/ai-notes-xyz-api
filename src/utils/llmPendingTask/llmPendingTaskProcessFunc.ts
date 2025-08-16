@@ -29,6 +29,9 @@ import groqModelGet from "./page/settings/groqModelGet";
 import suggestDailyTasksByAi from "./page/taskSchedule/suggestDailyTasksByAi";
 import taskScheduleAddTask from "./page/taskSchedule/taskScheduleAddTask";
 
+// Notes time based summary
+import executeDailySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId";
+
 const llmPendingTaskProcessFunc = async ({
     _id,
 }: {
@@ -103,6 +106,12 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId:
                 isTaskDone = await generateEmbeddingByNotesId({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId:
+                isTaskDone = await executeDailySummaryByUserId({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

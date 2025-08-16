@@ -23,10 +23,6 @@ const taskSchema = new Schema<tsTaskList>({
         type: Date,
         default: null,
     },
-    checklist: {
-        type: [String],
-        default: [],
-    },
     comments: {
         type: [String],
         default: [],

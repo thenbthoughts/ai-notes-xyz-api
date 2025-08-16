@@ -36,8 +36,12 @@ const llmPendingTaskTypes = {
             taskSchedule_taskAdd: 'pageTaskSchedule_taskAdd',
             taskSchedule_notesAdd: 'pageTaskSchedule_notesAdd',
             taskSchedule_restApiCall: 'pageTaskSchedule_restApiCall',
-            taskSchedule_generatedDailySummaryByAi: 'pageTaskSchedule_generatedDailySummaryByAi',
             taskSchedule_suggestDailyTasksByAi: 'pageTaskSchedule_suggestDailyTasksByAi',
+
+            taskSchedule_generateDailySummaryByUserId: 'pageTaskSchedule_generateDailySummaryByUserId',
+            taskSchedule_generateWeeklySummaryByUserId: 'pageTaskSchedule_generateWeeklySummaryByUserId',
+            taskSchedule_generateMonthlySummaryByUserId: 'pageTaskSchedule_generateMonthlySummaryByUserId',
+            taskSchedule_generateYearlySummaryByUserId: 'pageTaskSchedule_generateYearlySummaryByUserId',
         },
 
         // settings
