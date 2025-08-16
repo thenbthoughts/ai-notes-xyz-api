@@ -5,13 +5,14 @@ import { ModelLlmPendingTaskCron } from "../../src/schema/SchemaLlmPendingTaskCr
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
 import { ModelUser } from "../../src/schema/SchemaUser.schema";
 import IUser from "../../src/types/typesSchema/SchemaUser.types";
+import { generateDailySummaryByUserId } from "../../src/utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId";
 
 const init = async () => {
     try {
         console.time('total-time');
         await mongoose.connect(envKeys.MONGODB_URI);
 
-        const auth_username = 'example';
+        const auth_username = 'nibf';
         
         const userRecord = await ModelUser.findOne({
             username: auth_username,
@@ -21,12 +22,10 @@ const init = async () => {
             throw new Error('User not found');
         }
         
-        const userId = userRecord._id;
-
         const resultInsert = await ModelLlmPendingTaskCron.create({
             username: auth_username,
             taskType: llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId,
-            targetRecordId: userId,
+            targetRecordId: '68a017bbc9283b4666a56fac',
         });
 
         const resultInsert_id = resultInsert._id as string;
@@ -35,6 +34,23 @@ const init = async () => {
                 resultInsert_id.toString()
             ),
         })
+
+        const result2 = await generateDailySummaryByUserId({
+            username: 'nibf',
+            summaryDate: new Date('2025-08-16T00:00:00.000Z'),
+        });
+
+        for (let index = 0; index < 60; index++) {
+            const date = new Date('2025-08-16T00:00:00.000Z');
+
+            const substractDays = index * 1;
+            date.setDate(date.getDate() - substractDays);
+
+            const result2 = await generateDailySummaryByUserId({
+                username: 'nibf',
+                summaryDate: date,
+            });
+        }
 
         await mongoose.disconnect();
     } catch (error) {

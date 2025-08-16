@@ -1,21 +1,34 @@
+import mongoose from 'mongoose';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
+
 import { ModelUserApiKey } from "../../../../../schema/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/SchemaUser.schema";
+import IUser from "../../../../../types/typesSchema/SchemaUser.types";
+
 import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
-import { INotesWorkspace } from "../../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
+import { INotes } from '../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 import { ModelNotesWorkspace } from "../../../../../schema/schemaNotes/SchemaNotesWorkspace.schema";
+import { INotesWorkspace } from "../../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
+
 import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
 import { tsTaskList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
 import { ModelTaskWorkspace } from "../../../../../schema/schemaTask/SchemaTaskWorkspace.schema";
 import { ITaskWorkspace } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskWorkspace.types";
 import { ModelTaskStatusList } from "../../../../../schema/schemaTask/SchemaTaskStatusList.schema";
 import { tsTaskStatusList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types";
-import { ModelUser } from "../../../../../schema/SchemaUser.schema";
-import IUser from "../../../../../types/typesSchema/SchemaUser.types";
-import fetchLlmUnified from "../../../utils/fetchLlmUnified";
-import { INotes } from '../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
-import mongoose from 'mongoose';
-import { tsTaskListSchedule } from '../../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
+
 import { ModelTaskSchedule } from '../../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
+import { tsTaskListSchedule } from '../../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
+
+import { ModelLifeEvents } from '../../../../../schema/SchemaLifeEvents.schema';
+import { ILifeEvents } from '../../../../../types/typesSchema/SchemaLifeEvents.types';
+
+import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
+import { IChatLlm } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
+import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
+import { IChatLlmThread } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types';
+
+import fetchLlmUnified from "../../../utils/fetchLlmUnified";
 
 const getDataNotesStr = async ({
     username,
@@ -122,7 +135,7 @@ const getDataNotesStr = async ({
         console.error(error);
         return '';
     }
-}
+};
 
 const getDataTaskStr = async ({
     username,
@@ -261,6 +274,115 @@ const getDataTaskStr = async ({
     }
 };
 
+const getLifeEventsStr = async ({
+    username,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    username: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        const lifeEventsRecords = await ModelLifeEvents.find({
+            username,
+            $or: [
+                {
+                    eventDateUtc: {
+                        $gte: dateUtcStart,
+                        $lte: dateUtcEnd,
+                    },
+                },
+            ]
+        }) as ILifeEvents[];
+
+        if (!lifeEventsRecords || lifeEventsRecords.length === 0) {
+            return '';
+        }
+
+        let argContent = `Below are the life events added by the user:\n\n`;
+        for (let index = 0; index < lifeEventsRecords.length; index++) {
+            const element = lifeEventsRecords[index];
+
+            argContent += `Life Event ${index + 1} -> title: ${element.title}.\n`;
+            if (element.description.length >= 1) {
+                const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                argContent += `Life Event ${index + 1} -> description: ${markdownContent}.\n`;
+            }
+            if (element.isStar) {
+                argContent += `Life Event ${index + 1} -> isStar: Starred life event.\n`;
+            }
+            if (element.tags.length >= 1) {
+                argContent += `Life Event ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
+            }
+            if (element.eventImpact) {
+                argContent += `Life Event ${index + 1} -> eventImpact: ${element.eventImpact}.\n`;
+            }
+            if (element.eventDateUtc) {
+                argContent += `Life Event ${index + 1} -> eventDateUtc: ${element.eventDateUtc}.\n`;
+            }
+            if (element.aiSummary) {
+                argContent += `Life Event ${index + 1} -> aiSummary: ${element.aiSummary}.\n`;
+            }
+            if (element.aiTags.length >= 1) {
+                argContent += `Life Event ${index + 1} -> aiTags: ${element.aiTags.join(', ')}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+        return argContent;
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
+
+const getChatStr = async ({
+    username,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    username: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        const chatThreadRecords = await ModelChatLlmThread.find({
+            username,
+            updatedAtUtc: {
+                $gte: dateUtcStart,
+                $lte: dateUtcEnd,
+            },
+        }) as IChatLlmThread[];
+
+        let argContent = `Below are the chat messages added by the user:\n\n`;
+        for (let index = 0; index < chatThreadRecords.length; index++) {
+            const element = chatThreadRecords[index];
+            const chatRecords = await ModelChatLlm.find({
+                threadId: element._id,
+            }) as IChatLlm[];
+
+            if (!chatRecords || chatRecords.length === 0) {
+                continue;
+            }
+
+            for (let index = 0; index < chatRecords.length; index++) {
+                const element = chatRecords[index];
+                argContent += `Chat ${index + 1} -> content: ${element.content}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+
+        return argContent.trim();
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+}
+
 const generateDailySummaryByUserId = async ({
     username,
     summaryDate,
@@ -344,10 +466,22 @@ const generateDailySummaryByUserId = async ({
             dateUtcStart,
             dateUtcEnd,
         });
+        const lifeEventsStr = await getLifeEventsStr({
+            username: userFirst.username,
+            dateUtcStart,
+            dateUtcEnd,
+        });
+        const chatStr = await getChatStr({
+            username: userFirst.username,
+            dateUtcStart,
+            dateUtcEnd,
+        });
 
         let argContent = `Below are the notes and tasks added by the user:\n\n`;
         argContent += `Notes:\n${notesStr}\n`;
         argContent += `Tasks:\n${taskStr}\n`;
+        argContent += `Life Events:\n${lifeEventsStr}\n`;
+        argContent += `Chat:\n${chatStr}\n`;
 
         let systemPrompt = `Create a detailed daily summary of the notes and tasks added by the user. Group multiple notes and tasks into a single section if they are related.
         Focus on creating a comprehensive summary that captures the key activities, accomplishments, and important events from the day.
@@ -470,4 +604,7 @@ const executeDailySummaryByUserId = async ({
     }
 }
 
+export {
+    generateDailySummaryByUserId,
+};
 export default executeDailySummaryByUserId;
