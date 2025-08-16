@@ -5,7 +5,6 @@ export interface tsTaskList extends Document{
     title: string;
     description: string;
     dueDate: Date;
-    checklist: string[];
     comments: string[];
     
     // status

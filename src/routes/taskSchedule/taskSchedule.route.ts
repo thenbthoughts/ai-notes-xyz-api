@@ -260,13 +260,16 @@ export const executeTaskSchedule = async ({
                     // insert record in llmPendingTaskCron
                     if (
                         itemTaskSchedule.taskType === 'suggestDailyTasksByAi' ||
-                        itemTaskSchedule.taskType === 'taskAdd'
+                        itemTaskSchedule.taskType === 'taskAdd' ||
+                        itemTaskSchedule.taskType === 'generatedDailySummaryByAi'
                     ) {
                         let tempTaskType = '';
                         if (itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
                             tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi;
                         } else if (itemTaskSchedule.taskType === 'taskAdd') {
                             tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd;
+                        } else if (itemTaskSchedule.taskType === 'generatedDailySummaryByAi') {
+                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId;
                         }
                         if(tempTaskType !== '') {
                             await ModelLlmPendingTaskCron.create({
