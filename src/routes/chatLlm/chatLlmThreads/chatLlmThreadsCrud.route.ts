@@ -7,6 +7,7 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
+import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema';
 
 // Router
 const router = Router();
@@ -153,6 +154,18 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
             return res.status(400).json({ message: 'Thread ID cannot be null' });
         }
 
+        // delete all chat related to the thread
+        await ModelChatLlm.deleteMany({
+            username: res.locals.auth_username,
+            threadId: threadId,
+        });
+
+        // delete all context related to the thread
+        await ModelChatLlmThreadContextReference.deleteMany({
+            username: res.locals.auth_username,
+            threadId: threadId,
+        });
+
         const deletedThread = await ModelChatLlmThread.findOneAndDelete({
             _id: threadId,
             username: res.locals.auth_username
@@ -161,11 +174,6 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
             return res.status(404).json({ message: 'Thread not found' });
         }
 
-        // delete all chat related to the thread
-        await ModelChatLlm.deleteMany({
-            threadId: threadId,
-            username: res.locals.auth_username
-        });
 
         return res.json({ message: 'Thread deleted successfully' });
     } catch (error) {
