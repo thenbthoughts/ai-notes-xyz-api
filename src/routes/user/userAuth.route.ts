@@ -12,6 +12,9 @@ import { funcSendMail } from '../../utils/files/funcSendMail';
 import { DateTime } from 'luxon';
 import { middlewareActionDatetime } from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
+import middlewareUserAuth from '../../middleware/middlewareUserAuth';
+import { body } from 'express-validator';
+import middlewareExpressValidator from '../../middleware/middlewareExpressValidator';
 
 // Router
 const router = Router();
@@ -168,5 +171,70 @@ router.post('/logout', async (req: Request, res: Response) => {
         return res.status(500).json({ message: 'Server error' });
     }
 });
+
+// change password - logged in
+router.post(
+    '/change-password-logged-in',
+    middlewareUserAuth,
+    [
+        body('oldPassword').custom((value) => {
+            if (!value) {
+                throw new Error('Old password is required');
+            }
+            if(typeof value !== 'string') {
+                throw new Error('Old password must be a string');
+            }
+            return true;
+        }),
+        body('newPassword').custom((value) => {
+            if (!value) {
+                throw new Error('New password is required');
+            }
+            if(typeof value !== 'string') {
+                throw new Error('New password must be a string');
+            }
+            if (value.length < 8) {
+                throw new Error('New password must be at least 8 characters long');
+            }
+            return true;
+        }),
+    ],
+    middlewareExpressValidator,
+    async (req: Request, res: Response) => {
+        const { auth_username } = res.locals;
+        
+        try {
+            const { oldPassword, newPassword } = req.body;
+
+            // Find user by username
+            const user = await ModelUser.findOne({ username: auth_username });
+            if (!user) {
+                return res.status(400).json({ message: 'Invalid username or password' });
+            }
+
+            // Check old password
+            const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+            if (!isMatch) {
+                return res.status(400).json({ message: 'Invalid old password' });
+            }
+
+            // Hash new password
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+            // Update user password
+            await ModelUser.findOneAndUpdate(
+                { username: auth_username },
+                { password: hashedPassword },
+                { new: true }
+            );
+
+            return res.json({ message: 'Password changed successfully' });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
 
 export default router;
