@@ -48,6 +48,19 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
         // stateDocument -> match -> search
         if (typeof req.body?.search === 'string') {
             if (req.body.search.length >= 1) {
+                // lookup -> chatLlm
+                tempStage = {
+                    $lookup: {
+                        from: 'chatLlm',
+                        localField: '_id',
+                        foreignField: 'threadId',
+                        as: 'chatLlm',
+                    }
+                }
+                stateDocument.push(tempStage);
+                stateCount.push(tempStage);
+
+                // search
                 let searchQuery = req.body.search as string;
 
                 let searchQueryArr = searchQuery
@@ -62,6 +75,7 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
                             { threadTitle: { $regex: elementStr, $options: 'i' } },
                             { tagsAi: { $regex: elementStr, $options: 'i' } },
                             { aiSummary: { $regex: elementStr, $options: 'i' } },
+                            { 'chatLlm.content': { $regex: elementStr, $options: 'i' } },
                         ]
                     })
                 }
