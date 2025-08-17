@@ -15,6 +15,7 @@ import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpA
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { body } from 'express-validator';
 import middlewareExpressValidator from '../../middleware/middlewareExpressValidator';
+import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
 
 // Router
 const router = Router();
@@ -181,7 +182,7 @@ router.post(
             if (!value) {
                 throw new Error('Old password is required');
             }
-            if(typeof value !== 'string') {
+            if (typeof value !== 'string') {
                 throw new Error('Old password must be a string');
             }
             return true;
@@ -190,7 +191,7 @@ router.post(
             if (!value) {
                 throw new Error('New password is required');
             }
-            if(typeof value !== 'string') {
+            if (typeof value !== 'string') {
                 throw new Error('New password must be a string');
             }
             if (value.length < 8) {
@@ -200,9 +201,10 @@ router.post(
         }),
     ],
     middlewareExpressValidator,
+    middlewareActionDatetime,
     async (req: Request, res: Response) => {
         const { auth_username } = res.locals;
-        
+
         try {
             const { oldPassword, newPassword } = req.body;
 
@@ -228,6 +230,40 @@ router.post(
                 { password: hashedPassword },
                 { new: true }
             );
+
+            // send mail
+            const userApiKey = await ModelUserApiKey.findOne({ username: auth_username });
+            if (userApiKey) {
+                if (user.emailVerified && userApiKey.smtpValid) {
+                    try {
+                        let currentDateTime = new Date();
+                        let actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
+
+                        let text = `Hello from AI Notes XYZ.  \n`;
+                        text += `Your password has been changed successfully.  \n`;
+                        text += `Ip address: ${actionDatetimeObj.createdAtIpAddress}  \n`;
+                        text += `User agent: ${actionDatetimeObj.createdAtUserAgent}  \n`;
+                        text += `Time: ${currentDateTime.toISOString()} UTC.  \n`;
+                        if (user.timeZoneUtcOffset) {
+                            const luxonDate = DateTime.now().toUTC().plus({ minutes: user.timeZoneUtcOffset });
+                            const formattedDate = luxonDate.toFormat('EEE MMM dd yyyy HH:mm:ss');
+                            text += `Time (${user.timeZoneRegion}): ${formattedDate}. \n`;
+                        }
+                        text += `If this was not you, please secure your account immediately.  \n`;
+                        text += `Thank you for using AI Notes XYZ.`;
+
+                        const sendStatus = await funcSendMail({
+                            username: auth_username,
+                            smtpTo: user.email,
+                            subject: 'AI Notes XYZ - Password Changed',
+                            text,
+                        });
+                        console.log('sendStatus: ', sendStatus);
+                    } catch (error) {
+                        console.error(error);
+                    }
+                }
+            }
 
             return res.json({ message: 'Password changed successfully' });
         } catch (error) {
