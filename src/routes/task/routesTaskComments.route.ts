@@ -73,7 +73,7 @@ router.post('/taskCommentGet', middlewareUserAuth, async (req: Request, res: Res
         const resultComments = await ModelTaskComments.find({
             taskId: mongoose.Types.ObjectId.createFromHexString(taskId),
             username,
-        }).sort({ createdAt: -1 });
+        }).sort({ createdAtUtc: -1 });
 
         return res.json({
             message: 'Task comments retrieved successfully',
