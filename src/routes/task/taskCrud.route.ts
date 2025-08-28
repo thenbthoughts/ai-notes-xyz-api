@@ -352,7 +352,80 @@ router.post(
                 isArchived?: boolean;
                 isCompleted?: boolean;
                 taskWorkspaceId?: mongoose.Types.ObjectId;
+                $or?: [
+                    {
+                        title: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        description: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        priority: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        labels: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        labelsAi: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                ],
             };
+
+            if (req.body?.searchInput) {
+                if (typeof req.body?.searchInput === 'string') {
+                    if (req.body?.searchInput.trim() !== '') {
+                        const searchInput = req.body.searchInput.trim();
+                        tempStageMatch.$or = [
+                            // title
+                            {
+                                title: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                description: {
+                                    $regex: searchInput, // description
+                                    $options: 'i',
+                                },
+                            },
+                            {
+                                priority: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                labels: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                labelsAi: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                        ]
+                    }
+                }
+            }
 
             // Filter by task workspace id
             if (typeof req.body?.taskWorkspaceId === 'string') {
@@ -401,6 +474,41 @@ router.post(
                 }
             }
             stateDocument.push(tempStage);
+
+            // stage -> match labelArr
+            if (req.body?.labelArr) {
+                if (Array.isArray(req.body?.labelArr)) {
+                    if (req.body?.labelArr.length > 0) {
+                        let labelArr = [] as string[];
+
+                        let bodyLabelArr = req.body?.labelArr;
+                        for (let index = 0; index < bodyLabelArr.length; index++) {
+                            const element = bodyLabelArr[index];
+                            if (typeof element === 'string') {
+                                if (element.trim() !== '') {
+                                    labelArr.push(element);
+                                }
+                            }
+                        }
+
+                        if (labelArr.length > 0) {
+                            tempStage = {
+                                $match: {
+                                    $or: [
+                                        {
+                                            labels: { $in: labelArr },
+                                        },
+                                        {
+                                            labelsAi: { $in: labelArr },
+                                        },
+                                    ]
+                                }
+                            }
+                            stateDocument.push(tempStage);
+                        }
+                    }
+                }
+            }
 
             // stage -> match record id
             if (recordId.trim() !== '') {
@@ -583,7 +691,7 @@ router.post(
             const dateNow = new Date();
 
             // if task is pinned, update all other task pinned to false
-            if(isTaskPinned) {
+            if (isTaskPinned) {
                 await ModelTask.updateMany(
                     {
                         _id: { $ne: getMongodbObjectOrNull(id) },
@@ -597,7 +705,7 @@ router.post(
                     }
                 );
             }
- 
+
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
                     _id: getMongodbObjectOrNull(id),
@@ -666,6 +774,79 @@ router.post('/taskDelete', middlewareUserAuth, async (req: Request, res: Respons
         // TODO delete task comments
         // TODO delete task list
         return res.json({ message: 'Task deleted successfully' });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// taskLabelsByWorkspaceId
+router.post('/taskLabelsByWorkspaceId', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const {
+            workspaceId
+        } = req.body;
+        const auth_username = res.locals.auth_username;
+
+        const workspaceIdObj = getMongodbObjectOrNull(workspaceId);
+        if (!workspaceIdObj) {
+            return res.status(400).json({ message: 'Workspace ID is required' });
+        }
+
+        const resultDoesBelongToUser = await doesTaskWorkspaceExistAndBelongToUser({
+            taskWorkspaceId: workspaceId,
+            auth_username: auth_username,
+        });
+        if (!resultDoesBelongToUser) {
+            return res.status(400).json({ message: 'Workspace not found or unauthorized' });
+        }
+
+        const labelAggregation = await ModelTask.aggregate([
+            {
+                $match: {
+                    username: auth_username,
+                    taskWorkspaceId: workspaceIdObj,
+                }
+            },
+            {
+                $project: {
+                    allLabels: {
+                        $concatArrays: [
+                            { $ifNull: ["$labels", []] },
+                            { $ifNull: ["$labelsAi", []] }
+                        ]
+                    }
+                }
+            },
+            {
+                $unwind: "$allLabels"
+            },
+            {
+                $project: {
+                    labelLower: { $toLower: "$allLabels" }
+                }
+            },
+            {
+                $group: {
+                    _id: "$labelLower",
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: {
+                    count: -1,
+                    _id: 1,
+                }
+            }
+        ]).collation({
+            locale: 'en',
+            strength: 2,
+        });
+
+        return res.json({
+            message: 'Task labels retrieved successfully',
+            labels: labelAggregation,
+        });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
