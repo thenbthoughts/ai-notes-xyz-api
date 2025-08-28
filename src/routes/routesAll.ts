@@ -54,6 +54,9 @@ import apiKeyDefault from './apiKeyDefault/apiKeyDefault.route';
 
 import llmTaskBackgroundProcessCrudRouter from './llmTaskBackgroundProcess/llmTaskBackgroundProcessCrud.route';
 
+// llm crud
+import routesLlmCrud from './llmCrud/llmCrud.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -110,9 +113,13 @@ router.use('/apiKeyDefault/crud', apiKeyDefault);
 // llm task background process
 router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRouter);
 
+// llm crud
+router.use('/llm/crud', routesLlmCrud);
+
 // dynamic data
 router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
 router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
+
 
 // dashboard
 router.use('/dashboard/suggest-tasks', routesDashboardSuggestTasks);
