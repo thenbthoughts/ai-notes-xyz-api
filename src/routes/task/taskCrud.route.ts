@@ -352,7 +352,80 @@ router.post(
                 isArchived?: boolean;
                 isCompleted?: boolean;
                 taskWorkspaceId?: mongoose.Types.ObjectId;
+                $or?: [
+                    {
+                        title: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        description: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        priority: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        labels: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                    {
+                        labelsAi: {
+                            $regex: string,
+                            $options: 'i',
+                        },
+                    },
+                ]
             };
+
+            if (req.body?.searchInput) {
+                if (typeof req.body?.searchInput === 'string') {
+                    if (req.body?.searchInput.trim() !== '') {
+                        const searchInput = req.body.searchInput.trim();
+                        tempStageMatch.$or = [
+                            // title
+                            {
+                                title: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                description: {
+                                    $regex: searchInput, // description
+                                    $options: 'i',
+                                },
+                            },
+                            {
+                                priority: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                labels: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                            {
+                                labelsAi: {
+                                    $regex: searchInput,
+                                    $options: 'i', // case insensitive
+                                },
+                            },
+                        ]
+                    }
+                }
+            }
 
             // Filter by task workspace id
             if (typeof req.body?.taskWorkspaceId === 'string') {
@@ -583,7 +656,7 @@ router.post(
             const dateNow = new Date();
 
             // if task is pinned, update all other task pinned to false
-            if(isTaskPinned) {
+            if (isTaskPinned) {
                 await ModelTask.updateMany(
                     {
                         _id: { $ne: getMongodbObjectOrNull(id) },
@@ -597,7 +670,7 @@ router.post(
                     }
                 );
             }
- 
+
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
                     _id: getMongodbObjectOrNull(id),
