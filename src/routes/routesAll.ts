@@ -37,7 +37,7 @@ import routesTaskScheduleCrud from './taskSchedule/taskSchedule.route';
 // page -> notes
 import routesNotesCrud from './notes/notesCrud.route';
 import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
-import routesNotesFileUploadCrud from './notes/notesFileUploadCrud.route';
+import routesNotesComments from './notes/notesComments.route';
 
 // page -> info vault
 import routesInfoVaultAll from './infoVault/infoVaultAll.route';
@@ -93,7 +93,7 @@ router.use('/task-schedule/crud', routesTaskScheduleCrud);
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);
 router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
-router.use('/notes/file-upload-crud', routesNotesFileUploadCrud);
+router.use('/notes-comments/crud', routesNotesComments);
 
 // routes -> info vault
 router.use('/info-vault', routesInfoVaultAll);

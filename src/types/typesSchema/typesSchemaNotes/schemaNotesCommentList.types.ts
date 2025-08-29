@@ -1,7 +1,10 @@
 import mongoose, { Document } from 'mongoose';
 
-// Notes
-export interface INotesFileUpload extends Document {
+export interface tsNotesCommentList extends Document {
+    // Comment specific fields
+    commentText: string;
+    isAi: boolean;
+
     // file fields
     fileType: string;
     fileUrl: string;
@@ -14,9 +17,11 @@ export interface INotesFileUpload extends Document {
     aiSummarySpecific: string;
     aiTags: string[];
 
-    // identification
+    // auth
     username: string;
-    noteId: mongoose.Schema.Types.ObjectId | null;
+
+    // Reference to the notes
+    notesId: mongoose.Schema.Types.ObjectId;
 
     // auto
     createdAtUtc: Date;
@@ -25,4 +30,4 @@ export interface INotesFileUpload extends Document {
     updatedAtUtc: Date;
     updatedAtIpAddress: string;
     updatedAtUserAgent: string;
-};
+}
