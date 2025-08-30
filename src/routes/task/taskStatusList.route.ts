@@ -3,6 +3,9 @@ import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusLis
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import mongoose from 'mongoose';
 import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.schema';
+import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
+import { body } from 'express-validator';
+import middlewareValidation from '../../middleware/middlewareExpressValidator';
 
 // Router
 const router = Router();
@@ -13,20 +16,17 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
         const auth_username = res.locals.auth_username;
         const { statusTitle, listPosition, taskWorkspaceId } = req.body;
 
-        // task workspace id
-        let taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
-        if (taskWorkspaceId) {
-            let tempTaskWorkspaceIdObj = mongoose.Types.ObjectId.createFromHexString(taskWorkspaceId);
-            if (tempTaskWorkspaceIdObj) {
-                const workspace = await ModelTaskWorkspace.findOne({
-                    _id: tempTaskWorkspaceIdObj,
-                    username: auth_username,
-                });
-                if (!workspace) {
-                    return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
-                }
-                taskWorkspaceIdObj = workspace._id as mongoose.Types.ObjectId;
-            }
+        // validate task workspace id
+        let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
+        if (!taskWorkspaceIdObj) {
+            return res.status(400).json({ message: 'Task workspace ID is required' });
+        }
+        const workspace = await ModelTaskWorkspace.findOne({
+            _id: taskWorkspaceIdObj,
+            username: auth_username,
+        });
+        if (!workspace) {
+            return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
         }
 
         const newTaskStatusList = await ModelTaskStatusList.create({
@@ -43,6 +43,7 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
 
         await revalidatePositionAll({
             auth_username,
+            taskWorkspaceId: taskWorkspaceIdObj,
         });
 
         return res.status(201).json(newTaskStatusList);
@@ -55,27 +56,24 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
 // Get Task Board List API
 router.post('/taskStatusListGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const auth_username = res.locals.auth_username;
         const { taskWorkspaceId } = req.body;
 
-        // task workspace id
-        let taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
-        if (taskWorkspaceId) {
-            let tempTaskWorkspaceIdObj = mongoose.Types.ObjectId.createFromHexString(taskWorkspaceId);
-            if (tempTaskWorkspaceIdObj) {
-                const workspace = await ModelTaskWorkspace.findOne({
-                    _id: tempTaskWorkspaceIdObj,
-                    username: username,
-                });
-                if (!workspace) {
-                    return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
-                }
-                taskWorkspaceIdObj = workspace._id as mongoose.Types.ObjectId;
-            }
+        // validate task workspace id
+        let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
+        if (!taskWorkspaceIdObj) {
+            return res.status(400).json({ message: 'Task workspace ID is required' });
+        }
+        const workspace = await ModelTaskWorkspace.findOne({
+            _id: taskWorkspaceIdObj,
+            username: auth_username,
+        });
+        if (!workspace) {
+            return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
         }
 
         const resultTaskStatusLists = await ModelTaskStatusList.find({
-            username,
+            username: auth_username,
             taskWorkspaceId: taskWorkspaceIdObj,
         }).sort({ listPosition: 1 });
 
@@ -96,20 +94,17 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
         const { id, statusTitle, listPosition, taskWorkspaceId } = req.body;
         const auth_username = res.locals.auth_username;
 
-        // task workspace id
-        let taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
-        if (taskWorkspaceId) {
-            let tempTaskWorkspaceIdObj = mongoose.Types.ObjectId.createFromHexString(taskWorkspaceId);
-            if (tempTaskWorkspaceIdObj) {
-                const workspace = await ModelTaskWorkspace.findOne({
-                    _id: tempTaskWorkspaceIdObj,
-                    username: auth_username,
-                });
-                if (!workspace) {
-                    return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
-                }
-                taskWorkspaceIdObj = workspace._id as mongoose.Types.ObjectId;
-            }
+        // validate task workspace id
+        let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
+        if (!taskWorkspaceIdObj) {
+            return res.status(400).json({ message: 'Task workspace ID is required' });
+        }
+        const workspace = await ModelTaskWorkspace.findOne({
+            _id: taskWorkspaceIdObj,
+            username: auth_username,
+        });
+        if (!workspace) {
+            return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
         }
 
         const updatedTaskStatusList = await ModelTaskStatusList.findOneAndUpdate(
@@ -134,6 +129,7 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
 
         await revalidatePositionAll({
             auth_username,
+            taskWorkspaceId: taskWorkspaceIdObj,
         });
 
         return res.json(updatedTaskStatusList);
@@ -149,6 +145,14 @@ router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, re
         const { id } = req.body;
         const auth_username = res.locals.auth_username;
 
+        const taskStatusList = await ModelTaskStatusList.findOne({
+            _id: id,
+            username: auth_username,
+        });
+        if (!taskStatusList) {
+            return res.status(404).json({ message: 'Task status list not found' });
+        }
+
         const deletedTaskStatusList = await ModelTaskStatusList.findOneAndDelete({
             _id: id,
             username: auth_username,
@@ -159,6 +163,7 @@ router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, re
 
         await revalidatePositionAll({
             auth_username,
+            taskWorkspaceId: taskStatusList.taskWorkspaceId,
         });
 
         return res.json({ message: 'Task board list deleted successfully' });
@@ -169,15 +174,18 @@ router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, re
 });
 
 const revalidatePositionAll = async ({
-    auth_username
+    auth_username,
+    taskWorkspaceId
 }: {
     auth_username: string;
+    taskWorkspaceId: mongoose.Types.ObjectId | null;
 }) => {
     try {
         const result = await ModelTaskStatusList.aggregate([
             {
                 $match: {
                     username: auth_username,
+                    taskWorkspaceId: taskWorkspaceId,
                 }
             },
             {
@@ -190,7 +198,7 @@ const revalidatePositionAll = async ({
         for (let index = 0; index < result.length; index++) {
             const element = result[index];
             if (element.listPosition !== index + 1) {
-                await ModelTaskStatusList.findByIdAndUpdate(
+                await ModelTaskStatusList.findOneAndUpdate(
                     element._id,
                     { listPosition: index + 1 }, // Update the listPosition
                     { new: true } // Return the updated document
@@ -203,43 +211,81 @@ const revalidatePositionAll = async ({
 };
 
 // Task Status List Revalidate Position by ID API
-router.post('/taskStatusListRevalidatePositionById', middlewareUserAuth, async (req: Request, res: Response) => {
-    try {
-        const { _id, upOrDown } = req.body;
-        const auth_username = res.locals.auth_username;
+router.post(
+    '/taskStatusListRevalidatePositionById',
+    middlewareUserAuth,
+    [
+        body('_id').custom((value) => {
+            return getMongodbObjectOrNull(value) !== null;
+        }),
+        body('upOrDown').custom((value) => {
+            return value === 'up' || value === 'down';
+        }),
+        body('taskWorkspaceId').custom((value) => {
+            return getMongodbObjectOrNull(value) !== null;
+        }),
+    ],
+    middlewareValidation,
+    async (req: Request, res: Response) => {
+        try {
+            const { _id, upOrDown, taskWorkspaceId } = req.body;
+            const auth_username = res.locals.auth_username;
 
-        const taskStatusList = await ModelTaskStatusList.findById(_id);
-        if (!taskStatusList) {
-            return res.status(400).json({ message: 'Task status list not found' });
-        }
+            let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
 
-        const currentPosition = taskStatusList.listPosition;
-        const newPosition = upOrDown === 'up' ? currentPosition - 1 : currentPosition + 1;
+            if (!taskWorkspaceIdObj) {
+                return res.status(400).json({ message: 'Task workspace ID is required' });
+            }
 
-        const targetTaskStatusList = await ModelTaskStatusList.findOne({ listPosition: newPosition });
-        if (targetTaskStatusList) {
-            await ModelTaskStatusList.findByIdAndUpdate(
-                targetTaskStatusList._id,
-                { listPosition: currentPosition },
+            const taskStatusList = await ModelTaskStatusList.findOne({
+                _id: _id,
+                username: auth_username,
+                taskWorkspaceId: taskWorkspaceIdObj,
+            });
+            if (!taskStatusList) {
+                return res.status(400).json({ message: 'Task status list not found' });
+            }
+
+            const currentPosition = taskStatusList.listPosition;
+            const newPosition = upOrDown === 'up' ? currentPosition - 1 : currentPosition + 1;
+
+            const targetTaskStatusList = await ModelTaskStatusList.findOne({
+                listPosition: newPosition,
+                username: auth_username,
+                taskWorkspaceId: taskWorkspaceIdObj
+            });
+            if (targetTaskStatusList) {
+                await ModelTaskStatusList.findOneAndUpdate(
+                    {
+                        _id: targetTaskStatusList._id,
+                        username: auth_username,
+                        taskWorkspaceId: taskWorkspaceIdObj,
+                    },
+                    { listPosition: currentPosition },
+                    { new: true }
+                );
+            }
+
+            await ModelTaskStatusList.findOneAndUpdate(
+                {
+                    _id: _id,
+                    username: auth_username,
+                    taskWorkspaceId: taskWorkspaceIdObj,
+                },
+                { listPosition: newPosition },
                 { new: true }
             );
+
+            await revalidatePositionAll({
+                auth_username,
+                taskWorkspaceId: taskWorkspaceIdObj,
+            });
+
+            return res.json({ message: `Task status list moved ${upOrDown} successfully` });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
         }
-
-        await ModelTaskStatusList.findByIdAndUpdate(
-            _id,
-            { listPosition: newPosition },
-            { new: true }
-        );
-
-        await revalidatePositionAll({
-            auth_username,
-        });
-
-        return res.json({ message: `Task status list moved ${upOrDown} successfully` });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ message: 'Server error' });
-    }
-});
+    });
 
 export default router;
