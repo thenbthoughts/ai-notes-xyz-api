@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 
 // dashboard
 import routesDashboardSuggestTasks from './dashboard/dashboardSuggestTasks.route';
+import routesDashboard from './dashboard/dashboard.route';
 
 // user
 import routeUserAuth from './user/userAuth.route';
@@ -123,6 +124,7 @@ router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
 
 // dashboard
 router.use('/dashboard/suggest-tasks', routesDashboardSuggestTasks);
+router.use('/dashboard/crud', routesDashboard);
 
 /*
 Example:
