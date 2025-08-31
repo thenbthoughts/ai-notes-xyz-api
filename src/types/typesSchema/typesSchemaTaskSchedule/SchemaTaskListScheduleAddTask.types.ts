@@ -20,4 +20,7 @@ export interface tsTaskListScheduleAddTask extends Document {
     // task ai fields
     taskAiSummary: boolean;
     taskAiContext: string;
+
+    // subtaskArr
+    subtaskArr: string[];
 }

@@ -271,7 +271,7 @@ export const executeTaskSchedule = async ({
                         } else if (itemTaskSchedule.taskType === 'generatedDailySummaryByAi') {
                             tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId;
                         }
-                        if(tempTaskType !== '') {
+                        if (tempTaskType !== '') {
                             await ModelLlmPendingTaskCron.create({
                                 username: auth_username,
                                 taskType: tempTaskType,
@@ -594,6 +594,8 @@ router.post(
                 timezoneName,
                 timezoneOffset,
 
+                subtaskArr,
+
                 // 
                 taskAddObj: arg_taskAddObj,
             } = req.body;
@@ -707,6 +709,9 @@ router.post(
                         // task ai fields
                         taskAiSummary: taskAddObj.taskAiSummary,
                         taskAiContext: taskAddObj.taskAiContext,
+
+                        // subtaskArr
+                        subtaskArr: taskAddObj.subtaskArr,
                     });
                 }
             }
