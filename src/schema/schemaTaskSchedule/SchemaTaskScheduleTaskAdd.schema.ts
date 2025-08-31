@@ -55,6 +55,12 @@ const taskScheduleAddTaskSchema = new Schema<tsTaskListScheduleAddTask>({
         type: mongoose.Schema.Types.ObjectId,
         default: null,
     },
+
+    // subtaskArr
+    subtaskArr: {
+        type: [String],
+        default: [],
+    },
 });
 
 const ModelTaskScheduleAddTask = mongoose.model<tsTaskListScheduleAddTask>(

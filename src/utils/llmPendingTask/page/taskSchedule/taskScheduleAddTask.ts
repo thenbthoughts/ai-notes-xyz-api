@@ -12,6 +12,7 @@ import { ModelTaskScheduleAddTask } from '../../../../schema/schemaTaskSchedule/
 import { ModelTaskWorkspace } from '../../../../schema/schemaTask/SchemaTaskWorkspace.schema';
 import { ModelTaskStatusList } from '../../../../schema/schemaTask/SchemaTaskStatusList.schema';
 import { tsTaskStatusList } from '../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
+import { ModelTaskSubList } from '../../../../schema/schemaTask/SchemaTaskSub.schema';
 
 const taskScheduleAddTask = async ({
     targetRecordId,
@@ -54,7 +55,7 @@ const taskScheduleAddTask = async ({
         }
 
         let taskTitle = taskAddObj.taskTitle;
-        if(taskAddObj.taskDatePrefix) {
+        if (taskAddObj.taskDatePrefix) {
             const currentDateInUserTz = DateTime.now().setZone(taskInfo.timezoneName);
             const dateStr = currentDateInUserTz.toFormat('yyyy-MM-dd');
             taskTitle = `${dateStr} - ${taskTitle}`;
@@ -75,6 +76,17 @@ const taskScheduleAddTask = async ({
             dueDate: null,
             labels: [],
         });
+
+        // create subtasks
+        for (const subtask of taskAddObj.subtaskArr) {
+            const newSubtask = await ModelTaskSubList.create({
+                title: subtask,
+                parentTaskId: taskInsert._id,
+                taskPosition: 0,
+                username: taskInfo.username,
+            });
+            console.log('newSubtask: ', newSubtask);
+        }
 
         // create a mail
         const userInfo = await ModelUser.findOne({
