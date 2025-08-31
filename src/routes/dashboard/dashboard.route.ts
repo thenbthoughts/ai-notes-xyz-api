@@ -51,10 +51,13 @@ router.get(
                 }
             }
 
+            let taskCompletedCount = totalCount - taskRemainingCount;
+
             return res.json({
                 message: 'Tasks retrieved successfully',
                 docs: {
                     taskRemainingCount,
+                    taskCompletedCount,
                     totalCount,
                 },
             });
