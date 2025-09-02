@@ -60,6 +60,11 @@ const taskScheduleAddTask = async ({
             const dateStr = currentDateInUserTz.toFormat('yyyy-MM-dd');
             taskTitle = `${dateStr} - ${taskTitle}`;
         }
+        if (taskAddObj?.taskDateTimePrefix) {
+            const currentDateTimeInUserTz = DateTime.now().setZone(taskInfo.timezoneName);
+            const dateTimeStr = currentDateTimeInUserTz.toFormat('yyyy-MM-dd HH:mm:ss');
+            taskTitle = `${dateTimeStr} - ${taskTitle}`;
+        }
 
         // insert task
         const taskInsert = await ModelTask.create({

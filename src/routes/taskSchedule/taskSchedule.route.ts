@@ -701,6 +701,7 @@ router.post(
                         // task fields
                         taskTitle: taskAddObj.taskTitle,
                         taskDatePrefix: taskAddObj.taskDatePrefix,
+                        taskDateTimePrefix: taskAddObj.taskDateTimePrefix,
 
                         // deadline enabled
                         taskDeadlineEnabled: taskAddObj.taskDeadlineEnabled,
