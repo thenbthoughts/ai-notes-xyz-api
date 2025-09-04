@@ -37,6 +37,7 @@ const llmPendingTaskTypes = {
             taskSchedule_notesAdd: 'pageTaskSchedule_notesAdd',
             taskSchedule_restApiCall: 'pageTaskSchedule_restApiCall',
             taskSchedule_suggestDailyTasksByAi: 'pageTaskSchedule_suggestDailyTasksByAi',
+            taskSchedule_sendMyselfEmail: 'pageTaskSchedule_sendMyselfEmail',
 
             taskSchedule_generateDailySummaryByUserId: 'pageTaskSchedule_generateDailySummaryByUserId',
             taskSchedule_generateWeeklySummaryByUserId: 'pageTaskSchedule_generateWeeklySummaryByUserId',

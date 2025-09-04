@@ -11,6 +11,8 @@ import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.s
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelTaskScheduleAddTask } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleTaskAdd.schema';
 import { tsTaskListScheduleAddTask } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';
+import { tsTaskListScheduleSendMyselfEmail } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleSendMyselfEmail.types';
+import { ModelTaskScheduleSendMyselfEmail } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleSendMyselfEmail.schema';
 
 // Router
 const router = Router();
@@ -46,7 +48,8 @@ const isValidTaskType = (taskType: string): boolean => {
         'notesAdd',
         'customRestApiCall',
         'generatedDailySummaryByAi',
-        'suggestDailyTasksByAi'
+        'suggestDailyTasksByAi',
+        'sendMyselfEmail',
     ];
     return validTaskTypes.includes(taskType);
 }
@@ -258,26 +261,22 @@ export const executeTaskSchedule = async ({
                     });
 
                     // insert record in llmPendingTaskCron
-                    if (
-                        itemTaskSchedule.taskType === 'suggestDailyTasksByAi' ||
-                        itemTaskSchedule.taskType === 'taskAdd' ||
-                        itemTaskSchedule.taskType === 'generatedDailySummaryByAi'
-                    ) {
-                        let tempTaskType = '';
-                        if (itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
-                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi;
-                        } else if (itemTaskSchedule.taskType === 'taskAdd') {
-                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd;
-                        } else if (itemTaskSchedule.taskType === 'generatedDailySummaryByAi') {
-                            tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId;
-                        }
-                        if (tempTaskType !== '') {
-                            await ModelLlmPendingTaskCron.create({
-                                username: auth_username,
-                                taskType: tempTaskType,
-                                targetRecordId: itemTaskSchedule._id,
-                            });
-                        }
+                    let tempTaskType = '';
+                    if (itemTaskSchedule.taskType === 'suggestDailyTasksByAi') {
+                        tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi;
+                    } else if (itemTaskSchedule.taskType === 'taskAdd') {
+                        tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd;
+                    } else if (itemTaskSchedule.taskType === 'generatedDailySummaryByAi') {
+                        tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId;
+                    } else if (itemTaskSchedule.taskType === 'sendMyselfEmail') {
+                        tempTaskType = llmPendingTaskTypes.page.taskSchedule.taskSchedule_sendMyselfEmail;
+                    }
+                    if (tempTaskType !== '') {
+                        await ModelLlmPendingTaskCron.create({
+                            username: auth_username,
+                            taskType: tempTaskType,
+                            targetRecordId: itemTaskSchedule._id,
+                        });
                     }
 
                     break;
@@ -551,8 +550,16 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-
-            console.log(JSON.stringify(stateDocument, null, 2));
+            // lookup send myself email
+            tempStage = {
+                $lookup: {
+                    from: 'taskScheduleSendMyselfEmail',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'sendMyselfEmailArr',
+                }
+            };
+            stateDocument.push(tempStage);
 
             // Execute aggregation
             const resultTaskSchedules = await ModelTaskSchedule.aggregate(stateDocument);
@@ -594,10 +601,9 @@ router.post(
                 timezoneName,
                 timezoneOffset,
 
-                subtaskArr,
-
                 // 
                 taskAddObj: arg_taskAddObj,
+                sendMyselfEmailObj: arg_sendMyselfEmailObj,
             } = req.body;
 
             // Validate ID
@@ -609,7 +615,7 @@ router.post(
             // Validate task type if provided
             if (taskType && !isValidTaskType(taskType)) {
                 return res.status(400).json({
-                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, generatedDailySummaryByAi, suggestDailyTasksByAi'
+                    message: 'Valid task type is required. Must be one of: taskAdd, notesAdd, customRestApiCall, generatedDailySummaryByAi, suggestDailyTasksByAi, sendMyselfEmail'
                 });
             }
 
@@ -670,6 +676,7 @@ router.post(
                 }
             );
 
+            // task type add task
             if (taskType === 'taskAdd') {
                 const taskAddObj = arg_taskAddObj as unknown as tsTaskListScheduleAddTask;
                 if (taskAddObj) {
@@ -713,6 +720,40 @@ router.post(
 
                         // subtaskArr
                         subtaskArr: taskAddObj.subtaskArr,
+                    });
+                }
+            } else if (taskType === 'sendMyselfEmail') {
+                const sendMyselfEmailObj = arg_sendMyselfEmailObj as tsTaskListScheduleSendMyselfEmail;
+                if (sendMyselfEmailObj) {
+                    // delete existing send myself email
+                    await ModelTaskScheduleSendMyselfEmail.deleteMany({
+                        $or: [
+                            {
+                                _id: taskScheduleIdObj,
+                            },
+                        ]
+                    });
+
+                    // create new send myself email
+                    await ModelTaskScheduleSendMyselfEmail.create({
+                        // identification
+                        _id: taskScheduleIdObj,
+                        username: auth_username,
+                        taskScheduleId: taskScheduleIdObj,
+
+                        // email fields -> staticContent
+                        emailSubject: sendMyselfEmailObj.emailSubject || '',
+                        emailContent: sendMyselfEmailObj.emailContent || '',
+
+                        // ai fields -> aiConversationMail
+                        aiEnabled: sendMyselfEmailObj.aiEnabled || false,
+                        passAiContextEnabled: sendMyselfEmailObj.passAiContextEnabled || false,
+                        systemPrompt: sendMyselfEmailObj.systemPrompt || '',
+                        userPrompt: sendMyselfEmailObj.userPrompt || '',
+
+                        // model info
+                        aiModelName: sendMyselfEmailObj.aiModelName || '',
+                        aiModelProvider: sendMyselfEmailObj.aiModelProvider || '',
                     });
                 }
             }

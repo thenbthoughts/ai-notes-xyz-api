@@ -29,6 +29,7 @@ const taskScheduleSchema = new Schema<tsTaskListSchedule>({
             'customRestApiCall', // future
             'generatedDailySummaryByAi',
             'suggestDailyTasksByAi',
+            'sendMyselfEmail',
         ],
     },
 
