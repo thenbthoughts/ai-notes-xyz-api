@@ -25,6 +25,10 @@ const taskScheduleAddTaskSchema = new Schema<tsTaskListScheduleAddTask>({
         type: Boolean,
         default: false,
     },
+    taskDateTimePrefix: {
+        type: Boolean,
+        default: false,
+    },
 
     // deadline enabled
     taskDeadlineEnabled: {

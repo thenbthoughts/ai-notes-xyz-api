@@ -15,6 +15,7 @@ export interface tsTaskListSchedule extends Document {
     - customRestApiCall
     - generatedDailySummaryByAi
     - suggestDailyTasksByAi
+    - sendMyselfEmail
     */
 
     // required

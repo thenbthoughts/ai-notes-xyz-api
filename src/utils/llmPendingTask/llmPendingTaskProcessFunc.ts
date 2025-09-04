@@ -28,6 +28,7 @@ import groqModelGet from "./page/settings/groqModelGet";
 // Task Schedule tasks
 import suggestDailyTasksByAi from "./page/taskSchedule/suggestDailyTasksByAi";
 import taskScheduleAddTask from "./page/taskSchedule/taskScheduleAddTask";
+import sendMyselfEmail from "./page/taskSchedule/sendMyselfEmail";
 
 // Notes time based summary
 import executeDailySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId";
@@ -143,6 +144,12 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_taskAdd:
                 isTaskDone = await taskScheduleAddTask({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.taskSchedule.taskSchedule_sendMyselfEmail:
+                isTaskDone = await sendMyselfEmail({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

@@ -12,6 +12,7 @@ export interface tsTaskListScheduleAddTask extends Document {
     // task fields
     taskTitle: string;
     taskDatePrefix: boolean;
+    taskDateTimePrefix: boolean;
 
     // deadline enabled
     taskDeadlineEnabled: boolean;
