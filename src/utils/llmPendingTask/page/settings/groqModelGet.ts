@@ -1,9 +1,9 @@
 import axios from "axios";
 
 import { ModelAiListGroq } from "../../../../schema/schemaDynamicData/SchemaGroqModel.schema";
-import { ModelLlmPendingTaskCron } from "../../../../schema/SchemaLlmPendingTaskCron.schema";
+import { ModelLlmPendingTaskCron } from "../../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
 
 const groqModelGet = async ({

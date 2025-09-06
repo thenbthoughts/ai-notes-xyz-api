@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
-import { ModelUser } from '../../../../schema/SchemaUser.schema';
+import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
 
 import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 import { tsTaskListScheduleAddTask } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';

@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 import FormData from 'form-data';
 import { GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { ModelUserApiKey } from "../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { getFileFromS3R2 } from "../../files/s3R2GetFile";
 import { getApiKeyByObject } from "../../llm/llmCommonFunc";
 

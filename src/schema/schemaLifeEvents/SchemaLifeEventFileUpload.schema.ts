@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { ILifeEventsFileUpload } from '../types/typesSchema/SchemaLifeEventFileUpload.types';
+import { ILifeEventsFileUpload } from '../../types/typesSchema/typesLifeEvents/SchemaLifeEventFileUpload.types';
 
 // LifeEventsFileUpload Schema
 const lifeEventsFileUploadSchema = new Schema<ILifeEventsFileUpload>({

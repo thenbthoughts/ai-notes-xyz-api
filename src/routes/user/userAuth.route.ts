@@ -4,10 +4,10 @@ import crypto from 'crypto';
 
 import {
     ModelUser
-} from '../../schema/SchemaUser.schema';
+} from '../../schema/schemaUser/SchemaUser.schema';
 import {
     ModelUserDeviceList
-} from '../../schema/SchemaUserDeviceList.schema';
+} from '../../schema/schemaUser/SchemaUserDeviceList.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
 import { DateTime } from 'luxon';
 import { middlewareActionDatetime } from '../../middleware/middlewareActionDatetime';
@@ -15,7 +15,7 @@ import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpA
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { body } from 'express-validator';
 import middlewareExpressValidator from '../../middleware/middlewareExpressValidator';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
 // Router
 const router = Router();

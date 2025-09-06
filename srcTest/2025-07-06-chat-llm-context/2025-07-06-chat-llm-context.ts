@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import suggestAutoContextNotesByThreadId from "../../src/routes/chatLlm/chatLlmThreads/utils/selectAutoContextNotesByThreadId";
-import { ModelUserApiKey } from "../../src/schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../src/schema/schemaUser/SchemaUserApiKey.schema";
 import envKeys from "../../src/config/envKeys";
 
 const init = async () => {

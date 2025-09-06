@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 
-import { ModelUserApiKey } from "../../../../../schema/SchemaUserApiKey.schema";
-import { ModelUser } from "../../../../../schema/SchemaUser.schema";
-import IUser from "../../../../../types/typesSchema/SchemaUser.types";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
+import IUser from "../../../../../types/typesSchema/typesUser/SchemaUser.types";
 
 import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
 import { INotes } from '../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
@@ -20,8 +20,8 @@ import { tsTaskStatusList } from "../../../../../types/typesSchema/typesSchemaTa
 import { ModelTaskSchedule } from '../../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
 import { tsTaskListSchedule } from '../../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 
-import { ModelLifeEvents } from '../../../../../schema/SchemaLifeEvents.schema';
-import { ILifeEvents } from '../../../../../types/typesSchema/SchemaLifeEvents.types';
+import { ModelLifeEvents } from '../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
+import { ILifeEvents } from '../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
 
 import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { IChatLlm } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';

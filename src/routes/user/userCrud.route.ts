@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 
-import { ModelUser } from '../../schema/SchemaUser.schema';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 // import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';

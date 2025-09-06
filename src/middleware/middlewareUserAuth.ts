@@ -2,11 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 
 import {
     ModelUser
-} from '../schema/SchemaUser.schema';
+} from '../schema/schemaUser/SchemaUser.schema';
 import {
     ModelUserDeviceList
-} from '../schema/SchemaUserDeviceList.schema';
-import { ModelUserApiKey } from '../schema/SchemaUserApiKey.schema';
+} from '../schema/schemaUser/SchemaUserDeviceList.schema';
+import { ModelUserApiKey } from '../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../utils/llm/llmCommonFunc';
 
 const middlewareUserAuth = async (req: Request, res: Response, next: NextFunction) => {

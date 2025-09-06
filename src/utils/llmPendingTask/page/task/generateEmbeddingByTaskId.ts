@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { tsTaskList } from "../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
 

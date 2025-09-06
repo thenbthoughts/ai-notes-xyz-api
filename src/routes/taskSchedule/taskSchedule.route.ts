@@ -7,7 +7,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { tsTaskListSchedule } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelTaskScheduleAddTask } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleTaskAdd.schema';
 import { tsTaskListScheduleAddTask } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';

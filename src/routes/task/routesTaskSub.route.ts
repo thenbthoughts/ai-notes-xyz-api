@@ -5,7 +5,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 
 // Router
 const router = Router();

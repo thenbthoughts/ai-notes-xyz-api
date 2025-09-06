@@ -5,7 +5,7 @@ import { NodeHtmlMarkdown } from "node-html-markdown";
 import openrouterMarketing from "../../../../config/openrouterMarketing";
 
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
-import { ModelUser } from '../../../../schema/SchemaUser.schema';
+import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
 import {

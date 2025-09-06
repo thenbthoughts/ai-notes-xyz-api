@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 // Schema
-import { ModelLlmPendingTaskCron } from "../../schema/SchemaLlmPendingTaskCron.schema";
+import { ModelLlmPendingTaskCron } from "../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
 
 // Chat tasks

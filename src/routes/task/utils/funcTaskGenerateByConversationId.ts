@@ -3,7 +3,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import envKeys from "../../../config/envKeys";
-import { ModelUser } from '../../../schema/SchemaUser.schema';
+import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import openrouterMarketing from '../../../config/openrouterMarketing';
 
 interface Message {

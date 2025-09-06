@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import llmPendingTaskProcessFunc from '../../utils/llmPendingTask/llmPendingTaskProcessFunc';
 

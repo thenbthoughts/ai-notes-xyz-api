@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import { ModelUserApiKey } from "../../src/schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../src/schema/schemaUser/SchemaUserApiKey.schema";
 import envKeys from "../../src/config/envKeys";
 import { llmPendingTaskTypes } from "../../src/utils/llmPendingTask/llmPendingTaskConstants";
-import { ModelLlmPendingTaskCron } from "../../src/schema/SchemaLlmPendingTaskCron.schema";
+import { ModelLlmPendingTaskCron } from "../../src/schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
 
 const init = async () => {

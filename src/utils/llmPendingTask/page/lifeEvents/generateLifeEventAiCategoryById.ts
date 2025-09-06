@@ -4,9 +4,9 @@ import axios, {
     isAxiosError,
 } from "axios";
 import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
-import { ModelLifeEvents } from "../../../../schema/SchemaLifeEvents.schema";
-import { ILifeEvents } from "../../../../types/typesSchema/SchemaLifeEvents.types";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
 import lifeCategoriesAiJson from "../../../../routes/lifeEvents/lifeEventsCrud/LifeCategoriesAiJson";
 
 interface tsMessage {

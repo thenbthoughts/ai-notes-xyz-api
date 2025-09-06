@@ -2,7 +2,7 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelUserDeviceList } from '../../schema/SchemaUserDeviceList.schema';
+import { ModelUserDeviceList } from '../../schema/schemaUser/SchemaUserDeviceList.schema';
 
 const router = Router();
 
