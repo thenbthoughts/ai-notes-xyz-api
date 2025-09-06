@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelChatLlmThreadContextReference } from "../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema";
 
 import { getQdrantClient } from "../../../../config/qdrantConfig";
@@ -8,7 +8,7 @@ import { generateEmbedding } from "../../../../utils/llm/ollamaCommonFunc";
 
 import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import { getMongodbObjectOrNull } from "../../../../utils/common/getMongodbObjectOrNull";
-import IUserApiKey from "../../../../types/typesSchema/SchemaUserApiKey.types";
+import IUserApiKey from "../../../../types/typesSchema/typesUser/SchemaUserApiKey.types";
 
 interface VectorSearchResult {
     id: string;

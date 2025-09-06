@@ -2,8 +2,8 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import { ModelLifeEventCategory } from '../../../schema/SchemaLifeEventsCategory.schema';
-import { ILifeEventCategory } from '../../../types/typesSchema/SchemaLifeEventCategory.types';
+import { ModelLifeEventCategory } from '../../../schema/schemaLifeEvents/SchemaLifeEventsCategory.schema';
+import { ILifeEventCategory } from '../../../types/typesSchema/typesLifeEvents/SchemaLifeEventCategory.types';
 
 const router = Router();
 

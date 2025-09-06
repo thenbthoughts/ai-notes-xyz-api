@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import envKeys from '../../config/envKeys';
-import { ModelUser } from '../../schema/SchemaUser.schema';
+import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 
 // Router
 const router = Router();

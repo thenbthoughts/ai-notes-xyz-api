@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import envKeys from "../../src/config/envKeys";
 import { llmPendingTaskTypes } from "../../src/utils/llmPendingTask/llmPendingTaskConstants";
-import { ModelLlmPendingTaskCron } from "../../src/schema/SchemaLlmPendingTaskCron.schema";
+import { ModelLlmPendingTaskCron } from "../../src/schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
-import { ModelUser } from "../../src/schema/SchemaUser.schema";
-import IUser from "../../src/types/typesSchema/SchemaUser.types";
+import { ModelUser } from "../../src/schema/schemaUser/SchemaUser.schema";
+import IUser from "../../src/types/typesSchema/typesUser/SchemaUser.types";
 import { generateDailySummaryByUserId } from "../../src/utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId";
 
 const init = async () => {

@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { ILlmPendingTaskCron } from '../types/typesSchema/SchemaLlmPendingTaskCron.types';
+import { ILlmPendingTaskCron } from '../../types/typesSchema/typesFunctionality/SchemaLlmPendingTaskCron.types';
 
 // LlmPendingTaskCron Schema
 const llmPendingTaskCronSchema = new Schema<ILlmPendingTaskCron>({

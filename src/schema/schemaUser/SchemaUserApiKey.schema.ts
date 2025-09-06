@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import IUserApiKey from '../types/typesSchema/SchemaUserApiKey.types';
+import IUserApiKey from '../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 
 // User api key schema
 const userApiKeySchema = new Schema<IUserApiKey>({

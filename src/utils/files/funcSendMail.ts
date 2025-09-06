@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
 export const funcSendMail = async ({
     username,

@@ -6,7 +6,7 @@ import axios, {
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 
 import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 

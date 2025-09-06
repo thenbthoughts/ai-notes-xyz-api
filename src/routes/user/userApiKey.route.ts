@@ -4,13 +4,13 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 import nodemailer from 'nodemailer';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { putFileToS3 } from '../../utils/files/s3PutFile';
 import { getFileFromS3R2 } from '../../utils/files/s3R2GetFile';
 import openrouterMarketing from '../../config/openrouterMarketing';
-import { ModelUser } from '../../schema/SchemaUser.schema';
+import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
 
 // Router

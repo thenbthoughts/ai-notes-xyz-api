@@ -3,11 +3,11 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
-import { ModelUserApiKey } from '../../schema/SchemaUserApiKey.schema';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
 const router = Router();
 

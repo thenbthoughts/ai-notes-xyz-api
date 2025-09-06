@@ -4,8 +4,8 @@ import axios from "axios";
 
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
-import { ModelUser } from '../../../../schema/SchemaUser.schema';
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
 import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 

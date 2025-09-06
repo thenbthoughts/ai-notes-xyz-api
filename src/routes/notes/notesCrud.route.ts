@@ -5,7 +5,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
 import { ModelNotesWorkspace } from '../../schema/schemaNotes/SchemaNotesWorkspace.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 
 const router = Router();

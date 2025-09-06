@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import IUserFileUpload from '../types/typesSchema/SchemaUserFileUpload.types';
+import IUserFileUpload from '../../types/typesSchema/typesUser/SchemaUserFileUpload.types';
 
 // User file upload schema
 const userFileUploadSchema = new Schema<IUserFileUpload>({

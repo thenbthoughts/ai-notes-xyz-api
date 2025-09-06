@@ -8,7 +8,7 @@ import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskLi
 import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.schema';
 import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusList.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 
 // Router
 const router = Router();

@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { ILifeEvents } from '../types/typesSchema/SchemaLifeEvents.types';
+import { ILifeEvents } from '../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
 
 // LifeEvents Schema
 const lifeEventsSchema = new Schema<ILifeEvents>({

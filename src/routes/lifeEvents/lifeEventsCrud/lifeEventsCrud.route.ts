@@ -2,8 +2,8 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import { ModelLifeEvents } from '../../../schema/SchemaLifeEvents.schema';
-import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLifeEvents } from '../../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
+import { ModelLlmPendingTaskCron } from '../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 
 const router = Router();

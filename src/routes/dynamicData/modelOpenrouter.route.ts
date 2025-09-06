@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Router, Request, Response } from 'express';
 import { ModelAiListOpenrouter } from '../../schema/schemaDynamicData/SchemaOpenrouterModel.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelLlmPendingTaskCron } from '../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import llmPendingTaskProcessFunc from '../../utils/llmPendingTask/llmPendingTaskProcessFunc';
 

@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 

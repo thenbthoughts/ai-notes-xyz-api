@@ -10,7 +10,7 @@ import { ObjectId } from 'mongoose';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
-import { ModelLlmPendingTaskCron } from '../../../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';

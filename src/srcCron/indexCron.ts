@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
-import { ModelLlmPendingTaskCron } from '../schema/SchemaLlmPendingTaskCron.schema';
+import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
 
 const initCron = () => {

@@ -1,9 +1,9 @@
 import { DateTime } from 'luxon';
 
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
-import { ModelUser } from '../../../../schema/SchemaUser.schema';
-import { ModelUserApiKey } from "../../../../schema/SchemaUserApiKey.schema";
-import IUserApiKey from '../../../../types/typesSchema/SchemaUserApiKey.types';
+import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
+import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import IUserApiKey from '../../../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 
 import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 import { tsTaskListScheduleSendMyselfEmail } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleSendMyselfEmail.types';

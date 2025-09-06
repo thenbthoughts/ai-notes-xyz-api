@@ -7,7 +7,7 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { PassThrough } from 'stream';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { ModelUserFileUpload } from '../../schema/SchemaUserFileUpload.schema';
+import { ModelUserFileUpload } from '../../schema/schemaUser/SchemaUserFileUpload.schema';
 
 // Router
 const router = Router();

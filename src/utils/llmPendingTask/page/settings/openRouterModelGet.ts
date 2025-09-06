@@ -2,7 +2,7 @@ import axios from "axios";
 
 import openrouterMarketing from "../../../../config/openrouterMarketing";
 import { ModelAiListOpenrouter } from "../../../../schema/schemaDynamicData/SchemaOpenrouterModel.schema";
-import { ModelLlmPendingTaskCron } from "../../../../schema/SchemaLlmPendingTaskCron.schema";
+import { ModelLlmPendingTaskCron } from "../../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
 
 

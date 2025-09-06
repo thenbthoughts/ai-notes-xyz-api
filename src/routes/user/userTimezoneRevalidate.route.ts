@@ -11,7 +11,7 @@ const router = express.Router();
  * using an aggregation pipeline and bulkWrite for efficient updates.
  */
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelUser } from '../../schema/SchemaUser.schema';
+import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 
 router.post(
   '/revalidate',
