@@ -11,6 +11,7 @@ import routeUserApiKey from './user/userApiKey.route';
 import routeUserTimezoneRevalidate from './user/userTimezoneRevalidate.route';
 import routeUserRevalidate from './user/userRevalidate.route';
 import routeUserLoginHistory from './user/userLoginHistory';
+import routeUserNotification from './user/userNotification.route';
 
 // chat llm
 import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
@@ -71,6 +72,7 @@ router.use('/user/api-keys', routeUserApiKey);
 router.use('/user/timezone-revalidate', routeUserTimezoneRevalidate);
 router.use('/user/revalidate', routeUserRevalidate);
 router.use('/user/login-history', routeUserLoginHistory);
+router.use('/user/notification', routeUserNotification);
 
 // routes -> chat llm
 router.use('/chat-llm/crud', routesChatLlmCrud);

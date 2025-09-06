@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
+import { ModelUserNotification } from '../../schema/schemaUser/SchemaUserNotification';
 
 export const funcSendMail = async ({
     username,
@@ -21,19 +22,19 @@ export const funcSendMail = async ({
         }
 
         // get user
-        const user = await ModelUserApiKey.findOne({
+        const apiKeys = await ModelUserApiKey.findOne({
             username: username
         });
 
-        if (!user) {
+        if (!apiKeys) {
             return false;
         }
 
-        const smtpHost = user.smtpHost;
-        const smtpPort = user.smtpPort;
-        const smtpUser = user.smtpUser;
-        const smtpPassword = user.smtpPassword;
-        const smtpFrom = user.smtpFrom;
+        const smtpHost = apiKeys.smtpHost;
+        const smtpPort = apiKeys.smtpPort;
+        const smtpUser = apiKeys.smtpUser;
+        const smtpPassword = apiKeys.smtpPassword;
+        const smtpFrom = apiKeys.smtpFrom;
 
         let sendStatus = false;
 
@@ -51,10 +52,26 @@ export const funcSendMail = async ({
             to: smtpTo,
             subject: subject,
         };
-        if(typeof html === 'string' && html.length >= 1) {
+        if (typeof html === 'string' && html.length >= 1) {
             mailOptions.html = html;
         } else {
             mailOptions.text = text;
+        }
+
+        // insert into user notification
+        await ModelUserNotification.create({
+            username: username,
+            smtpTo: smtpTo,
+            subject: subject,
+            text: text,
+            html: html,
+        });
+        
+        // if not valid credentials, return false
+        if (apiKeys.smtpValid === true) {
+            // validate credentials
+        } else {
+            return false;
         }
 
         const info = await transporter.sendMail(mailOptions);
