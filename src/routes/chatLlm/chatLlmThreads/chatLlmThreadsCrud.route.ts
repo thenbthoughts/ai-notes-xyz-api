@@ -348,7 +348,7 @@ router.post(
 );
 
 // Get Top LLM conversation model
-router.post('/topLlmConversationModel', middlewareUserAuth, async (req: Request, res: Response) => {
+router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const recentlyUsedLlm = await ModelChatLlmThread.aggregate([
             {
