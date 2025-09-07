@@ -347,4 +347,113 @@ router.post(
     }
 );
 
+// Get Top LLM conversation model
+router.post('/topLlmConversationModel', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const recentlyUsedLlm = await ModelChatLlmThread.aggregate([
+            {
+                $match: {
+                    username: res.locals.auth_username,
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        aiModelProvider: '$aiModelProvider',
+                        aiModelName: '$aiModelName'
+                    },
+                    updatedAtUtc: { $max: '$updatedAtUtc' }
+                }
+            },
+            {
+                $sort: {
+                    updatedAtUtc: -1
+                }
+            },
+            {
+                $limit: 10
+            },
+            {
+                $project: {
+                    aiModelProvider: '$_id.aiModelProvider',
+                    aiModelName: '$_id.aiModelName',
+                }
+            },
+        ]) as {
+            aiModelProvider: string;
+            aiModelName: string;
+        }[];
+        console.log('recentlyUsedLlm: ', recentlyUsedLlm);
+
+        const topLlmModelArr = await ModelChatLlmThread.aggregate([
+            {
+                $match: {
+                    username: res.locals.auth_username,
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        aiModelProvider: '$aiModelProvider',
+                        aiModelName: '$aiModelName'
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: {
+                    count: -1
+                }
+            },
+            {
+                $limit: 10
+            },
+            {
+                $project: {
+                    aiModelProvider: '$_id.aiModelProvider',
+                    aiModelName: '$_id.aiModelName',
+                }
+            }
+        ]) as {
+            aiModelProvider: string;
+            aiModelName: string;
+        }[];
+
+        const uniqueModelArr = [] as {
+            aiModelProvider: string;
+            aiModelName: string;
+        }[];
+        for (let index = 0; index < recentlyUsedLlm.length; index++) {
+            const element = recentlyUsedLlm[index];
+            uniqueModelArr.push(element);
+        }
+        
+        for (let index = 0; index < topLlmModelArr.length; index++) {
+            const element = topLlmModelArr[index];
+
+            let doesExist = false;
+
+            // check does exist
+            for (let index = 0; index < uniqueModelArr.length; index++) {
+                if (
+                    element.aiModelProvider === uniqueModelArr[index].aiModelProvider &&
+                    element.aiModelName === uniqueModelArr[index].aiModelName
+                ) {
+                    doesExist = true;
+                }
+            }
+            if (doesExist) {
+                continue;
+            }
+
+            uniqueModelArr.push(element);
+        }
+
+        return res.json({ message: 'Top LLM conversation model retrieved successfully', modelArr: uniqueModelArr });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
 export default router;
