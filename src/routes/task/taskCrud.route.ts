@@ -2,13 +2,15 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
+import { DefaultDateTimeIpAddress, normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.schema';
 import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusList.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
+import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.schema';
+import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
 
 // Router
 const router = Router();
@@ -645,6 +647,66 @@ router.post(
     }
 );
 
+const taskEditTriggerAddComment = async ({
+    taskId,
+    taskStatusIdOld,
+    taskStatusIdNew,
+    auth_username,
+
+    actionDatetimeObj,
+}: {
+    taskId: string;
+    taskStatusIdOld: string;
+    taskStatusIdNew: string;
+    auth_username: string;
+
+    actionDatetimeObj: DefaultDateTimeIpAddress;
+}) => {
+    try {
+        if(taskStatusIdOld === taskStatusIdNew) {
+            return;
+        }
+
+        // find task status old
+        const resultTaskStatus = await ModelTaskStatusList.find({
+            _id: {
+                $in: [
+                    mongoose.Types.ObjectId.createFromHexString(taskStatusIdOld),
+                    mongoose.Types.ObjectId.createFromHexString(taskStatusIdNew)
+                ],
+            },
+            username: auth_username,
+        }) as tsTaskStatusList[];
+        if(!resultTaskStatus) {
+            return;
+        }
+
+        // find the status names
+        let taskStatusOldName = '';
+        let taskStatusNewName = '';
+        
+        for (const taskStatusItem of resultTaskStatus) {
+            if (taskStatusItem._id.toString() === taskStatusIdOld) {
+                taskStatusOldName = taskStatusItem.statusTitle;
+            }
+            if (taskStatusItem._id.toString() === taskStatusIdNew) {
+                taskStatusNewName = taskStatusItem.statusTitle;
+            }
+        }
+
+        await ModelTaskComments.create({
+            taskId: mongoose.Types.ObjectId.createFromHexString(taskId),
+            commentText: 'Task status changed from ' + taskStatusOldName + ' to ' + taskStatusNewName,
+            username: auth_username,
+
+            // datetime ip
+            ...actionDatetimeObj,
+        });
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 // taskEdit
 router.post(
     '/taskEdit',
@@ -728,6 +790,26 @@ router.post(
                     }
                 );
             }
+
+            // get task
+            const task = await ModelTask.findOne({
+                _id: getMongodbObjectOrNull(id),
+                username: auth_username,
+            });
+
+            if(!task) {
+                return res.status(404).json({ message: 'Task not found' });
+            }
+
+            // task edit trigger add comment
+            await taskEditTriggerAddComment({
+                taskId: id,
+                taskStatusIdOld: task.taskStatusId?.toString() || '',
+                taskStatusIdNew: final_taskStatusId?.toString() || '',
+                auth_username: auth_username,
+
+                actionDatetimeObj: actionDatetimeObj,
+            });
 
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
