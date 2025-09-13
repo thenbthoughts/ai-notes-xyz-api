@@ -571,6 +571,28 @@ router.post(
             }
             stateDocument.push(tempStage);
 
+            // stateDocument -> lookup task comments
+            tempStage = {
+                $lookup: {
+                    from: 'taskComments',
+                    localField: '_id',
+                    foreignField: 'taskId',
+                    as: 'taskComments',
+                }
+            }
+            stateDocument.push(tempStage);
+
+            // stateDocument -> lookup task sub task
+            tempStage = {
+                $lookup: {
+                    from: 'tasksSub',
+                    localField: '_id',
+                    foreignField: 'parentTaskId',
+                    as: 'tasksSub',
+                }
+            }
+            stateDocument.push(tempStage);
+
             // pipeline
             const resultTasks = await ModelTask.aggregate(stateDocument).collation({ locale: 'en', strength: 2 });
 

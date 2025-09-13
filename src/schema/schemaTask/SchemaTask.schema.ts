@@ -23,10 +23,6 @@ const taskSchema = new Schema<tsTaskList>({
         type: Date,
         default: null,
     },
-    comments: {
-        type: [String],
-        default: [],
-    },
 
     // identification
     taskWorkspaceId: {
