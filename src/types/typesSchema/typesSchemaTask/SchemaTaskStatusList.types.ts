@@ -1,6 +1,9 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface tsTaskStatusList extends Document {
+    // identification
+    _id: mongoose.Types.ObjectId;
+
     // fields
     statusTitle: string;
     listPosition: number;
