@@ -40,9 +40,9 @@ const taskCommentSchema = new Schema<tsTaskCommentList>({
 
     // Reference to the task
     taskId: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
         required: true,
-        default: '',
+        default: null,
     },
 
     // auto

@@ -40,9 +40,8 @@ const notesCommentSchema = new Schema<tsNotesCommentList>({
 
     // Reference to the task
     notesId: {
-        type: String,
-        required: true,
-        default: '',
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
     },
 
     // auto
