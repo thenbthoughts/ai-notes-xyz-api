@@ -16,6 +16,10 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Boolean,
         default: true,
     },
+    systemPrompt: {
+        type: String,
+        default: ''
+    },
 
     // selected model
     aiModelName: {

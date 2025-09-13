@@ -8,6 +8,7 @@ export interface IChatLlmThread extends Document {
     // auto context
     isPersonalContextEnabled: boolean,
     isAutoAiContextSelectEnabled: boolean,
+    systemPrompt: string,
 
     // selected model
     aiModelName: string,

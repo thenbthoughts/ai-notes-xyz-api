@@ -8,6 +8,7 @@ import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema';
+import { systemPromptForChatLlmThread } from './constantsChatLlmThread/constantsChatLlmThread';
 
 // Router
 const router = Router();
@@ -242,6 +243,9 @@ router.post(
                 addData.aiModelProvider = aiModelProvider;
             };
 
+            let systemPrompt = systemPromptForChatLlmThread;
+
+
             const newThread = await ModelChatLlmThread.create({
                 // fields
                 ...addData,
@@ -251,6 +255,8 @@ router.post(
 
                 // created at
                 ...actionDatetimeObj,
+
+                systemPrompt,
             });
 
             return res.status(201).json({ message: 'Thread created successfully', thread: newThread });
@@ -289,6 +295,8 @@ router.post(
                 // model settings
                 aiModelName,
                 aiModelProvider,
+
+                systemPrompt,
             } = req.body;
 
             // Build update object
@@ -315,6 +323,10 @@ router.post(
 
             if (typeof aiModelProvider === 'string') {
                 updateData.aiModelProvider = aiModelProvider;
+            };
+
+            if (typeof systemPrompt === 'string') {
+                updateData.systemPrompt = systemPrompt;
             };
 
             // Update timestamps and user agent info
@@ -427,7 +439,7 @@ router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, 
             const element = recentlyUsedLlm[index];
             uniqueModelArr.push(element);
         }
-        
+
         for (let index = 0; index < topLlmModelArr.length; index++) {
             const element = topLlmModelArr[index];
 
