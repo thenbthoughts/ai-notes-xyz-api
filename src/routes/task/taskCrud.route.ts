@@ -669,6 +669,7 @@ router.post(
                 priority,
                 taskWorkspaceId,
                 taskStatusId,
+                dueDate,
 
                 // task homepage pinned
                 isTaskPinned,
@@ -738,6 +739,7 @@ router.post(
                     description,
                     taskStatus,
                     labels,
+                    dueDate,
 
                     // status
                     isArchived,
