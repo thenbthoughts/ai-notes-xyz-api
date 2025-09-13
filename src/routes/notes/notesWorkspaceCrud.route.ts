@@ -193,7 +193,7 @@ router.post('/notesWorkspaceAdd', middlewareUserAuth, async (req: Request, res: 
         const now = new Date();
         const newNoteWorkspace = await ModelNotesWorkspace.create({
             username: res.locals.auth_username,
-            title: title,
+            title: req.body.title || title,
             description: req.body.description || '',
             isStar: req.body.isStar === true,
             tags: Array.isArray(req.body.tags) ? req.body.tags : [],

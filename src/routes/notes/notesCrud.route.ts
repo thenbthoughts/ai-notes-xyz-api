@@ -109,6 +109,17 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
             }
         }
 
+        // stage -> match -> title
+        if (typeof req.body?.title === 'string') {
+            if (req.body.title.length >= 1) {
+                tempStage = {
+                    $match: { title: req.body.title },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> search
         if (typeof req.body?.search === 'string') {
             if (req.body.search.length >= 1) {
@@ -251,7 +262,7 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
         const newNote = await ModelNotes.create({
             username: res.locals.auth_username,
             notesWorkspaceId: notesWorkspaceId,
-            title: title,
+            title: req.body.title || title,
             description: req.body.description || '',
             isStar: req.body.isStar === true,
             tags: Array.isArray(req.body.tags) ? req.body.tags : [],
