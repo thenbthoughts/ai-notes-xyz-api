@@ -42,6 +42,17 @@ const aiModelModalitySchema = new Schema<tsSchemaAiModelModality>({
     },
 });
 
+// unique
+aiModelModalitySchema.index(
+    {
+        provider: 1,
+        modalIdString: 1,
+    },
+    {
+        unique: true
+    }
+);
+
 // AI Model
 const ModelAiModelModality = mongoose.model<tsSchemaAiModelModality>(
     'aiModelModality',

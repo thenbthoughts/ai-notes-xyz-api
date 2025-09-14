@@ -28,6 +28,15 @@ const revalidate = async () => {
             _id: task._id as mongoose.Types.ObjectId,
         })
 
+        const task2 = await ModelLlmPendingTaskCron.create({
+            taskType: llmPendingTaskTypes.page.settings.groqModelGet,
+            username: 'exampleuser',
+        });
+
+        await llmPendingTaskProcessFunc({
+            _id: task2._id as mongoose.Types.ObjectId,
+        })
+
         console.timeEnd('total-time');
         mongoose.disconnect();
     } catch (error) {
@@ -37,5 +46,4 @@ const revalidate = async () => {
 
 revalidate();
 
-// npx ts-node srcTest/2025-09-14-openrouter-get-files/2025-09-14-revalidate.ts
 // npx ts-node -r dotenv/config ./srcTest/2025-09-14-openrouter-get-files/2025-09-14-revalidate.ts

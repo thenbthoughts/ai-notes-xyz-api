@@ -73,7 +73,9 @@ const openRouterModelGet = async () => {
                 };
             });
 
-            await ModelAiModelModality.deleteMany({});
+            await ModelAiModelModality.deleteMany({
+                provider: 'openrouter',
+            });
             await ModelAiModelModality.insertMany(filterDocModality);
         }
 

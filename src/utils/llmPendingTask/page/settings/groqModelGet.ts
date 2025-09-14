@@ -4,7 +4,7 @@ import { ModelAiListGroq } from "../../../../schema/schemaDynamicData/SchemaGroq
 import { ModelLlmPendingTaskCron } from "../../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-
+import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 
 const groqModelGet = async ({
     username,
@@ -20,7 +20,7 @@ const groqModelGet = async ({
             console.log('User not found, skipping...');
             return false;
         }
-        if(userApiKey.apiKeyGroqValid === false) {
+        if (userApiKey.apiKeyGroqValid === false) {
             console.log('User does not have a Groq API key, skipping...');
             return false;
         }
@@ -59,6 +59,28 @@ const groqModelGet = async ({
             // delete all and insert new
             await ModelAiListGroq.deleteMany({});
             await ModelAiListGroq.insertMany(filterDoc);
+
+            // insert into ai model modality
+            for (let index = 0; index < filterDoc.length; index++) {
+                const element = filterDoc[index];
+
+                // find if exists
+                const resultModelModality = await ModelAiModelModality.findOne({
+                    provider: 'groq',
+                    modalIdString: element.id,
+                });
+                if (!resultModelModality) {
+                    // insert
+                    await ModelAiModelModality.create({
+                        provider: 'groq',
+                        modalIdString: element.id,
+                        isInputModalityText: 'pending',
+                        isInputModalityImage: 'pending',
+                        isInputModalityAudio: 'pending',
+                        isInputModalityVideo: 'pending',
+                    });
+                }
+            }
         }
 
         return true;
