@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
+import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 import { NodeHtmlMarkdown } from "node-html-markdown";
+
+import openrouterMarketing from "../../../../config/openrouterMarketing";
 
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
@@ -10,16 +13,16 @@ import {
 } from "../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema";
 
 import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
-import { fetchLlmUnified, Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
 import { IChatLlmThreadContextReference } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThreadContextReference.types";
 import { INotesWorkspace } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
-import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
-import { getFileFromS3R2 } from "../../../../utils/files/s3R2GetFile";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
+
+interface Message {
+    role: string;
+    content: string;
+}
 
 // Function to get the last 20 conversations from MongoDB
 const getLast20Conversations = async ({
@@ -42,139 +45,78 @@ const getLast20Conversations = async ({
         .exec();
 
     return conversations.map((convo: { content: string; }) => ({
-        role: 'user' as 'user',
+        role: 'user',
         content: convo.content
     }));
 }
 
-const funcDoesModalSupportImage = async ({
-    modelProvider,
-    modelName,
-}: {
-    modelProvider: 'groq' | 'openrouter';
-    modelName: string;
-}) => {
-    let isSupportImage = false;
-    const resultModelModality = await ModelAiModelModality.findOne({
-        provider: modelProvider,
-        modalIdString: modelName,
-    });
-    return resultModelModality?.isInputModalityImage === 'true';
+interface Message {
+    role: string;
+    content: string;
 }
 
-const getBase64File = async ({
-    fileUrl,
-    type,
-
-    userApiKey,
-}: {
-    fileUrl: string;
-    type: 'image';
-    userApiKey: tsUserApiKey;
-}) => {
-    let base64File = '';
-    try {
-        if (type === 'image') {
-            const resultImage = await getFileFromS3R2({
-                fileName: fileUrl,
-                userApiKey: userApiKey,
-            })
-            const resultImageContent = await resultImage?.Body?.transformToByteArray();
-            const resultImageContentString = resultImageContent ? Buffer.from(resultImageContent).toString('base64') : '';
-            base64File = `data:image/png;base64,${resultImageContentString}`;
-        }
-    } catch (error) {
-        console.error(error);
-    }
-    return base64File;
+interface RequestData {
+    messages: Message[];
+    model: string;
+    temperature: number;
+    max_tokens: number;
+    top_p: number;
+    stream: boolean;
+    stop: null | string;
 }
 
-const getConversationList = async ({
-    username,
-    threadId,
-
-    modelProvider,
+const fetchLlm = async ({
+    argMessages,
     modelName,
+
+    llmAuthToken,
+    provider,
 }: {
-    username: string,
-    threadId: mongoose.Types.ObjectId,
-    modelProvider: 'groq' | 'openrouter',
+    argMessages: Message[];
     modelName: string,
-}) => {
-    interface IChatLlmTemp extends IChatLlm {
-        temp_base64_file: string;
-    }
 
-    const userApiKey = await ModelUserApiKey.findOne({
-        username,
-    });
-    if (!userApiKey) {
-        return [];
-    }
-
-    let conversationList = [] as Message[];
-
-    const resultConversations = await ModelChatLlm.find({
-        username,
-        threadId,
-    }) as IChatLlmTemp[];
-
-    let isContainImages = false;
-    for (let index = 0; index < resultConversations.length; index++) {
-        const element = resultConversations[index];
-        if (element.type === 'image') {
-            isContainImages = true;
+    llmAuthToken: string;
+    provider: 'groq' | 'openrouter';
+}): Promise<string> => {
+    try {
+        let apiEndpoint = '';
+        if (provider === 'openrouter') {
+            apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+        } else if (provider === 'groq') {
+            apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
         }
-    }
 
-    let doesModalSupportImage = false;
-    if (isContainImages) {
-        doesModalSupportImage = await funcDoesModalSupportImage({
-            modelProvider: modelProvider,
-            modelName: modelName,
-        });
-    }
+        const data: RequestData = {
+            messages: argMessages,
+            model: modelName,
+            temperature: 1,
+            max_tokens: 2048,
+            top_p: 1,
+            stream: false,
+            stop: null
+        };
 
-    for (let index = 0; index < resultConversations.length; index++) {
-        const element = resultConversations[index];
-        if (element.type === 'image') {
-            const base64File = await getBase64File({
-                fileUrl: element.fileUrl,
-                type: 'image',
-                userApiKey: userApiKey,
-            });
-            element.temp_base64_file = base64File;
-        } else {
-            element.temp_base64_file = '';
+        const config: AxiosRequestConfig = {
+            method: 'post',
+            url: apiEndpoint,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${llmAuthToken}`,
+                ...openrouterMarketing,
+            },
+            data: JSON.stringify(data)
+        };
+
+        const response: AxiosResponse = await axios.request(config);
+        return response.data.choices[0].message.content;
+    } catch (error) {
+        if (isAxiosError(error)) {
+            console.error(error.message);
         }
+        console.error(error);
+        return '';
     }
-
-    for (let index = 0; index < resultConversations.length; index++) {
-        const element = resultConversations[index];
-        if (element.type === 'image') {
-            if (doesModalSupportImage) {
-                conversationList.push({
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image_url',
-                            image_url: {
-                                url: element.temp_base64_file,
-                            },
-                        }
-                    ],
-                });
-            }
-        } else if (element.type === 'text') {
-            conversationList.push({
-                role: 'user',
-                content: element.content,
-            });
-        }
-    }
-
-    return conversationList;
-}
+};
 
 const getPersonalContext = async ({
     threadInfo,
@@ -505,14 +447,14 @@ const getNextMessageFromLast30Conversation = async ({
     aiModelProvider: 'groq' | 'openrouter';
     aiModelName: string;
 }) => {
-    const messages: Message[] = [];
+    const messages = [];
 
     // system prompt
     const systemPrompt = threadInfo.systemPrompt || "";
     if (systemPrompt.length >= 1) {
         messages.push({
-            role: "system",
-            content: systemPrompt,
+            "role": "system",
+            "content": systemPrompt,
         })
     }
 
@@ -554,78 +496,60 @@ const getNextMessageFromLast30Conversation = async ({
     }
 
     // last 20 conversations
-    // const lastConversationsDesc = await getLast20Conversations({
-    //     username,
-    //     threadId,
-    // });
-    // const lastConversations = lastConversationsDesc.reverse();
-    // for (let index = 0; index < lastConversations.length; index++) {
-    //     const element = lastConversations[index];
-
-    //     // Handle content as string (from database)
-    //     const contentStr = typeof element.content === 'string' ? element.content : '';
-
-    //     if (contentStr.includes("AI:")) {
-    //         messages.push({
-    //             role: "assistant",
-    //             content: contentStr.replace("AI:", "").trim(),
-    //         });
-    //     } else {
-    //         messages.push({
-    //             role: "user",
-    //             content: contentStr.replace('Text to audio:', ''),
-    //         });
-    //     }
-    // }
-
-    // conversation list
-    const conversationList = await getConversationList({
+    const lastConversationsDesc = await getLast20Conversations({
         username,
         threadId,
-        modelProvider: aiModelProvider,
-        modelName: aiModelName,
     });
-    for (let index = 0; index < conversationList.length; index++) {
-        const element = conversationList[index];
-        messages.push(element);
+    const lastConversations = lastConversationsDesc.reverse();
+    for (let index = 0; index < lastConversations.length; index++) {
+        const element = lastConversations[index];
+
+        if (element.content.includes("AI:")) {
+            messages.push({
+                role: "assistant",
+                content: element.content.replace("AI:", "").trim(),
+            });
+        } else {
+            messages.push({
+                role: "user",
+                content: element.content.replace('Text to audio:', ''),
+            });
+        }
     }
 
     // result
     let resultNextMessage = '';
 
-    // llm auth token and endpoint
+    // llm auth token
     let llmAuthToken = '';
-    let llmEndpoint = '';
 
-    // select preference model and get API key
+    // select preference model
     if (userInfo) {
         if (aiModelProvider === 'openrouter' && userApiKey.apiKeyOpenrouterValid) {
             llmAuthToken = userApiKey.apiKeyOpenrouter;
-            llmEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
         } else if (aiModelProvider === 'groq' && userApiKey.apiKeyGroqValid) {
             llmAuthToken = userApiKey.apiKeyGroq;
-            llmEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
         }
     }
 
-    console.log('messages', messages);
-
-    // fetch llm using unified approach
+    // fetch llm
     if (llmAuthToken.length >= 1) {
-        const result = await fetchLlmUnified({
-            provider: aiModelProvider,
-            apiKey: llmAuthToken,
-            apiEndpoint: llmEndpoint,
-            model: aiModelName,
-            messages: messages,
-            temperature: 1,
-            maxTokens: 2048,
-        });
+        if (aiModelProvider === 'groq') {
+            resultNextMessage = await fetchLlm({
+                argMessages: messages,
+                modelName: aiModelName,
 
-        if (result.success) {
-            resultNextMessage = result.content;
-        } else {
-            console.error('LLM fetch failed:', result.error);
+                provider: 'groq',
+                llmAuthToken,
+            });
+        } else if (aiModelProvider === 'openrouter') {
+            resultNextMessage = await fetchLlm({
+                argMessages: messages,
+                modelName: aiModelName,
+
+                provider: 'openrouter',
+                llmAuthToken,
+            });
         }
     }
 
