@@ -45,7 +45,7 @@ const fetchLlmGroqVision = async ({
             ],
             model: modelName,
             temperature: 1,
-            max_tokens: 4096,
+            max_tokens: 8192,
             top_p: 1,
             stream: false,
             stop: null

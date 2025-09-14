@@ -173,6 +173,7 @@ const getConversationList = async ({
     for (let index = 0; index < resultConversations.length; index++) {
         const element = resultConversations[index];
         if (element.type === 'image') {
+            // insert image
             if (doesModalSupportImage) {
                 conversationList.push({
                     role: 'user',
@@ -185,6 +186,14 @@ const getConversationList = async ({
                         }
                     ],
                 });
+            } else {
+                // insert file content ai
+                if (element.fileContentAi.length >= 1) {
+                    conversationList.push({
+                        role: 'user',
+                        content: `Image description: ${element.fileContentAi}`,
+                    });
+                }
             }
         } else if (element.type === 'text') {
             conversationList.push({
