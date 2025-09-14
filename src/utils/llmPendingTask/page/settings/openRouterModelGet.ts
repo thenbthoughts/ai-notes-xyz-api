@@ -4,7 +4,7 @@ import openrouterMarketing from "../../../../config/openrouterMarketing";
 import { ModelAiListOpenrouter } from "../../../../schema/schemaDynamicData/SchemaOpenrouterModel.schema";
 import { ModelLlmPendingTaskCron } from "../../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
-
+import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 
 const openRouterModelGet = async () => {
     try {
@@ -54,6 +54,29 @@ const openRouterModelGet = async () => {
             // delete all and insert new
             await ModelAiListOpenrouter.deleteMany({});
             await ModelAiListOpenrouter.insertMany(filterDoc);
+
+            // insert into aiModelModality
+            let filterDocModality = filterDoc.map((item: any) => {
+                let modalIdString = item.id;
+                let isText = item.architecture.input_modalities.includes('text') ? 'true' : 'false';
+                let isImage = item.architecture.input_modalities.includes('image') ? 'true' : 'false';
+                let isAudio = item.architecture.input_modalities.includes('audio') ? 'true' : 'false';
+                let isVideo = item.architecture.input_modalities.includes('video') ? 'true' : 'false';
+
+                return {
+                    provider: 'openrouter',
+                    modalIdString: modalIdString,
+                    isInputModalityText: isText,
+                    isInputModalityImage: isImage,
+                    isInputModalityAudio: isAudio,
+                    isInputModalityVideo: isVideo,
+                };
+            });
+
+            await ModelAiModelModality.deleteMany({
+                provider: 'openrouter',
+            });
+            await ModelAiModelModality.insertMany(filterDocModality);
         }
 
         return true;

@@ -12,7 +12,7 @@ const init = async () => {
         console.time('total-time');
         await mongoose.connect(envKeys.MONGODB_URI);
 
-        const auth_username = 'nibf';
+        const auth_username = 'exampleuser';
         
         const userRecord = await ModelUser.findOne({
             username: auth_username,
@@ -36,7 +36,7 @@ const init = async () => {
         })
 
         const result2 = await generateDailySummaryByUserId({
-            username: 'nibf',
+            username: 'exampleuser',
             summaryDate: new Date('2025-08-16T00:00:00.000Z'),
         });
 
@@ -47,7 +47,7 @@ const init = async () => {
             date.setDate(date.getDate() - substractDays);
 
             const result2 = await generateDailySummaryByUserId({
-                username: 'nibf',
+                username: 'exampleuser',
                 summaryDate: date,
             });
         }

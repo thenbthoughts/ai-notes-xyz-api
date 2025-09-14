@@ -20,7 +20,6 @@ import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatL
 import { getFileFromS3R2 } from "../../../../utils/files/s3R2GetFile";
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
-import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModalityById";
 
 // Function to get the last 20 conversations from MongoDB
 const getLast20Conversations = async ({
@@ -51,34 +50,15 @@ const getLast20Conversations = async ({
 const funcDoesModalSupportImage = async ({
     modelProvider,
     modelName,
-    username,
 }: {
     modelProvider: 'groq' | 'openrouter';
     modelName: string;
-    username: string;
 }) => {
-    let resultModelModality = await ModelAiModelModality.findOne({
+    let isSupportImage = false;
+    const resultModelModality = await ModelAiModelModality.findOne({
         provider: modelProvider,
         modalIdString: modelName,
     });
-
-    if (!resultModelModality) {
-        return false;
-    }
-
-    if (resultModelModality.isInputModalityImage === 'pending') {
-        await updateLlmModalModalityById({
-            modalIdString: modelName,
-            provider: modelProvider,
-            username: username,
-        });
-
-        resultModelModality = await ModelAiModelModality.findOne({
-            provider: modelProvider,
-            modalIdString: modelName,
-        });
-    }
-
     return resultModelModality?.isInputModalityImage === 'true';
 }
 
@@ -152,7 +132,6 @@ const getConversationList = async ({
         doesModalSupportImage = await funcDoesModalSupportImage({
             modelProvider: modelProvider,
             modelName: modelName,
-            username: username,
         });
     }
 
@@ -173,7 +152,6 @@ const getConversationList = async ({
     for (let index = 0; index < resultConversations.length; index++) {
         const element = resultConversations[index];
         if (element.type === 'image') {
-            // insert image
             if (doesModalSupportImage) {
                 conversationList.push({
                     role: 'user',
@@ -186,14 +164,6 @@ const getConversationList = async ({
                         }
                     ],
                 });
-            } else {
-                // insert file content ai
-                if (element.fileContentAi.length >= 1) {
-                    conversationList.push({
-                        role: 'user',
-                        content: `Image description: ${element.fileContentAi}`,
-                    });
-                }
             }
         } else if (element.type === 'text') {
             conversationList.push({

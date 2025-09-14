@@ -17,8 +17,15 @@ export interface VisionContentPartImageUrl {
   };
 }
 
-export type MessageContent = string | Array<VisionContentPartText | VisionContentPartImageUrl>;
+export interface VisionContentPartAudioBase64 {
+  type: 'input_audio';
+  input_audio: {
+    data: string; // base64 string without data URL prefix
+    format: "wav" | "mp3" | "m4a" | "flac";
+  };
+}
 
+export type MessageContent = string | Array<VisionContentPartText | VisionContentPartImageUrl | VisionContentPartAudioBase64>;
 export interface Message {
   role: ChatRole;
   content: MessageContent;
@@ -261,6 +268,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
     const toolCalls: ToolCall[] | undefined = choice?.message?.tool_calls;
     return { success: content.length > 0 || !!toolCalls?.length, content, raw: response.data, error: '', toolCalls };
   } catch (error) {
+    console.log('Llm failed error: ', error);
     if (isAxiosError(error)) {
       return { success: false, content: '', raw: error.response?.data, error: error.message };
     }

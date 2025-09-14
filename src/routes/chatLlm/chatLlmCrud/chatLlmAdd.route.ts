@@ -103,7 +103,7 @@ router.post(
                         let contentAi = '';
                         if (provider === 'groq' || provider === 'openrouter') {
                             contentAi = await fetchLlmGroqVision({
-                                argContent: "What's in the image",
+                                argContent: "What's in the image? Explain in detail like victorian style but in simple words",
                                 imageBase64: `data:image/png;base64,${imageBase64}`,
 
                                 llmAuthToken,
@@ -112,68 +112,20 @@ router.post(
                         }
 
                         if (contentAi.length >= 1) {
-                            const newNote = await ModelChatLlm.create({
-                                type: 'text',
-                                content: `Image desc:` + '\n' + `${contentAi}`,
-                                username: res.locals.auth_username,
-                                tags,
-                                fileUrl: fileUrl,
-                                fileUrlArr: '',
-                                threadId, // Added threadId here
+                            await ModelChatLlm.findOneAndUpdate(
+                                { _id: result._id },
+                                {
+                                    $set: {
+                                        fileContentAi: contentAi,
+                                    }
+                                }
+                            );
 
-                                isAi: true,
-                                aiModelProvider: 'groq',
-                                aiModelName: 'meta-llama/llama-4-scout-17b-16e-instruct',
-
-                                ...actionDatetimeObj,
-                            });
-
-                            // add tags
-                            await generateTags({
-                                mongodbRecordId: (newNote._id as ObjectId).toString(),
-                                auth_username,
-                            });
                             // add tags
                             await generateTags({
                                 mongodbRecordId: (result._id as ObjectId).toString(),
                                 auth_username,
                             });
-
-                            // add notes from last 25 conversations
-                            /*
-                            if (provider === 'groq' || provider === 'openrouter') {
-                                const nextMessage = await getNextMessageFromLast30Conversation({
-                                    // identification
-                                    threadId,
-                                    threadInfo,
-                                    username: res.locals.auth_username,
-
-                                    userApiKey: apiKeys,
-                                });
-                                const resultFromLastConversation = await ModelChatLlm.create({
-                                    type: 'text',
-                                    content: `AI: ${nextMessage.nextMessage}`,
-                                    username: res.locals.auth_username,
-                                    tags: [],
-                                    fileUrl: '',
-                                    fileUrlArr: '',
-                                    threadId, // Added threadId here
-
-                                    // model name
-                                    isAi: true,
-                                    aiModelProvider: nextMessage.aiModelProvider,
-                                    aiModelName: nextMessage.aiModelName,
-
-                                    ...actionDatetimeObj,
-                                });
-
-                                // add tags
-                                await generateTags({
-                                    mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                                    auth_username,
-                                });
-                            }
-                            */
                         }
                     }
                 }
@@ -268,42 +220,6 @@ router.post(
                                 mongodbRecordId: (newNoteAudio._id as ObjectId).toString(),
                                 auth_username,
                             });
-
-                            /*
-                            // add notes from last 25 conversations
-                            if (provider === 'groq' || provider === 'openrouter') {
-                                const nextMessage = await getNextMessageFromLast30Conversation({
-                                    // identification
-                                    threadId,
-                                    threadInfo,
-                                    username: res.locals.auth_username,
-
-                                    userApiKey: apiKeys,
-                                });
-                                const resultFromLastConversation = await ModelChatLlm.create({
-                                    type: 'text',
-                                    content: `AI: ${nextMessage.nextMessage}`,
-                                    username: res.locals.auth_username,
-                                    tags: [],
-                                    fileUrl: '',
-                                    fileUrlArr: '',
-                                    threadId, // Added threadId here
-
-                                    // model name
-                                    isAi: true,
-                                    aiModelProvider: nextMessage.aiModelProvider,
-                                    aiModelName: nextMessage.aiModelName,
-
-                                    ...actionDatetimeObj,
-                                });
-
-                                // add tags
-                                await generateTags({
-                                    mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                                    auth_username,
-                                });
-                            }
-                            */
                         }
                     }
                 }
@@ -329,40 +245,6 @@ router.post(
                     auth_username,
                 });
 
-                /*
-                // add notes
-                if (provider === 'groq' || provider === 'openrouter') {
-                    const nextMessage = await getNextMessageFromLast30Conversation({
-                        // identification
-                        threadId,
-                        threadInfo,
-                        username: res.locals.auth_username,
-
-                        userApiKey: apiKeys,
-                    });
-                    const resultFromLastConversation = await ModelChatLlm.create({
-                        type: 'text',
-                        content: `AI: ${nextMessage.nextMessage}`,
-                        username: res.locals.auth_username,
-                        tags: [],
-                        fileUrl: '',
-                        fileUrlArr: '',
-                        threadId, // Added threadId here
-
-                        // model name
-                        isAi: true,
-                        aiModelProvider: nextMessage.aiModelProvider,
-                        aiModelName: nextMessage.aiModelName,
-
-                        ...actionDatetimeObj,
-                    });
-                    // add tags
-                    await generateTags({
-                        mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
-                        auth_username,
-                    });
-                }
-                */
                 return res.status(201).json(newNote);
             }
 

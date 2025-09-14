@@ -22,6 +22,8 @@ const chatLlmSchema = new Schema<IChatLlm>({
         default: '',
         // public or private
     },
+
+    // file info
     fileUrl: {
         type: String,
         default: '',
