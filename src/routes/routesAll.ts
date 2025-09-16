@@ -59,6 +59,9 @@ import llmTaskBackgroundProcessCrudRouter from './llmTaskBackgroundProcess/llmTa
 // llm crud
 import routesLlmCrud from './llmCrud/llmCrud.route';
 
+// maps
+import routesMapsCrud from './maps/maps.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -127,6 +130,9 @@ router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
 // dashboard
 router.use('/dashboard/suggest-tasks', routesDashboardSuggestTasks);
 router.use('/dashboard/crud', routesDashboard);
+
+// maps
+router.use('/maps/crud', routesMapsCrud);
 
 /*
 Example:
