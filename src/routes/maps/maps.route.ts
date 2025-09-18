@@ -62,6 +62,16 @@ const getMapsLocationInfoVault = ({
     };
     stateDocument.push(tempStage);
 
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            lifeEvents: "$$ROOT"
+        }
+    };
+    stateDocument.push(tempStage);
+
     return stateDocument;
 }
 
