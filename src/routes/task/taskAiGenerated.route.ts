@@ -6,6 +6,7 @@ import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.schema';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
+import funcTasksGenerateByConversationAll from './utils/funcTaskGenerateByConversationAll';
 
 // Router
 const router = Router();
@@ -111,5 +112,26 @@ router.post(
     }
 );
 
+// taskGenerateByConversationAll
+router.post('/taskGenerateByConversationAll', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        let taskList = [] as object[];
+        taskList = await funcTasksGenerateByConversationAll({
+            username: res.locals.auth_username,
+        });
+
+        return res.status(201).json({
+            success: 'Success',
+            error: '',
+            data: {
+                count: taskList.length,
+                docs: taskList,
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
 
 export default router;
