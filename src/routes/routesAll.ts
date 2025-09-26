@@ -62,6 +62,9 @@ import routesLlmCrud from './llmCrud/llmCrud.route';
 // maps
 import routesMapsCrud from './maps/maps.route';
 
+// calender
+import routesCalenderCrud from './calender/calender.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -133,6 +136,9 @@ router.use('/dashboard/crud', routesDashboard);
 
 // maps
 router.use('/maps/crud', routesMapsCrud);
+
+// routes -> calender
+router.use('/calender/crud', routesCalenderCrud);
 
 /*
 Example:
