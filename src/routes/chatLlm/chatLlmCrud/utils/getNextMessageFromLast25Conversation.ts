@@ -583,31 +583,6 @@ const getNextMessageFromLast30Conversation = async ({
         });
     }
 
-    // last 20 conversations
-    // const lastConversationsDesc = await getLast20Conversations({
-    //     username,
-    //     threadId,
-    // });
-    // const lastConversations = lastConversationsDesc.reverse();
-    // for (let index = 0; index < lastConversations.length; index++) {
-    //     const element = lastConversations[index];
-
-    //     // Handle content as string (from database)
-    //     const contentStr = typeof element.content === 'string' ? element.content : '';
-
-    //     if (contentStr.includes("AI:")) {
-    //         messages.push({
-    //             role: "assistant",
-    //             content: contentStr.replace("AI:", "").trim(),
-    //         });
-    //     } else {
-    //         messages.push({
-    //             role: "user",
-    //             content: contentStr.replace('Text to audio:', ''),
-    //         });
-    //     }
-    // }
-
     // conversation list
     const conversationList = await getConversationList({
         username,
@@ -649,7 +624,7 @@ const getNextMessageFromLast30Conversation = async ({
             model: aiModelName,
             messages: messages,
             temperature: 1,
-            maxTokens: 2048,
+            maxTokens: 8096,
         });
 
         if (result.success) {
