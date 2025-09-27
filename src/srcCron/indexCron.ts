@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
+import { cronTaskSendRemainder } from '../routes/task/cron/taskSendRemainder';
 
 const initCron = () => {
     cron.schedule(
@@ -57,6 +58,14 @@ const initCron = () => {
         {
             noOverlap: true,
         }
+    );
+
+    cron.schedule(
+        '*/5 * * * *',
+        async () => {
+            console.log('running a task every 5 minutes - taskSendRemainder');
+            await cronTaskSendRemainder();
+        },
     );
 };
 

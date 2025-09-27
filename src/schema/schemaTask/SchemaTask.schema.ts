@@ -67,6 +67,20 @@ const taskSchema = new Schema<tsTaskList>({
         default: false,
     },
 
+    // reminder
+    reminderPresetTimeLabel: {
+        type: String,
+        default: '',
+    },
+    reminderPresetTimes: {
+        type: [Date],
+        default: [],
+    },
+    reminderPresetTimesCompleted: {
+        type: [Date],
+        default: [],
+    },
+
     // auto
     createdAtUtc: {
         type: Date,
