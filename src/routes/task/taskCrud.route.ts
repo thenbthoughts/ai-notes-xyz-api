@@ -663,7 +663,7 @@ const taskEditTriggerAddComment = async ({
     actionDatetimeObj: DefaultDateTimeIpAddress;
 }) => {
     try {
-        if(taskStatusIdOld === taskStatusIdNew) {
+        if (taskStatusIdOld === taskStatusIdNew) {
             return;
         }
 
@@ -677,14 +677,14 @@ const taskEditTriggerAddComment = async ({
             },
             username: auth_username,
         }) as tsTaskStatusList[];
-        if(!resultTaskStatus) {
+        if (!resultTaskStatus) {
             return;
         }
 
         // find the status names
         let taskStatusOldName = '';
         let taskStatusNewName = '';
-        
+
         for (const taskStatusItem of resultTaskStatus) {
             if (taskStatusItem._id.toString() === taskStatusIdOld) {
                 taskStatusOldName = taskStatusItem.statusTitle;
@@ -735,6 +735,10 @@ router.post(
 
                 // task homepage pinned
                 isTaskPinned,
+
+                // remainder
+                reminderPresetTimeLabel,
+                reminderCustomTimes,
             } = req.body;
 
             let final_taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
@@ -797,7 +801,7 @@ router.post(
                 username: auth_username,
             });
 
-            if(!task) {
+            if (!task) {
                 return res.status(404).json({ message: 'Task not found' });
             }
 
@@ -810,6 +814,46 @@ router.post(
 
                 actionDatetimeObj: actionDatetimeObj,
             });
+
+            // remainder
+            if (reminderPresetTimeLabel && dueDate) {
+                // Simple calculation of reminder times based on dueDate and preset labels (lowercase, minus)
+                const labelToMsArr: { labelName: string, subTime: number }[] = [
+                    { labelName: "before-60-day", subTime: 60 * 24 * 60 * 60 * 1000 },
+                    { labelName: "before-30-day", subTime: 30 * 24 * 60 * 60 * 1000 },
+                    { labelName: "before-15-day", subTime: 15 * 24 * 60 * 60 * 1000 },
+                    { labelName: "before-5-day", subTime: 5 * 24 * 60 * 60 * 1000 },
+                    { labelName: "before-3-day", subTime: 3 * 24 * 60 * 60 * 1000 },
+                    { labelName: "before-1-day", subTime: 24 * 60 * 60 * 1000 },
+                    { labelName: "before-6-hours", subTime: 6 * 60 * 60 * 1000 },
+                    { labelName: "before-3-hours", subTime: 3 * 60 * 60 * 1000 },
+                    { labelName: "before-1-hours", subTime: 60 * 60 * 1000 },
+                    { labelName: "before-30-mins", subTime: 30 * 60 * 1000 },
+                    { labelName: "before-15-mins", subTime: 15 * 60 * 1000 },
+                    { labelName: "at-the-time-of-due-date", subTime: 0 },
+                ];
+
+                let presetTimes: Date[] = [];
+
+                if (reminderPresetTimeLabel && dueDate) {
+                    const normalizedLabel = typeof reminderPresetTimeLabel === "string" ? reminderPresetTimeLabel.toLowerCase() : "";
+                    const found = labelToMsArr.find(item => item.labelName === normalizedLabel);
+                    if (found) {
+                        const relatedLabels = labelToMsArr.filter(item => {
+                            if(
+                                Math.min(item.subTime, found.subTime) === item.subTime
+                            ) {
+                                return true;
+                            }
+                            return false;
+                        });
+                        presetTimes = relatedLabels.map(item => new Date(new Date(dueDate).getTime() - item.subTime));
+                    }
+                }
+
+                updateObj.reminderPresetTimeLabel = reminderPresetTimeLabel;
+                updateObj.reminderPresetTimes = presetTimes;
+            }
 
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
