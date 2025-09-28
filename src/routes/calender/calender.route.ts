@@ -7,7 +7,7 @@ import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 // Router
 const router = Router();
 
-const getCalenderLocationInfoVault = ({
+const getCalenderFromTasks = ({
     username,
     startDate,
     endDate,
@@ -25,8 +25,6 @@ const getCalenderLocationInfoVault = ({
     tempStage = {
         $match: {
             username: username,
-            isCompleted: false,
-            isArchived: false,
             dueDate: {
                 $lte: endDate,
                 $gte: startDate,
@@ -49,6 +47,53 @@ const getCalenderLocationInfoVault = ({
             _id: 1,
             fromCollection: 1,
             taskInfo: "$$ROOT"
+        }
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+}
+
+const getCalenderFromLifeEvents = ({
+    username,
+    startDate,
+    endDate,
+}: {
+    username: string;
+    startDate: Date;
+    endDate: Date;
+}) => {
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    // stateDocument -> match
+    tempStage = {
+        $match: {
+            username: username,
+            eventDateUtc: {
+                $lte: endDate,
+                $gte: startDate,
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> fromCollection
+    tempStage = {
+        $addFields: {
+            fromCollection: 'lifeEvents',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            lifeEventInfo: "$$ROOT"
         }
     };
     stateDocument.push(tempStage);
@@ -97,7 +142,20 @@ router.post(
             tempStage = {
                 $unionWith: {
                     coll: 'tasks',
-                    pipeline: getCalenderLocationInfoVault({
+                    pipeline: getCalenderFromTasks({
+                        username: res.locals.auth_username,
+                        startDate,
+                        endDate,
+                    }),
+                }
+            };
+            stateDocument.push(tempStage);
+
+            // stateDocument -> unionWith
+            tempStage = {
+                $unionWith: {
+                    coll: 'lifeEvents',
+                    pipeline: getCalenderFromLifeEvents({
                         username: res.locals.auth_username,
                         startDate,
                         endDate,
