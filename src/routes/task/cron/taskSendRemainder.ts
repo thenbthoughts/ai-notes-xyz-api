@@ -118,6 +118,8 @@ export const cronTaskSendRemainder = async () => {
         console.log('running a task every 5 minutes');
 
         const results = await ModelTask.find({
+            isArchived: false,
+            isCompleted: false,
             reminderPresetTimes: {
                 $ne: null,
                 $lte: currentTimeUtc,
