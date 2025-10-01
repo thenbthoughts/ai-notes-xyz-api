@@ -237,7 +237,7 @@ const getDataTaskStr = async ({
             if (element.dueDate) {
                 argContent += `Task ${index + 1} -> dueDate: ${element.dueDate}.\n`;
             }
-            if (element.comments.length >= 1) {
+            if (element.comments?.length >= 1) {
                 argContent += `Task ${index + 1} -> comments: ${element.comments.join(', ')}.\n`;
             }
             if (element.labels.length >= 1) {
@@ -407,11 +407,6 @@ const generateDailySummaryByUserId = async ({
         let dateUtcStart = new Date(summaryDateUtc.setHours(0, 0, 0, 0));
         let dateUtcEnd = new Date(summaryDateUtc.setHours(23, 59, 59, 999));
 
-        console.log('summaryDate: ', summaryDate);
-        console.log('summaryDateUtc: ', summaryDateUtc);
-        console.log('dateUtcStart: ', dateUtcStart);
-        console.log('dateUtcEnd: ', dateUtcEnd);
-
         // get api keys
         const apiKeys = await ModelUserApiKey.findOne({
             username: userFirst.username,
@@ -447,15 +442,6 @@ const generateDailySummaryByUserId = async ({
             apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
         }
 
-        // test ollama
-        // modelProvider = 'ollama';
-        // llmAuthToken = apiKeys.apiKeyOllamaEndpoint;
-        // modelName = 'gemma3:1b-it-q8_0';
-        // modelName = 'gemma3:270m';
-        // modelName = 'gemma3:1b';
-        // modelName = 'gemma3:4b';
-        // apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
-
         const notesStr = await getDataNotesStr({
             username: userFirst.username,
             dateUtcStart,
@@ -490,6 +476,7 @@ const generateDailySummaryByUserId = async ({
         The summary should be written in a clear, narrative style that flows naturally and provides insight into the user's daily activities and progress.
         Avoid simply listing items and instead weave them into a cohesive story of the day's events and achievements.
         The summary should be not in markdown format and should be in a simple language.
+        Create bullet points for the summary.
         `;
 
         const llmResult = await fetchLlmUnified({
@@ -529,22 +516,35 @@ const generateDailySummaryByUserId = async ({
         }
 
         // delete notes with title 'Daily Summary - currentDateOnly'
-        let dailyNotesTitle = `Daily Summary - ${summaryDateOnly}`;
-        await ModelNotes.deleteMany({
+        let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
+        await ModelLifeEvents.deleteMany({
             username: userFirst.username,
-            notesWorkspaceId: workspaceId,
             title: dailyNotesTitle,
         });
 
         const now = new Date();
-        const newNotesRecord = await ModelNotes.create({
+        // update in life events record
+        await ModelLifeEvents.create({
             username: userFirst.username,
+
+            // identification - pagination
+            eventDateUtc: summaryDateUtc,
+            eventDateYearStr: (summaryDateUtc).getFullYear().toString(),
+            eventDateYearMonthStr: (summaryDateUtc).getFullYear().toString() + '-' + (summaryDateUtc).getMonth().toString().padStart(2, '0'),
+
+            // fields
             title: dailyNotesTitle,
             description: llmResult.content,
-            notesWorkspaceId: workspaceId,
+            isStar: false,
+            eventImpact: 'very-low',
+            tags: [],
             aiSummary: llmResult.content,
             aiTags: [],
             aiSuggestions: '',
+            aiCategory: 'Other',
+            aiSubCategory: 'Other',
+
+            // auto
             createdAtUtc: now,
             createdAtIpAddress: '',
             createdAtUserAgent: '',
