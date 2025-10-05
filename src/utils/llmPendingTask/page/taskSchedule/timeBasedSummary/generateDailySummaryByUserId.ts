@@ -208,22 +208,11 @@ const getDataTaskStr = async ({
                 const markdownContent = NodeHtmlMarkdown.translate(element.description);
                 argContent += `Task ${index + 1} -> description: ${markdownContent}.\n`;
             }
-
-            if (element.taskWorkspaceId) {
-                const taskWorkspace = await ModelTaskWorkspace.findOne({
-                    _id: element.taskWorkspaceId,
-                }) as ITaskWorkspace;
-                if (taskWorkspace) {
-                    argContent += `Task ${index + 1} -> workspace: ${taskWorkspace.title}.\n`;
-                }
+            if (element.taskWorkspace.length >= 1) {
+                argContent += `Task ${index + 1} -> workspace: ${element.taskWorkspace[0].title}.\n (Workspace of the task)`;
             }
-            if (element.taskStatusId) {
-                const taskStatus = await ModelTaskStatusList.findOne({
-                    _id: element.taskStatusId,
-                }) as tsTaskStatusList;
-                if (taskStatus) {
-                    argContent += `Task ${index + 1} -> status: ${taskStatus.statusTitle}.\n`;
-                }
+            if (element.taskStatusList.length >= 1) {
+                argContent += `Task ${index + 1} -> status: ${element.taskStatusList[0].statusTitle}.\n (Status of the task)`;
             }
             if (element.isArchived) {
                 argContent += `Task ${index + 1} -> isArchived: ${element.isArchived ? 'Yes' : 'No'}.\n`;
@@ -248,13 +237,6 @@ const getDataTaskStr = async ({
             }
             if (element.isTaskPinned) {
                 argContent += `Task ${index + 1} -> isTaskPinned: ${element.isTaskPinned ? 'Yes' : 'No'}.\n`;
-            }
-
-            if (element.taskWorkspace.length >= 1) {
-                argContent += `Task ${index + 1} -> workspace: ${element.taskWorkspace[0].title}.\n`;
-            }
-            if (element.taskStatusList.length >= 1) {
-                argContent += `Task ${index + 1} -> status: ${element.taskStatusList[0].statusTitle}.\n`;
             }
 
             if (element.createdAtUtc) {
@@ -469,15 +451,36 @@ const generateDailySummaryByUserId = async ({
         argContent += `Life Events:\n${lifeEventsStr}\n`;
         argContent += `Chat:\n${chatStr}\n`;
 
-        let systemPrompt = `Create a detailed daily summary of the notes and tasks added by the user. Group multiple notes and tasks into a single section if they are related.
-        Focus on creating a comprehensive summary that captures the key activities, accomplishments, and important events from the day.
-        Organize the content logically by themes or time periods when possible.
-        Include specific details and context that would be meaningful for future reference.
-        The summary should be written in a clear, narrative style that flows naturally and provides insight into the user's daily activities and progress.
-        Avoid simply listing items and instead weave them into a cohesive story of the day's events and achievements.
-        The summary should be not in markdown format and should be in a simple language.
-        Create bullet points for the summary.
-        `;
+        let systemPrompt = `You create compact daily summaries from user data.
+
+Analyze notes, tasks, life events, and chat messages. Write a concise summary focusing only on important information.
+
+What to include:
+- Key accomplishments
+- Important decisions
+- Significant problems and solutions
+- Notable learnings or insights
+- Meaningful patterns
+
+What to exclude:
+- Simple greetings (hello, hi, good morning, etc.)
+- Small talk or casual pleasantries
+- Trivial or routine interactions without substance
+
+Format rules:
+- Use bullet points starting with a dash (-)
+- NO markdown formatting (no **, ##, or *italics*)
+- Group by topic or time with clear headings
+- Each bullet must be unique and relevant - avoid repetition
+- Keep it brief and professional
+
+Structure:
+- One sentence overview of the day
+- Group by topic (Work, Personal, etc.) or chronologically
+- Only include significant items
+- End with key takeaways or next steps if important
+
+Be selective. Only include what matters for future reference.`;
 
         const llmResult = await fetchLlmUnified({
             // provider
