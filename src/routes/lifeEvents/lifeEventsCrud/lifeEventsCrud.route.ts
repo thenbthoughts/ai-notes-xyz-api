@@ -207,7 +207,7 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
         // sort
         tempStage = {
             $sort: {
-                eventDateUtc: 1,
+                eventDateUtc: -1,
             }
         };
         pipelineDocument.push(tempStage);
