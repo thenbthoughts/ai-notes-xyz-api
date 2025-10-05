@@ -141,11 +141,38 @@ const generateTaskSuggestionsFromConversations = async ({
         const messages = [] as Message[];
 
         let systemPrompt = '';
-        systemPrompt += `Create a list of relevant task from input in JSON format. `
-        systemPrompt += `Ensure each task has a detailed and descriptive title under the key taskTitle depending on the context. `
-        systemPrompt += `Also provide why we are executing this task in taskTitle and taskDescription. `
-        systemPrompt += `Also provide why we are executing this task in taskTitle. `
-        systemPrompt += `Also provide tags in taskTags. `
+        systemPrompt += `You are an expert task management assistant. Your role is to analyze conversations and extract actionable tasks in JSON format.\n\n`;
+        
+        systemPrompt += `## Task Generation Guidelines:\n`;
+        systemPrompt += `- Generate 5-30 actionable, well-defined tasks from the conversation context\n`;
+        systemPrompt += `- Each task must be specific, measurable, and achievable\n`;
+        systemPrompt += `- Include both immediate action items and longer-term goals when relevant\n`;
+        systemPrompt += `- Cover all topics and areas mentioned in the conversation\n`;
+        systemPrompt += `- Break complex activities into smaller, manageable subtasks\n`;
+        systemPrompt += `- Consider follow-up actions, preparation steps, and related activities\n`;
+        systemPrompt += `- Provide relevant tasks that directly relate to the conversation context\n`;
+        systemPrompt += `- Do not repeat or duplicate tasks - each task should be unique\n\n`;
+        
+        systemPrompt += `## Task Title Requirements:\n`;
+        systemPrompt += `- Write clear, concise, and specific titles (taskTitle)\n`;
+        systemPrompt += `- Use action verbs to start each title (e.g., "Review", "Complete", "Schedule")\n`;
+        systemPrompt += `- Avoid vague or ambiguous language\n`;
+        systemPrompt += `- Make the task's purpose immediately clear from the title alone\n\n`;
+        
+        systemPrompt += `## Task Description Best Practices:\n`;
+        systemPrompt += `- Use simple, accessible language that anyone can understand\n`;
+        systemPrompt += `- Explain technical terms in plain language when necessary\n`;
+        systemPrompt += `- Include the purpose and benefit of completing the task\n`;
+        systemPrompt += `- Provide context that motivates action\n`;
+        systemPrompt += `- Write as if explaining to someone who needs clear, actionable instructions\n`;
+        systemPrompt += `- Balance technical accuracy with readability\n\n`;
+        
+        systemPrompt += `## Additional Requirements:\n`;
+        systemPrompt += `- Assign relevant tags (taskTags) for categorization and searchability\n`;
+        systemPrompt += `- Set appropriate priority levels based on urgency and importance\n`;
+        systemPrompt += `- Suggest realistic due dates when timeframes are mentioned\n`;
+        systemPrompt += `- Mark tasks as "task-suggestion" unless explicitly confirmed by the user\n`;
+        systemPrompt += `- Provide helpful AI suggestions (taskAiSuggestion) for task completion when applicable\n\n`;
         systemPrompt += `Don't use tool calls or function calls. `
         systemPrompt += `'''
         {
