@@ -101,6 +101,120 @@ const getCalenderFromLifeEvents = ({
     return stateDocument;
 }
 
+const getCalenderFromInfoVaultSignificantDate = ({
+    username,
+    startDate,
+    endDate,
+}: {
+    username: string;
+    startDate: Date;
+    endDate: Date;
+}) => {
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    // stateDocument -> match
+    tempStage = {
+        $match: {
+            username: username,
+            date: {
+                $lte: endDate,
+                $gte: startDate,
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> fromCollection
+    tempStage = {
+        $addFields: {
+            fromCollection: 'infoVaultSignificantDate',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            infoVaultSignificantDate: "$$ROOT"
+        }
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+}
+
+const getCalenderFromInfoVaultSignificantDateRepeat = ({
+    username,
+    startDate,
+    endDate,
+}: {
+    username: string;
+    startDate: Date;
+    endDate: Date;
+}) => {
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    // stateDocument -> addFields -> normalizedDate (set year to current year for comparison)
+    const currentYear = new Date().getFullYear();
+    tempStage = {
+        $addFields: {
+            normalizedDate: {
+                $dateFromParts: {
+                    year: currentYear,
+                    month: { $month: "$date" },
+                    day: { $dayOfMonth: "$date" },
+                    hour: { $hour: "$date" },
+                    minute: { $minute: "$date" },
+                    second: { $second: "$date" },
+                    millisecond: { $millisecond: "$date" },
+                }
+            }
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> match
+    tempStage = {
+        $match: {
+            username: username,
+            normalizedDate: {
+                $lte: endDate,
+                $gte: startDate,
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> fromCollection
+    tempStage = {
+        $addFields: {
+            fromCollection: 'infoVaultSignificantDateRepeat',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            infoVaultSignificantDateRepeat: "$$ROOT",
+            normalizedDate: 1,
+        }
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+}
+
 // Get CalenderAPI
 router.post(
     '/calenderGet',
@@ -156,6 +270,32 @@ router.post(
                 $unionWith: {
                     coll: 'lifeEvents',
                     pipeline: getCalenderFromLifeEvents({
+                        username: res.locals.auth_username,
+                        startDate,
+                        endDate,
+                    }),
+                }
+            };
+            stateDocument.push(tempStage);
+
+            // stateDocument -> unionWith
+            tempStage = {
+                $unionWith: {
+                    coll: 'infoVaultSignificantDate',
+                    pipeline: getCalenderFromInfoVaultSignificantDate({
+                        username: res.locals.auth_username,
+                        startDate,
+                        endDate,
+                    }),
+                }
+            };
+            stateDocument.push(tempStage);
+
+            // stateDocument -> unionWith
+            tempStage = {
+                $unionWith: {
+                    coll: 'infoVaultSignificantDate',
+                    pipeline: getCalenderFromInfoVaultSignificantDateRepeat({
                         username: res.locals.auth_username,
                         startDate,
                         endDate,
