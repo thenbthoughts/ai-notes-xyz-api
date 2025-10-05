@@ -4,6 +4,7 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 import { generateDailySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId';
+import generateTaskSuggestionsFromConversations from './utils/generateTaskSuggestionsFromConversations';
 
 const router = Router();
 
@@ -17,18 +18,18 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
     try {
 
         // validate summary type
-        if(summaryType === 'daily') {
+        if (summaryType === 'daily') {
             // valid
         } else {
             return res.status(400).json({ message: 'Invalid summary type' });
         }
 
         // validate summary date
-        if(!summaryDate || isNaN(new Date(summaryDate).getTime())) {
+        if (!summaryDate || isNaN(new Date(summaryDate).getTime())) {
             return res.status(400).json({ message: 'Summary date is required' });
         }
 
-        if(summaryType === 'daily') {
+        if (summaryType === 'daily') {
             await generateDailySummaryByUserId({
                 username: res.locals.auth_username,
                 summaryDate: new Date(summaryDate),
@@ -97,6 +98,28 @@ router.get('/ai-daily-diary-get-yesterday-summary', middlewareUserAuth, async (r
             message: 'AI Daily Diary - Today Summary retrieved successfully',
             count: totalCount,
             docs: docs,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get AI Task
+router.get('/get-ai-task-suggestions', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        let taskList = [] as object[];
+        taskList = await generateTaskSuggestionsFromConversations({
+            username: res.locals.auth_username,
+        });
+
+        return res.status(201).json({
+            success: 'Success',
+            error: '',
+            data: {
+                count: taskList.length,
+                docs: taskList,
+            }
         });
     } catch (error) {
         console.error(error);
