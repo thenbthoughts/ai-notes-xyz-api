@@ -85,6 +85,11 @@ export interface FetchLlmParams {
   ollamaExtras?: {
     options?: Record<string, unknown>;
   };
+  openRouterApi?: {
+    provider?: {
+      sort?: 'price' | 'throughput'
+    }
+  }
 }
 
 export interface FetchLlmResult {
@@ -122,6 +127,9 @@ function buildOpenAiPayload(params: FetchLlmParams) {
   if (params.toolChoice) {
     (data as any).tool_choice = params.toolChoice;
   }
+  if (params.toolChoice === 'none') {
+    (data as any).tool_choice = [];
+  }
 
   // OpenAI extras pass-through (only when provider is 'openai')
   if (params.provider === 'openai' && params.openaiExtras) {
@@ -129,6 +137,16 @@ function buildOpenAiPayload(params: FetchLlmParams) {
     if (reasoning) (data as any).reasoning = reasoning;
     if (typeof seed === 'number') (data as any).seed = seed;
     if (typeof logprobs === 'number') (data as any).logprobs = logprobs;
+  }
+
+  if (params.provider === 'openrouter' && params.openRouterApi) {
+    if(params?.openRouterApi?.provider) {
+      if(params?.openRouterApi?.provider?.sort) {
+        data.provider = {
+          sort: params?.openRouterApi?.provider?.sort
+        }
+      }
+    }
   }
 
   return data;
@@ -182,7 +200,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
           name: params.model,
           stream: false
         };
-        
+
         console.log(`Attempting to pull model: ${params.model}`);
         await axios.post(pullUrl, pullPayload, {
           headers: { 'Content-Type': 'application/json' },
