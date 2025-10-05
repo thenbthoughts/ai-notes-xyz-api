@@ -130,7 +130,6 @@ function buildOpenAiPayload(params: FetchLlmParams) {
   if (params.toolChoice === 'none') {
     (data as any).tool_choice = [];
   }
-  console.log('data: ', data);
 
   // OpenAI extras pass-through (only when provider is 'openai')
   if (params.provider === 'openai' && params.openaiExtras) {
