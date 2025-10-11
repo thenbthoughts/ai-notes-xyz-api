@@ -14,7 +14,7 @@ const init = async () => {
         "username": "example",
         "taskType": llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
         "targetRecordId": "6860cef19714a47f91f932b3",
-        "aiModelName": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "aiModelName": "openai/gpt-oss-20b",
         "aiModelProvider": "groq",
     });
 
@@ -22,7 +22,7 @@ const init = async () => {
         "username": "example",
         "taskType": llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
         "targetRecordId": "6860cef19714a47f91f932b3",
-        "aiModelName": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "aiModelName": "openai/gpt-oss-20b",
         "aiModelProvider": "groq",
     });
 

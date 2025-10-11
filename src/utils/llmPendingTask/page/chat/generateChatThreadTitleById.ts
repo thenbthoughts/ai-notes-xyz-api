@@ -48,10 +48,10 @@ const fetchLlmTags = async ({
         let modelName = '';
         if (modelProvider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.2-11b-vision-instruct';
+            modelName = 'openai/gpt-oss-20b';
         } else if (modelProvider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'meta-llama/llama-4-scout-17b-16e-instruct';
+            modelName = 'openai/gpt-oss-20b';
         }
 
         const data: tsRequestData = {
@@ -168,10 +168,10 @@ const fetchLlmSummarise = async ({
         let modelName = '';
         if (modelProvider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.2-11b-vision-instruct';
+            modelName = 'openai/gpt-oss-20b';
         } else if (modelProvider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'meta-llama/llama-4-scout-17b-16e-instruct';
+            modelName = 'openai/gpt-oss-20b';
         }
 
         const data: tsRequestData = {
@@ -236,10 +236,10 @@ const fetchLlmTitle = async ({
         let modelName = '';
         if (modelProvider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.2-11b-vision-instruct';
+            modelName = 'openai/gpt-oss-20b';
         } else if (modelProvider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'meta-llama/llama-4-scout-17b-16e-instruct';
+            modelName = 'openai/gpt-oss-20b';
         }
 
         let systemPrompt = '';

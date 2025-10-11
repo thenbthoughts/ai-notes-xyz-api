@@ -104,10 +104,10 @@ const fetchLlmForTaskAnalysis = async ({
         let modelName = '';
         if (provider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.2-11b-vision-instruct';
+            modelName = 'openai/gpt-oss-20b';
         } else if (provider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'llama-3.1-8b-instant';
+            modelName = 'openai/gpt-oss-20b';
         }
 
         console.log('Task analysis - Message length: ', JSON.stringify(argMessages).length);
