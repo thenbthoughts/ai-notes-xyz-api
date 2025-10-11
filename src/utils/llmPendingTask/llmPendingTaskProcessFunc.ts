@@ -32,6 +32,8 @@ import sendMyselfEmail from "./page/taskSchedule/sendMyselfEmail";
 
 // Notes time based summary
 import executeDailySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId";
+import executeWeeklySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateWeeklySummaryByUserId";
+import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -112,9 +114,22 @@ const llmPendingTaskProcessFunc = async ({
                 break;
 
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId:
-                isTaskDone = await executeDailySummaryByUserId({
-                    targetRecordId: resultTask.targetRecordId,
-                });
+                try {
+                    // daily summary
+                    isTaskDone = await executeDailySummaryByUserId({
+                        targetRecordId: resultTask.targetRecordId,
+                    });
+                    // weekly summary
+                    isTaskDone = await executeWeeklySummaryByUserId({
+                        targetRecordId: resultTask.targetRecordId,
+                    });
+                    // monthly summary
+                    isTaskDone = await executeMonthlySummaryByUserId({
+                        targetRecordId: resultTask.targetRecordId,
+                    });
+                } catch (error) {
+                    console.error(error);
+                }
                 break;
 
             // Task tasks

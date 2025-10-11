@@ -2,9 +2,11 @@ import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 import { generateDailySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateDailySummaryByUserId';
 import generateTaskSuggestionsFromConversations from './utils/generateTaskSuggestionsFromConversations';
+import { generateWeeklySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateWeeklySummaryByUserId';
+import { generateMonthlySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId';
+import { getUserSummary } from './utils/getUserSummary';
 
 const router = Router();
 
@@ -18,7 +20,11 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
     try {
 
         // validate summary type
-        if (summaryType === 'daily') {
+        if (
+            summaryType === 'daily'
+            || summaryType === 'weekly'
+            || summaryType === 'monthly'
+        ) {
             // valid
         } else {
             return res.status(400).json({ message: 'Invalid summary type' });
@@ -34,6 +40,16 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
                 username: res.locals.auth_username,
                 summaryDate: new Date(summaryDate),
             });
+        } else if (summaryType === 'weekly') {
+            await generateWeeklySummaryByUserId({
+                username: res.locals.auth_username,
+                summaryDate: new Date(summaryDate),
+            });
+        } else if (summaryType === 'monthly') {
+            await generateMonthlySummaryByUserId({
+                username: res.locals.auth_username,
+                summaryDate: new Date(summaryDate),
+            });
         }
 
         return res.json({
@@ -45,59 +61,15 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
     }
 });
 
-// Get AI Daily Diary - Today Summary
-router.get('/ai-daily-diary-get-today-summary', middlewareUserAuth, async (req: Request, res: Response) => {
+router.get('/ai-summary-get', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        let todayDateUtc = new Date();
-        let summaryDateOnly = new Date(todayDateUtc).toISOString().split('T')[0];
-        let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
+        const username = res.locals.auth_username;
 
-        const docs = await ModelLifeEvents.aggregate([
-            {
-                $match: {
-                    username: res.locals.auth_username,
-                    title: dailyNotesTitle,
-                },
-            },
-        ]);
-
-        const totalCount = docs.length;
+        const userSummary = await getUserSummary(username);
 
         return res.json({
-            message: 'AI Daily Diary - Today Summary retrieved successfully',
-            count: totalCount,
-            docs: docs,
-        });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Get AI Daily Diary - Yesterday Summary
-router.get('/ai-daily-diary-get-yesterday-summary', middlewareUserAuth, async (req: Request, res: Response) => {
-    try {
-        let todayDateUtc = new Date(
-            new Date().valueOf() - 24 * 60 * 60 * 1000
-        );
-        let summaryDateOnly = new Date(todayDateUtc).toISOString().split('T')[0];
-        let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
-
-        const docs = await ModelLifeEvents.aggregate([
-            {
-                $match: {
-                    username: res.locals.auth_username,
-                    title: dailyNotesTitle,
-                },
-            },
-        ]);
-
-        const totalCount = docs.length;
-
-        return res.json({
-            message: 'AI Daily Diary - Today Summary retrieved successfully',
-            count: totalCount,
-            docs: docs,
+            message: 'AI Summaries retrieved successfully',
+            data: userSummary,
         });
     } catch (error) {
         console.error(error);
