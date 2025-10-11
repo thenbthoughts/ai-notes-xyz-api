@@ -7,6 +7,7 @@ import generateTaskSuggestionsFromConversations from './utils/generateTaskSugges
 import { generateWeeklySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateWeeklySummaryByUserId';
 import { generateMonthlySummaryByUserId } from '../../utils/llmPendingTask/page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId';
 import { getUserSummary } from './utils/getUserSummary';
+import { getUserSummaryCombined } from './utils/getUserSummaryCombined';
 
 const router = Router();
 
@@ -61,6 +62,35 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
     }
 });
 
+// Get AI summary Combined
+router.get('/get-ai-summary-combined', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const username = res.locals.auth_username;
+
+        const userSummaryStr = await getUserSummaryCombined(username);
+
+        if (userSummaryStr.length <= 0) {
+            return res.status(404).json({
+                message: 'No summary found',
+                data: {
+                    userSummary: ''
+                }
+            });
+        }
+
+        return res.json({
+            message: 'AI Summaries retrieved successfully',
+            data: {
+                userSummary: userSummaryStr,
+            },
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get AI Summary
 router.get('/ai-summary-get', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const username = res.locals.auth_username;
