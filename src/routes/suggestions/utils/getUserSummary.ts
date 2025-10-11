@@ -2,8 +2,9 @@ import { ModelLifeEvents } from '../../../schema/schemaLifeEvents/SchemaLifeEven
 import { DateTime } from 'luxon';
 import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import IUser from '../../../types/typesSchema/typesUser/SchemaUser.types';
+import { ILifeEvents } from '../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
 
-const getTodaySummary = async (username: string): Promise<object | null> => {
+const getTodaySummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         let todayDateUtc = new Date();
         let summaryDateOnly = new Date(todayDateUtc).toISOString().split('T')[0];
@@ -16,7 +17,7 @@ const getTodaySummary = async (username: string): Promise<object | null> => {
                     title: dailyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -25,7 +26,7 @@ const getTodaySummary = async (username: string): Promise<object | null> => {
     }
 };
 
-const getYesterdaySummary = async (username: string): Promise<object | null> => {
+const getYesterdaySummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         let yesterdayDateUtc = new Date(new Date().valueOf() - 24 * 60 * 60 * 1000);
         let summaryDateOnly = new Date(yesterdayDateUtc).toISOString().split('T')[0];
@@ -38,7 +39,7 @@ const getYesterdaySummary = async (username: string): Promise<object | null> => 
                     title: dailyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -47,7 +48,7 @@ const getYesterdaySummary = async (username: string): Promise<object | null> => 
     }
 };
 
-const getCurrentWeekSummary = async (username: string): Promise<object | null> => {
+const getCurrentWeekSummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         const userRecords = await ModelUser.find({
             username: username,
@@ -72,7 +73,7 @@ const getCurrentWeekSummary = async (username: string): Promise<object | null> =
                     title: weeklyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -81,7 +82,7 @@ const getCurrentWeekSummary = async (username: string): Promise<object | null> =
     }
 };
 
-const getLastWeekSummary = async (username: string): Promise<object | null> => {
+const getLastWeekSummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         const userRecords = await ModelUser.find({
             username: username,
@@ -108,7 +109,7 @@ const getLastWeekSummary = async (username: string): Promise<object | null> => {
                     title: weeklyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -117,7 +118,7 @@ const getLastWeekSummary = async (username: string): Promise<object | null> => {
     }
 };
 
-const getCurrentMonthSummary = async (username: string): Promise<object | null> => {
+const getCurrentMonthSummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         const summaryDateUtc = new Date();
         let monthYearStr = summaryDateUtc.getFullYear().toString();
@@ -131,7 +132,7 @@ const getCurrentMonthSummary = async (username: string): Promise<object | null> 
                     title: monthlyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -140,7 +141,7 @@ const getCurrentMonthSummary = async (username: string): Promise<object | null> 
     }
 };
 
-const getLastMonthSummary = async (username: string): Promise<object | null> => {
+const getLastMonthSummary = async (username: string): Promise<ILifeEvents | null> => {
     try {
         const lastMonth = DateTime.fromJSDate(new Date()).minus({ months: 1 }).toJSDate();
 
@@ -156,7 +157,7 @@ const getLastMonthSummary = async (username: string): Promise<object | null> => 
                     title: monthlyNotesTitle,
                 },
             },
-        ]);
+        ]) as ILifeEvents[];
 
         return docs.length > 0 ? docs[0] : null;
     } catch (error) {
@@ -165,7 +166,14 @@ const getLastMonthSummary = async (username: string): Promise<object | null> => 
     }
 };
 
-const getUserSummary = async (username: string): Promise<object | null> => {
+const getUserSummary = async (username: string): Promise<{
+    summaryToday: ILifeEvents | null,
+    summaryYesterday: ILifeEvents | null,
+    summaryCurrentWeek: ILifeEvents | null,
+    summaryLastWeek: ILifeEvents | null,
+    summaryCurrentMonth: ILifeEvents | null,
+    summaryLastMonth: ILifeEvents | null,
+}> => {
     try {
         const [summaryToday, summaryYesterday, summaryCurrentWeek, summaryLastWeek, summaryCurrentMonth, summaryLastMonth] = await Promise.all([
             getTodaySummary(username),
@@ -186,7 +194,14 @@ const getUserSummary = async (username: string): Promise<object | null> => {
         };
     } catch (error) {
         console.error(error);
-        return null;
+        return {
+            summaryToday: null,
+            summaryYesterday: null,
+            summaryCurrentWeek: null,
+            summaryLastWeek: null,
+            summaryCurrentMonth: null,
+            summaryLastMonth: null,
+        };
     }
 };
 
