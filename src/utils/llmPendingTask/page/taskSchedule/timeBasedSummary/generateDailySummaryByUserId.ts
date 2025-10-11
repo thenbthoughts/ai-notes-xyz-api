@@ -12,9 +12,7 @@ import { INotesWorkspace } from "../../../../../types/typesSchema/typesSchemaNot
 
 import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
 import { tsTaskList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
-import { ModelTaskWorkspace } from "../../../../../schema/schemaTask/SchemaTaskWorkspace.schema";
 import { ITaskWorkspace } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskWorkspace.types";
-import { ModelTaskStatusList } from "../../../../../schema/schemaTask/SchemaTaskStatusList.schema";
 import { tsTaskStatusList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types";
 
 import { ModelTaskSchedule } from '../../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
@@ -496,29 +494,7 @@ Be selective. Only include what matters for future reference.`;
             ],
         });
 
-        // create a new notes record with the summary
-        let workspaceId = null as mongoose.Schema.Types.ObjectId | null;
-
-        const workspaceNotesName = 'Ai Daily Summary';
-
-        const notesWorkspaceRecords = await ModelNotesWorkspace.findOne({
-            username: userFirst.username,
-            title: workspaceNotesName,
-        }) as INotesWorkspace | null;
-        if (notesWorkspaceRecords) {
-            workspaceId = notesWorkspaceRecords._id as mongoose.Schema.Types.ObjectId;
-        } else {
-            const newNotesWorkspaceRecord = await ModelNotesWorkspace.create({
-                username: userFirst.username,
-                title: workspaceNotesName,
-                description: '',
-                isStar: false,
-                tags: [],
-            });
-            workspaceId = newNotesWorkspaceRecord._id as mongoose.Schema.Types.ObjectId;
-        }
-
-        // delete notes with title 'Daily Summary - currentDateOnly'
+        // delete notes with title 'Daily Summary - summaryDateOnly'
         let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
         await ModelLifeEvents.deleteMany({
             username: userFirst.username,
