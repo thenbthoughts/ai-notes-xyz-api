@@ -202,6 +202,8 @@ Be selective. Only include what matters for future reference.`;
                 { role: 'user', content: argContent },
             ],
         });
+        console.log('llmResult: ', llmResult);
+        console.log('llmResult.error: ', llmResult.error);
 
         // delete notes with title 'Monthly Summary - monthStr'
         let monthYearStr = summaryDateUtc.getFullYear().toString();
