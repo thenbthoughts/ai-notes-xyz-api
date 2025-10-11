@@ -206,9 +206,9 @@ Be selective. Only include what matters for future reference.`;
         console.log('llmResult.error: ', llmResult.error);
 
         // delete notes with title 'Monthly Summary - monthStr'
-        let monthYearStr = summaryDateUtc.getFullYear().toString();
-        let monthName = summaryDateUtc.toLocaleString('default', { month: 'long' });
-        let monthNumber = summaryDateUtc.getMonth() + 1;
+        let monthYearStr = startOfMonth.toJSDate().getFullYear().toString();
+        let monthName = startOfMonth.toJSDate().toLocaleString('default', { month: 'long' });
+        let monthNumber = startOfMonth.toJSDate().getMonth() + 1;
         let monthlyNotesTitle = `Monthly Summary by AI - ${monthYearStr} - ${monthName}`;
         console.log('monthlyNotesTitle: ', monthlyNotesTitle);
         await ModelLifeEvents.deleteMany({
