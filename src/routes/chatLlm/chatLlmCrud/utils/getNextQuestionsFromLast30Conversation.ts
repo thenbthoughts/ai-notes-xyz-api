@@ -70,10 +70,10 @@ const fetchLlmGroq = async ({
         let modelName = '';
         if(provider === 'openrouter') {
             apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'meta-llama/llama-3.1-8b-instruct';
+            modelName = 'openai/gpt-oss-20b';
         } else if(provider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'llama-3.1-8b-instant';
+            modelName = 'openai/gpt-oss-20b';
         }
 
         const data: RequestData = {

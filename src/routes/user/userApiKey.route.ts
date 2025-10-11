@@ -114,7 +114,7 @@ router.post(
                         content: 'About artificial intelligence.'
                     }
                 ],
-                modelName: 'meta-llama/llama-4-scout-17b-16e-instruct',
+                modelName: 'openai/gpt-oss-20b',
                 provider: 'groq',
             });
 
@@ -167,7 +167,7 @@ router.post(
                         content: 'About artificial intelligence.'
                     }
                 ],
-                modelName: 'meta-llama/llama-3.2-11b-vision-instruct',
+                modelName: 'openai/gpt-oss-20b',
                 provider: 'openrouter',
             });
 
