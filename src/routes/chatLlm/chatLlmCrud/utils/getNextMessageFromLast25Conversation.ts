@@ -319,9 +319,9 @@ const getTasks = async ({
         },
         {
             $lookup: {
-                from: 'taskComments',
+                from: 'commentsCommon',
                 localField: '_id',
-                foreignField: 'taskId',
+                foreignField: 'entityId',
                 as: 'taskComments',
             }
         },

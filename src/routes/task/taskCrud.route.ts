@@ -576,9 +576,9 @@ router.post(
             // stateDocument -> lookup task comments
             tempStage = {
                 $lookup: {
-                    from: 'taskComments',
+                    from: 'commentsCommon',
                     localField: '_id',
-                    foreignField: 'taskId',
+                    foreignField: 'entityId',
                     as: 'taskComments',
                 }
             }
