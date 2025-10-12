@@ -128,11 +128,40 @@ router.post('/infoVaultGet', middlewareUserAuth, async (req: Request, res: Respo
                     .replace('-', ' ')
                     .split(' ');
 
+                // stage -> lookup -> comments
+                const lookupMatchCommentsAnd = [];
+                for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
+                    const elementStr = searchQueryArr[iLookup];
+                    lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
+                }
+                tempStage = {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        let: { taskId: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $eq: ['$entityId', '$$taskId']
+                                    },
+                                    $or: [
+                                        ...lookupMatchCommentsAnd,
+                                    ],
+                                }
+                            }
+                        ],
+                        as: 'commentSearch',
+                    }
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+
                 const matchAnd = [];
                 for (let index = 0; index < searchQueryArr.length; index++) {
                     const elementStr = searchQueryArr[index];
                     matchAnd.push({
                         $or: [
+                            // info vault
                             { name: { $regex: elementStr, $options: 'i' } },
                             { nickname: { $regex: elementStr, $options: 'i' } },
                             { company: { $regex: elementStr, $options: 'i' } },
@@ -143,8 +172,11 @@ router.post('/infoVaultGet', middlewareUserAuth, async (req: Request, res: Respo
                             { aiSummary: { $regex: elementStr, $options: 'i' } },
                             { aiTags: { $regex: elementStr, $options: 'i' } },
                             { aiSuggestions: { $regex: elementStr, $options: 'i' } },
+
+                            // comment search
+                            { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
                         ]
-                    })
+                    });
                 }
 
                 tempStage = {
@@ -153,6 +185,15 @@ router.post('/infoVaultGet', middlewareUserAuth, async (req: Request, res: Respo
                             ...matchAnd,
                         ],
                     },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+
+                // stage -> unset chatListSearch
+                tempStage = {
+                    $unset: [
+                        'commentSearch',
+                    ],
                 };
                 pipelineDocument.push(tempStage);
                 pipelineCount.push(tempStage);
@@ -244,7 +285,7 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
             username: res.locals.auth_username,
 
             name,
-            
+
             createdAtUtc: now,
             createdAtIpAddress: req.ip || '',
             createdAtUserAgent: req.headers['user-agent'] || '',
