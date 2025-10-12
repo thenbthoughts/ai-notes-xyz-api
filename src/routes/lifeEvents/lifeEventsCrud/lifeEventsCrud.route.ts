@@ -247,17 +247,6 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
         };
         pipelineDocument.push(tempStage);
 
-        // stage -> lookup -> files list
-        tempStage = {
-            $lookup: {
-                from: 'lifeEventsFileUpload',
-                localField: '_id',
-                foreignField: 'lifeEventId',
-                as: 'filesArr',
-            }
-        };
-        pipelineDocument.push(tempStage);
-
         // stageCount -> count
         pipelineCount.push({
             $count: 'count'
