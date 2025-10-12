@@ -3,10 +3,10 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import funcTasksGenerateByConversationId from './utils/funcTaskGenerateByConversationId';
 import funcGetTaskAiSuggestionByTaskId from './utils/funcGetTaskAiSuggestionByTaskId';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.schema';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import funcTasksGenerateByConversationAll from './utils/funcTaskGenerateByConversationAll';
+import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaCommentCommon.schema';
 
 // Router
 const router = Router();
@@ -85,8 +85,9 @@ router.post(
 
             // add ai suggestion
             if (taskInfo.newTaskAiSuggestion.length >= 1) {
-                await ModelTaskComments.create({
-                    taskId: req.body.id,
+                await ModelCommentCommon.create({
+                    commentType: 'task',
+                    entityId: req.body.id,
 
                     commentText: taskInfo.newTaskAiSuggestion,
                     isAi: true,
