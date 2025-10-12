@@ -21,6 +21,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: ''
     },
 
+    // classification
+    isFavourite: {
+        type: Boolean,
+        default: false,
+    },
+
     // selected model
     aiModelName: {
         type: String,

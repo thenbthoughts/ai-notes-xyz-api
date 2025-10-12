@@ -10,6 +10,9 @@ export interface IChatLlmThread extends Document {
     isAutoAiContextSelectEnabled: boolean,
     systemPrompt: string,
 
+    // classification
+    isFavourite: boolean,
+
     // selected model
     aiModelName: string,
     aiModelProvider: string,
