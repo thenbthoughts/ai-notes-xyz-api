@@ -247,6 +247,28 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
         };
         pipelineDocument.push(tempStage);
 
+        // stage -> comments
+        tempStage = {
+            $lookup: {
+                from: 'commentsCommon',
+                let: { entityId: '$_id' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ['$entityId', '$$entityId'] },
+                                    { $eq: ['$username', res.locals.auth_username] }
+                                ]
+                            }
+                        }
+                    }
+                ],
+                as: 'comments',
+            }
+        };
+        pipelineDocument.push(tempStage);
+
         // stageCount -> count
         pipelineCount.push({
             $count: 'count'
