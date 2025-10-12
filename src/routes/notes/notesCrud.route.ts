@@ -129,16 +129,52 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
                     .replace('-', ' ')
                     .split(' ');
 
+                // stage -> lookup -> comments
+                const lookupMatchCommentsAnd = [];
+                for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
+                    const elementStr = searchQueryArr[iLookup];
+                    lookupMatchCommentsAnd.push({
+                        $or: [
+                            { commentText: { $regex: elementStr, $options: 'i' } },
+                        ]
+                    })
+                }
+                tempStage = {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        let: { noteId: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $eq: ['$entityId', '$$noteId']
+                                    },
+                                    $and: [
+                                        ...lookupMatchCommentsAnd,
+                                    ],
+                                }
+                            }
+                        ],
+                        as: 'commentSearch',
+                    }
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+
                 const matchAnd = [];
                 for (let index = 0; index < searchQueryArr.length; index++) {
                     const elementStr = searchQueryArr[index];
                     matchAnd.push({
                         $or: [
+                            // notes
                             { title: { $regex: elementStr, $options: 'i' } },
                             { description: { $regex: elementStr, $options: 'i' } },
                             { aiSummary: { $regex: elementStr, $options: 'i' } },
                             { aiTags: { $regex: elementStr, $options: 'i' } },
                             { aiSuggestions: { $regex: elementStr, $options: 'i' } },
+
+                            // comment search
+                            { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
                         ]
                     })
                 }
@@ -149,6 +185,15 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
                             ...matchAnd,
                         ],
                     },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+
+                // stage -> unset chatListSearch
+                tempStage = {
+                    $unset: [
+                        'commentSearch',
+                    ],
                 };
                 pipelineDocument.push(tempStage);
                 pipelineCount.push(tempStage);
