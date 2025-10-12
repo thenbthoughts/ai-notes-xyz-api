@@ -8,7 +8,6 @@ import infoVaultWebsiteCrud from './infoVaultWebsiteCrud.route';
 import infoVaultCustomFieldCrud from './infoVaultCustomFieldCrud.route';
 import infoVaultRelatedPersonCrud from './infoVaultRelatedPersonCrud.route';
 import infoVaultSignificantDateCrud from './infoVaultSignificantDateCrud.route';
-import infoVaultFileUploadCrud from './infoVaultFileUploadCrud.route';
 
 const router = Router();
 
@@ -23,6 +22,5 @@ router.use('/website', infoVaultWebsiteCrud);
 router.use('/customField', infoVaultCustomFieldCrud);
 router.use('/relatedPerson', infoVaultRelatedPersonCrud);
 router.use('/significantDate', infoVaultSignificantDateCrud);
-router.use('/fileUpload', infoVaultFileUploadCrud);
 
 export default router; 

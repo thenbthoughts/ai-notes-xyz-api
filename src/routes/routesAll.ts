@@ -45,7 +45,6 @@ import routesInfoVaultAll from './infoVault/infoVaultAll.route';
 // page -> life events
 import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.route';
 import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsCategoryCrud.route';
-import routesLifeEventFileUploadCrud from './lifeEvents/lifeEventsCrud/lifeEventsFileUploadCrud.route';
 import routesLifeEventsAiCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsAiCategoryCrud.route';
 
 import uploadFileS3 from './upload/uploadFileS3';
@@ -112,7 +111,6 @@ router.use('/info-vault', routesInfoVaultAll);
 // router -> life events
 router.use('/life-events/crud', routesLifeEventsCrud);
 router.use('/life-events/category-crud', routesLifeEventCategoryCrud);
-router.use('/life-events/file-upload-crud', routesLifeEventFileUploadCrud);
 router.use('/life-events/ai-category-crud', routesLifeEventsAiCategoryCrud);
 
 // uploads
