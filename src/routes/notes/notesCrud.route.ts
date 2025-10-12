@@ -133,11 +133,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
                 const lookupMatchCommentsAnd = [];
                 for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
                     const elementStr = searchQueryArr[iLookup];
-                    lookupMatchCommentsAnd.push({
-                        $or: [
-                            { commentText: { $regex: elementStr, $options: 'i' } },
-                        ]
-                    })
+                    lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } })
                 }
                 tempStage = {
                     $lookup: {
@@ -149,7 +145,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
                                     $expr: {
                                         $eq: ['$entityId', '$$noteId']
                                     },
-                                    $and: [
+                                    $or: [
                                         ...lookupMatchCommentsAnd,
                                     ],
                                 }

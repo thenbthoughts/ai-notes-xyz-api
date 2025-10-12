@@ -354,80 +354,7 @@ router.post(
                 isArchived?: boolean;
                 isCompleted?: boolean;
                 taskWorkspaceId?: mongoose.Types.ObjectId;
-                $or?: [
-                    {
-                        title: {
-                            $regex: string,
-                            $options: 'i',
-                        },
-                    },
-                    {
-                        description: {
-                            $regex: string,
-                            $options: 'i',
-                        },
-                    },
-                    {
-                        priority: {
-                            $regex: string,
-                            $options: 'i',
-                        },
-                    },
-                    {
-                        labels: {
-                            $regex: string,
-                            $options: 'i',
-                        },
-                    },
-                    {
-                        labelsAi: {
-                            $regex: string,
-                            $options: 'i',
-                        },
-                    },
-                ],
             };
-
-            if (req.body?.searchInput) {
-                if (typeof req.body?.searchInput === 'string') {
-                    if (req.body?.searchInput.trim() !== '') {
-                        const searchInput = req.body.searchInput.trim();
-                        tempStageMatch.$or = [
-                            // title
-                            {
-                                title: {
-                                    $regex: searchInput,
-                                    $options: 'i', // case insensitive
-                                },
-                            },
-                            {
-                                description: {
-                                    $regex: searchInput, // description
-                                    $options: 'i',
-                                },
-                            },
-                            {
-                                priority: {
-                                    $regex: searchInput,
-                                    $options: 'i', // case insensitive
-                                },
-                            },
-                            {
-                                labels: {
-                                    $regex: searchInput,
-                                    $options: 'i', // case insensitive
-                                },
-                            },
-                            {
-                                labelsAi: {
-                                    $regex: searchInput,
-                                    $options: 'i', // case insensitive
-                                },
-                            },
-                        ]
-                    }
-                }
-            }
 
             // Filter by task workspace id
             if (typeof req.body?.taskWorkspaceId === 'string') {
@@ -476,6 +403,79 @@ router.post(
                 }
             }
             stateDocument.push(tempStage);
+
+            // stage -> searchInput
+            if (typeof req.body?.searchInput === 'string') {
+                if (req.body.searchInput.length >= 1) {
+                    let searchQuery = req.body.searchInput as string;
+
+                    let searchQueryArr = searchQuery
+                        .replace('-', ' ')
+                        .split(' ');
+
+                    // stage -> lookup -> comments
+                    const lookupMatchCommentsAnd = [];
+                    for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
+                        const elementStr = searchQueryArr[iLookup];
+                        lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
+                    }
+                    tempStage = {
+                        $lookup: {
+                            from: 'commentsCommon',
+                            let: { taskId: '$_id' },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $eq: ['$entityId', '$$taskId']
+                                        },
+                                        $or: [
+                                            ...lookupMatchCommentsAnd,
+                                        ],
+                                    }
+                                }
+                            ],
+                            as: 'commentSearch',
+                        }
+                    };
+                    stateDocument.push(tempStage);
+
+                    const matchAnd = [];
+                    for (let index = 0; index < searchQueryArr.length; index++) {
+                        const elementStr = searchQueryArr[index];
+                        matchAnd.push({
+                            $or: [
+                                // notes
+                                { title: { $regex: elementStr, $options: 'i' } },
+                                { description: { $regex: elementStr, $options: 'i' } },
+                                { priority: { $regex: elementStr, $options: 'i' } },
+                                { labels: { $regex: elementStr, $options: 'i' } },
+                                { labelsAi: { $regex: elementStr, $options: 'i' } },
+
+                                // comment search
+                                { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
+                            ]
+                        })
+                    }
+
+                    tempStage = {
+                        $match: {
+                            $and: [
+                                ...matchAnd,
+                            ],
+                        },
+                    };
+                    stateDocument.push(tempStage);
+
+                    // stage -> unset chatListSearch
+                    tempStage = {
+                        $unset: [
+                            'commentSearch',
+                        ],
+                    };
+                    stateDocument.push(tempStage);
+                }
+            }
 
             // stage -> match labelArr
             if (req.body?.labelArr) {
@@ -842,7 +842,7 @@ router.post(
                     const found = labelToMsArr.find(item => item.labelName === normalizedLabel);
                     if (found) {
                         const relatedLabels = labelToMsArr.filter(item => {
-                            if(
+                            if (
                                 Math.min(item.subTime, found.subTime) === item.subTime
                             ) {
                                 return true;
