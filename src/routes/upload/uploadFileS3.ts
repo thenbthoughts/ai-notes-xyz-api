@@ -132,6 +132,7 @@ router.get(
 
             const data = await s3Client.send(new GetObjectCommand(params));
             res.setHeader('Content-Type', data.ContentType || 'application/octet-stream');
+            res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
             (data.Body as NodeJS.ReadableStream).pipe(res);
         } catch (error) {
             console.error(error);
