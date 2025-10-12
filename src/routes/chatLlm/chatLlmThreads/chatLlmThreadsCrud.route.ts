@@ -41,6 +41,14 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
         tempStage = {
             $match: {
                 username: res.locals.auth_username,
+            } as {
+                username: string;
+                isFavourite?: boolean;
+            }
+        }
+        if (typeof req.body?.isFavourite === 'string') {
+            if (req.body.isFavourite === 'true' || req.body.isFavourite === 'false') {
+                tempStage.$match.isFavourite = req.body.isFavourite === 'true' ? true : false;
             }
         }
         stateDocument.push(tempStage);
@@ -215,6 +223,9 @@ router.post(
                 // model settings
                 aiModelName,
                 aiModelProvider,
+
+                // classification
+                isFavourite,
             } = req.body;
 
             const addData = {
@@ -225,6 +236,9 @@ router.post(
                 // model settings
                 aiModelName: '',
                 aiModelProvider: '',
+
+                // classification
+                isFavourite: false,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -241,6 +255,10 @@ router.post(
 
             if (typeof aiModelProvider === 'string') {
                 addData.aiModelProvider = aiModelProvider;
+            };
+
+            if (typeof isFavourite === 'boolean') {
+                addData.isFavourite = isFavourite;
             };
 
             let systemPrompt = systemPromptForChatLlmThread;
@@ -297,6 +315,9 @@ router.post(
                 aiModelProvider,
 
                 systemPrompt,
+
+                // classification
+                isFavourite,
             } = req.body;
 
             // Build update object
@@ -304,10 +325,6 @@ router.post(
             if (typeof threadTitle === 'string') {
                 updateData.threadTitle = threadTitle
             };
-
-            if (Object.keys(updateData).length === 0) {
-                return res.status(400).json({ message: 'No valid fields provided for update' });
-            }
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
                 updateData.isAutoAiContextSelectEnabled = isAutoAiContextSelectEnabled;
@@ -328,6 +345,15 @@ router.post(
             if (typeof systemPrompt === 'string') {
                 updateData.systemPrompt = systemPrompt;
             };
+
+            console.log('isFavourite: ', isFavourite);
+            if (typeof isFavourite === 'boolean') {
+                updateData.isFavourite = isFavourite;
+            };
+
+            if (Object.keys(updateData).length === 0) {
+                return res.status(400).json({ message: 'No valid fields provided for update' });
+            }
 
             // Update timestamps and user agent info
             const actionDatetimeUpdateObj = {
