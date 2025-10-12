@@ -1,8 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
-import { tsTaskCommentList } from '../../types/typesSchema/typesSchemaTask/schemaTaskCommentList.types';
+import { ISchemaCommentCommon } from '../../types/typesSchema/typesSchemaCommentCommon/schemaCommentCommonList.types';
 
-// taskCommentSchema
-const taskCommentSchema = new Schema<tsTaskCommentList>({
+// commentsCommonSchema
+const commentsCommonSchema = new Schema<ISchemaCommentCommon>({
     // Comment specific fields
     commentText: {
         type: String,
@@ -33,15 +33,14 @@ const taskCommentSchema = new Schema<tsTaskCommentList>({
     // auth
     username: {
         type: String,
-        required: true,
         default: '',
         index: true,
     },
 
-    // Reference to the task
-    taskId: {
+    // Reference to the notes, task, lifeEvent, infoVault
+    commentType: { type: String, default: '' }, // note | task | lifeEvent | infoVault
+    entityId: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         default: null,
     },
 
@@ -73,12 +72,12 @@ const taskCommentSchema = new Schema<tsTaskCommentList>({
 });
 
 // Comment Model
-const ModelTaskComments = mongoose.model<tsTaskCommentList>(
-    'taskComments',
-    taskCommentSchema,
-    'taskComments'
+const ModelCommentCommon = mongoose.model<ISchemaCommentCommon>(
+    'commentsCommon',
+    commentsCommonSchema,
+    'commentsCommon'
 );
 
 export {
-    ModelTaskComments
+    ModelCommentCommon,
 };

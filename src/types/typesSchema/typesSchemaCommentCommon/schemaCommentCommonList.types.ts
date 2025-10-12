@@ -1,6 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 
-export interface tsTaskCommentList extends Document {
+export interface ISchemaCommentCommon extends Document {
     // Comment specific fields
     commentText: string;
     isAi: boolean;
@@ -20,8 +20,9 @@ export interface tsTaskCommentList extends Document {
     // auth
     username: string;
 
-    // Reference to the task
-    taskId: mongoose.Schema.Types.ObjectId;
+    // Reference to the notes, task, lifeEvent, infoVault
+    commentType: string; // notes, task, lifeEvent, infoVault
+    entityId: mongoose.Schema.Types.ObjectId;
 
     // auto
     createdAtUtc: Date;
