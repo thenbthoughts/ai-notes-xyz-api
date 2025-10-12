@@ -30,7 +30,6 @@ import routesTaskCrud from './task/taskCrud.route';
 import routesTaskStatusList from './task/taskStatusList.route';
 import routeTaskAiGenerated from './task/taskAiGenerated.route';
 import routesTaskSub from './task/routesTaskSub.route';
-import routesTaskComments from './task/routesTaskComments.route';
 import routesTaskWorkspaceCrud from './task/taskWorkspaceCrud.route';
 
 // page -> task schedule
@@ -39,7 +38,6 @@ import routesTaskScheduleCrud from './taskSchedule/taskSchedule.route';
 // page -> notes
 import routesNotesCrud from './notes/notesCrud.route';
 import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
-import routesNotesComments from './notes/notesComments.route';
 
 // page -> info vault
 import routesInfoVaultAll from './infoVault/infoVaultAll.route';
@@ -67,6 +65,9 @@ import routesCalenderCrud from './calender/calender.route';
 
 // suggestions
 import routesSuggestionsCrud from './suggestions/suggestionsCrud.route';
+
+// common comments
+import routesCommentCommonCrud from './commentCommon/commentCommon.route';
 
 const router = Router();
 
@@ -96,7 +97,6 @@ router.use('/task/crud', routesTaskCrud);
 router.use('/task/ai-generated', routeTaskAiGenerated);
 router.use('/task-sub/crud', routesTaskSub);
 router.use('/task-status-list/crud', routesTaskStatusList);
-router.use('/task-comments/crud', routesTaskComments);
 router.use('/task-workspace/crud', routesTaskWorkspaceCrud);
 
 // routes -> task schedule
@@ -105,7 +105,6 @@ router.use('/task-schedule/crud', routesTaskScheduleCrud);
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);
 router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
-router.use('/notes-comments/crud', routesNotesComments);
 
 // routes -> info vault
 router.use('/info-vault', routesInfoVaultAll);
@@ -145,6 +144,9 @@ router.use('/calender/crud', routesCalenderCrud);
 
 // routes -> suggestions
 router.use('/suggestions/crud', routesSuggestionsCrud);
+
+// routes -> common comments
+router.use('/comment-common/crud', routesCommentCommonCrud);
 
 /*
 Example:

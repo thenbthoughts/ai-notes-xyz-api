@@ -9,8 +9,8 @@ import { ModelTaskWorkspace } from '../../schema/schemaTask/SchemaTaskWorkspace.
 import { ModelTaskStatusList } from '../../schema/schemaTask/SchemaTaskStatusList.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
-import { ModelTaskComments } from '../../schema/schemaTask/SchemaTaskComments.schema';
 import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
+import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaCommentCommon.schema';
 
 // Router
 const router = Router();
@@ -694,8 +694,10 @@ const taskEditTriggerAddComment = async ({
             }
         }
 
-        await ModelTaskComments.create({
-            taskId: mongoose.Types.ObjectId.createFromHexString(taskId),
+        await ModelCommentCommon.create({
+            commentType: 'task',
+            entityId: mongoose.Types.ObjectId.createFromHexString(taskId),
+
             commentText: 'Task status changed from ' + taskStatusOldName + ' to ' + taskStatusNewName,
             username: auth_username,
 
