@@ -28,6 +28,36 @@ app.use(cors({
     credentials: true,
 }));
 
+app.use((req, res, next) => {
+  // Remove legacy header if present
+  res.removeHeader('Feature-Policy');
+
+  // Allow permissions for self and Capacitor WebView origin
+  const cap = '"capacitor://localhost"';
+  const dev = '"http://localhost"'; // optional for local testing
+
+  res.setHeader(
+    'Permissions-Policy',
+    [
+      `geolocation=(self ${cap} ${dev})`,
+      `microphone=(self ${cap} ${dev})`,
+      `camera=(self ${cap} ${dev})`,
+      `autoplay=(self ${cap} ${dev})`,
+      `fullscreen=(self ${cap} ${dev})`,
+      `clipboard-read=(self ${cap} ${dev})`,
+      `clipboard-write=(self ${cap} ${dev})`,
+      `accelerometer=(self ${cap} ${dev})`,
+      `gyroscope=(self ${cap} ${dev})`,
+      `magnetometer=(self ${cap} ${dev})`,
+      `payment=(self ${cap} ${dev})`,
+      `xr-spatial-tracking=(self ${cap} ${dev})`
+      // add others if your app uses them
+    ].join(', ')
+  );
+
+  next();
+});
+
 // set Bearer token from cookie
 app.use((req: Request, res: Response, next) => {   
     // randomDeviceId
