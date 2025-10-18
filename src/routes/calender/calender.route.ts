@@ -58,10 +58,14 @@ const getCalenderFromLifeEvents = ({
     username,
     startDate,
     endDate,
+
+    filterEventTypeDiary,
 }: {
     username: string;
     startDate: Date;
     endDate: Date;
+
+    filterEventTypeDiary: boolean;
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
 
@@ -78,6 +82,14 @@ const getCalenderFromLifeEvents = ({
             },
         }
     };
+    if (filterEventTypeDiary === false) {
+        tempStage.$match.title = {
+            $not: {
+                $regex: '(Daily|Weekly|Monthly) Summary by AI',
+                $options: 'i',
+            }
+        };
+    }
     stateDocument.push(tempStage);
 
     // stateDocument -> addFields -> fromCollection
@@ -226,7 +238,12 @@ router.post(
             let perPage = 100;
             let startDate = new Date();
             let endDate = new Date();
-            
+
+            let filterEventTypeTasks = true;
+            let filterEventTypeLifeEvents = true;
+            let filterEventTypeInfoVault = true;
+            let filterEventTypeDiary = true;
+
             // set arg -> page
             if (typeof req.body?.page === 'number') {
                 if (req.body.page >= 1) {
@@ -238,6 +255,23 @@ router.post(
                 if (req.body.perPage >= 1) {
                     perPage = req.body.perPage;
                 }
+            }
+
+            // set arg -> filterEventTypeTasks
+            if (typeof req.body?.filterEventTypeTasks === 'boolean') {
+                filterEventTypeTasks = req.body.filterEventTypeTasks;
+            }
+            // set arg -> filterEventTypeLifeEvents
+            if (typeof req.body?.filterEventTypeLifeEvents === 'boolean') {
+                filterEventTypeLifeEvents = req.body.filterEventTypeLifeEvents;
+            }
+            // set arg -> filterEventTypeInfoVault
+            if (typeof req.body?.filterEventTypeInfoVault === 'boolean') {
+                filterEventTypeInfoVault = req.body.filterEventTypeInfoVault;
+            }
+            // set arg -> filterEventTypeDiary
+            if (typeof req.body?.filterEventTypeDiary === 'boolean') {
+                filterEventTypeDiary = req.body.filterEventTypeDiary;
             }
 
             let tempStage = {} as PipelineStage;
@@ -253,56 +287,67 @@ router.post(
             }
 
             // stateDocument -> unionWith
-            tempStage = {
-                $unionWith: {
-                    coll: 'tasks',
-                    pipeline: getCalenderFromTasks({
-                        username: res.locals.auth_username,
-                        startDate,
-                        endDate,
-                    }),
-                }
-            };
-            stateDocument.push(tempStage);
+            if (filterEventTypeTasks) {
+                tempStage = {
+                    $unionWith: {
+                        coll: 'tasks',
+                        pipeline: getCalenderFromTasks({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+            }
+
+            if (filterEventTypeLifeEvents) {
+                // stateDocument -> unionWith
+                tempStage = {
+                    $unionWith: {
+                        coll: 'lifeEvents',
+                        pipeline: getCalenderFromLifeEvents({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+
+                            // 
+                            filterEventTypeDiary,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+            }
 
             // stateDocument -> unionWith
-            tempStage = {
-                $unionWith: {
-                    coll: 'lifeEvents',
-                    pipeline: getCalenderFromLifeEvents({
-                        username: res.locals.auth_username,
-                        startDate,
-                        endDate,
-                    }),
-                }
-            };
-            stateDocument.push(tempStage);
+            if (filterEventTypeInfoVault) {
+                tempStage = {
+                    $unionWith: {
+                        coll: 'infoVaultSignificantDate',
+                        pipeline: getCalenderFromInfoVaultSignificantDate({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+            }
 
             // stateDocument -> unionWith
-            tempStage = {
-                $unionWith: {
-                    coll: 'infoVaultSignificantDate',
-                    pipeline: getCalenderFromInfoVaultSignificantDate({
-                        username: res.locals.auth_username,
-                        startDate,
-                        endDate,
-                    }),
-                }
-            };
-            stateDocument.push(tempStage);
-
-            // stateDocument -> unionWith
-            tempStage = {
-                $unionWith: {
-                    coll: 'infoVaultSignificantDate',
-                    pipeline: getCalenderFromInfoVaultSignificantDateRepeat({
-                        username: res.locals.auth_username,
-                        startDate,
-                        endDate,
-                    }),
-                }
-            };
-            stateDocument.push(tempStage);
+            if (filterEventTypeInfoVault) {
+                tempStage = {
+                    $unionWith: {
+                        coll: 'infoVaultSignificantDate',
+                        pipeline: getCalenderFromInfoVaultSignificantDateRepeat({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+            }
 
             // stateDocument -> skip
             tempStage = {
