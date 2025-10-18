@@ -11,6 +11,7 @@ import selectAutoContextNotesByThreadId from './utils/selectAutoContextNotesByTh
 import selectAutoContextTaskByThreadId from './utils/selectAutoContextTaskByThreadId';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import selectAutoContextByThreadId from './utils/selectAutoContextByThreadId';
+import searchContext from './utils/searchContext';
 
 // Router
 const router = Router();
@@ -187,10 +188,10 @@ router.post(
             if (updateObj.referenceId === null) {
                 return res.status(400).json({ message: 'Reference ID cannot be null' });
             }
-            if (['note', 'task', 'chat', 'memo', 'life-event', 'info-vault'].includes(updateObj.referenceFrom)) {
+            if (['notes', 'tasks', 'chats', 'life-events', 'info-vaults'].includes(updateObj.referenceFrom)) {
                 // valid
             } else {
-                return res.status(400).json({ message: 'Reference from is invalid. Valid values are: note, task, chat, memo, life-event, info-vault' });
+                return res.status(400).json({ message: 'Reference from is invalid. Valid values are: notes, tasks, chats, life-events, info-vaults' });
             }
 
             const existingContext = await ModelChatLlmThreadContextReference.findOne({
@@ -321,5 +322,49 @@ router.post(
         }
     }
 );
+
+// Search Context API
+router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const {
+            threadId,
+
+            searchQuery,
+            filterEventTypeTasks,
+            filterEventTypeLifeEvents,
+            filterEventTypeNotes,
+            filterEventTypeDiary,
+            filterIsContextSelected,
+
+            page,
+            limit,
+         } = req.body;
+        const auth_username = res.locals.auth_username;
+
+        const result = await searchContext({
+            username: auth_username,
+            threadId: threadId,
+            searchQuery: searchQuery,
+
+            filterEventTypeTasks,
+            filterEventTypeLifeEvents,
+            filterEventTypeNotes,
+            filterEventTypeDiary,
+            filterIsContextSelected,
+            // filterEventTypeInfoVault: false,
+
+            page,
+            limit,
+        });
+
+        return res.json({
+            message: 'Contexts searched successfully',
+            result,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
 
 export default router;
