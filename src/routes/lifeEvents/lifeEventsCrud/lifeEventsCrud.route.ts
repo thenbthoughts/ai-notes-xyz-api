@@ -5,6 +5,8 @@ import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import { ModelLifeEvents } from '../../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 import { ModelLlmPendingTaskCron } from '../../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
+import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
+import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 
 const router = Router();
 
@@ -366,13 +368,17 @@ router.post('/lifeEventsDelete', middlewareUserAuth, async (req: Request, res: R
 });
 
 // Add Life Event API
-router.post('/lifeEventsAdd', middlewareUserAuth, async (req: Request, res: Response) => {
+router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, async (req: Request, res: Response) => {
     try {
         const eventDateUtc = new Date();
         const year = eventDateUtc.getUTCFullYear();
         const month = (eventDateUtc.getUTCMonth() + 1).toString().padStart(2, '0');
         const eventDateYearStr = `${year}-${month}`;
         const eventDateYearMonthStr = `${year}-${month}`;
+
+        const actionDatetimeObj = normalizeDateTimeIpAddress(
+            res.locals.actionDatetime
+        );
 
         const newLifeEvent = await ModelLifeEvents.create({
             eventDateUtc,
@@ -383,6 +389,8 @@ router.post('/lifeEventsAdd', middlewareUserAuth, async (req: Request, res: Resp
             title: `Empty Event - ${eventDateUtc.toDateString()} ${eventDateUtc.toLocaleTimeString().substring(0, 7)}`,
 
             aiTags: ['Empty event'],
+
+            ...actionDatetimeObj,
         });
 
         return res.json({
@@ -396,7 +404,7 @@ router.post('/lifeEventsAdd', middlewareUserAuth, async (req: Request, res: Resp
 });
 
 // Edit Life Event API
-router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Response) => {
+router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, async (req: Request, res: Response) => {
     try {
         let _id = null as mongoose.Types.ObjectId | null;
         const arg_id = req.body._id;
@@ -406,6 +414,10 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
         if (_id === null) {
             return res.status(400).json({ message: 'Life event ID cannot be null' });
         }
+
+        const actionDatetimeObj = normalizeDateTimeIpAddress(
+            res.locals.actionDatetime
+        );
 
         const updateObj = {
 
@@ -461,6 +473,11 @@ router.post('/lifeEventsEdit', middlewareUserAuth, async (req: Request, res: Res
                 {
                     $set: {
                         ...updateObj,
+
+                        // updated datetime ip
+                        updatedAtUtc: actionDatetimeObj.updatedAtUtc,
+                        updatedAtIpAddress: actionDatetimeObj.updatedAtIpAddress,
+                        updatedAtUserAgent: actionDatetimeObj.updatedAtUserAgent,
                     }
                 }
             );
