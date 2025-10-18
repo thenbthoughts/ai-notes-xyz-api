@@ -346,7 +346,6 @@ router.post(
                 updateData.systemPrompt = systemPrompt;
             };
 
-            console.log('isFavourite: ', isFavourite);
             if (typeof isFavourite === 'boolean') {
                 updateData.isFavourite = isFavourite;
             };
@@ -421,7 +420,6 @@ router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, 
             aiModelProvider: string;
             aiModelName: string;
         }[];
-        console.log('recentlyUsedLlm: ', recentlyUsedLlm);
 
         const topLlmModelArr = await ModelChatLlmThread.aggregate([
             {
