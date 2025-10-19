@@ -147,9 +147,15 @@ const getContextFromTasks = ({
 const getContextFromNotes = ({
     username,
     searchQuery,
+
+    // filter -> note
+    filterNotesWorkspaceIds,
 }: {
     username: string;
     searchQuery: string;
+
+    // filter -> note
+    filterNotesWorkspaceIds: string[];
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
 
@@ -160,6 +166,14 @@ const getContextFromNotes = ({
     const matchConditions: any = {
         username: username,
     };
+    let filterNoteWorkspaceIdsObj = [];
+    for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
+        const elementStr = filterNotesWorkspaceIds[i];
+        filterNoteWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
+    }
+    if (filterNoteWorkspaceIdsObj.length > 0) {
+        matchConditions.notesWorkspaceId = { $in: filterNoteWorkspaceIdsObj };
+    }
     tempStage = {
         $match: matchConditions
     };
@@ -396,6 +410,9 @@ const searchContext = async ({
     filterTaskIsArchived,
     filterTaskWorkspaceIds,
 
+    // filter -> note
+    filterNotesWorkspaceIds,
+
     // pagination
     page,
     limit,
@@ -414,6 +431,9 @@ const searchContext = async ({
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
     filterTaskWorkspaceIds: string[];
+
+    // filter -> note
+    filterNotesWorkspaceIds: string[];
 
     // pagination
     page: number;
@@ -470,6 +490,9 @@ const searchContext = async ({
                     pipeline: getContextFromNotes({
                         username,
                         searchQuery,
+
+                        // filter -> note
+                        filterNotesWorkspaceIds,
                     }),
                 }
             };
