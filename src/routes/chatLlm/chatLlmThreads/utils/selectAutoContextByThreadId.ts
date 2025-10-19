@@ -204,10 +204,10 @@ const selectAutoContextByThreadId = async ({
         for (let index = 0; index < results.length; index++) {
             const element = results[index];
             
-            if(element.payload.recordType === 'note') {
+            if(element.payload.recordType === 'notes') {
                 // get note reference by id
                 const noteOrTask = await ModelChatLlmThreadContextReference.findOne({
-                    referenceFrom: 'note',
+                    referenceFrom: 'notes',
                     referenceId: getMongodbObjectOrNull(element.payload.recordId),
                     threadId,
                     username,
@@ -216,16 +216,16 @@ const selectAutoContextByThreadId = async ({
                 // insert context reference if not exists
                 if(!noteOrTask) {
                     await ModelChatLlmThreadContextReference.create({
-                        referenceFrom: 'note',
+                        referenceFrom: 'notes',
                         referenceId: getMongodbObjectOrNull(element.payload.recordId),
                         threadId,
                         username,
                     });
                 }
-            } else if(element.payload.recordType === 'task') {
+            } else if(element.payload.recordType === 'tasks') {
                 // get task reference by id
                 const noteOrTask = await ModelChatLlmThreadContextReference.findOne({
-                    referenceFrom: 'task',
+                    referenceFrom: 'tasks',
                     referenceId: getMongodbObjectOrNull(element.payload.recordId),
                     threadId,
                     username,
@@ -234,7 +234,7 @@ const selectAutoContextByThreadId = async ({
                 // insert context reference if not exists
                 if(!noteOrTask) {
                     await ModelChatLlmThreadContextReference.create({
-                        referenceFrom: 'task',
+                        referenceFrom: 'tasks',
                         referenceId: getMongodbObjectOrNull(element.payload.recordId),
                         threadId,
                         username,

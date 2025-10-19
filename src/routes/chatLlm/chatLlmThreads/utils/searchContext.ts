@@ -7,9 +7,17 @@ import { getMongodbObjectOrNull } from '../../../../utils/common/getMongodbObjec
 const getContextFromTasks = ({
     username,
     searchQuery,
+
+    // filter -> task
+    filterTaskIsCompleted,
+    filterTaskIsArchived,
 }: {
     username: string;
     searchQuery: string;
+
+    // filter -> task
+    filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
+    filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
 
@@ -20,6 +28,16 @@ const getContextFromTasks = ({
     const matchConditions: any = {
         username: username,
     };
+    if (filterTaskIsCompleted === 'completed') {
+        matchConditions.isCompleted = true;
+    } else if (filterTaskIsCompleted === 'not-completed') {
+        matchConditions.isCompleted = false;
+    }
+    if (filterTaskIsArchived === 'archived') {
+        matchConditions.isArchived = true;
+    } else if (filterTaskIsArchived === 'not-archived') {
+        matchConditions.isArchived = false;
+    }
     tempStage = {
         $match: matchConditions
     };
@@ -363,6 +381,10 @@ const searchContext = async ({
     filterEventTypeDiary,
     filterIsContextSelected,
 
+    // filter -> task
+    filterTaskIsCompleted,
+    filterTaskIsArchived,
+
     // pagination
     page,
     limit,
@@ -376,6 +398,10 @@ const searchContext = async ({
     filterEventTypeNotes: boolean;
     filterEventTypeDiary: boolean;
     filterIsContextSelected: 'all' | 'added' | 'not-added';
+
+    // filter -> task
+    filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
+    filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
 
     // pagination
     page: number;
@@ -394,6 +420,10 @@ const searchContext = async ({
                     pipeline: getContextFromTasks({
                         username,
                         searchQuery,
+
+                        // filter -> task
+                        filterTaskIsCompleted,
+                        filterTaskIsArchived,
                     }),
                 }
             };
