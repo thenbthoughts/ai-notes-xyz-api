@@ -182,7 +182,7 @@ const insertTop5ContextReferences = async ({
                 if (!existingReference) {
                     console.log('inserting reference: ', item.note._id);
                     await ModelChatLlmThreadContextReference.create({
-                        referenceFrom: 'note',
+                        referenceFrom: 'notes',
                         referenceId: item.note._id,
                         threadId,
                         username,

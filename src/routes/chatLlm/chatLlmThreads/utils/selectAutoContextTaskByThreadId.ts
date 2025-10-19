@@ -408,7 +408,7 @@ const insertTop8ContextReferences = async ({
             await ModelChatLlmThreadContextReference.deleteMany({
                 threadId,
                 username,
-                referenceFrom: 'task',
+                referenceFrom: 'tasks',
                 isAddedByAi: true,
                 createdAtUtc: {
                     $lt: new Date(Date.now() - 10 * 60 * 1000) // Older than 10 minutes
@@ -417,7 +417,7 @@ const insertTop8ContextReferences = async ({
 
             for (const item of topResults) {
                 const existingReference = await ModelChatLlmThreadContextReference.findOne({
-                    referenceFrom: 'task',
+                    referenceFrom: 'tasks',
                     referenceId: item.task._id,
                     threadId,
                     username,
@@ -426,7 +426,7 @@ const insertTop8ContextReferences = async ({
                 if (!existingReference) {
                     console.log('Inserting task reference: ', item.task._id, 'Score:', item.relevanceScore);
                     await ModelChatLlmThreadContextReference.create({
-                        referenceFrom: 'task',
+                        referenceFrom: 'tasks',
                         referenceId: item.task._id,
                         threadId,
                         username,

@@ -188,7 +188,7 @@ router.post(
             if (updateObj.referenceId === null) {
                 return res.status(400).json({ message: 'Reference ID cannot be null' });
             }
-            if (['notes', 'tasks', 'chats', 'life-events', 'info-vaults'].includes(updateObj.referenceFrom)) {
+            if (['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault'].includes(updateObj.referenceFrom)) {
                 // valid
             } else {
                 return res.status(400).json({ message: 'Reference from is invalid. Valid values are: notes, tasks, chats, life-events, info-vaults' });
@@ -327,8 +327,10 @@ router.post(
 router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const {
+            // thread
             threadId,
 
+            // filter
             searchQuery,
             filterEventTypeTasks,
             filterEventTypeLifeEvents,
@@ -336,6 +338,11 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             filterEventTypeDiary,
             filterIsContextSelected,
 
+            // filter -> task
+            filterTaskIsCompleted,
+            filterTaskIsArchived,
+
+            // pagination
             page,
             limit,
          } = req.body;
@@ -353,6 +360,11 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             filterIsContextSelected,
             // filterEventTypeInfoVault: false,
 
+            // filter -> task
+            filterTaskIsCompleted,
+            filterTaskIsArchived,
+
+            // pagination
             page,
             limit,
         });

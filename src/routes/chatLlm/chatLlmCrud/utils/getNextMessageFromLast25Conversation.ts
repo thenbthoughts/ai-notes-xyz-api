@@ -21,32 +21,8 @@ import { getFileFromS3R2 } from "../../../../utils/files/s3R2GetFile";
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModalityById";
-
-// Function to get the last 20 conversations from MongoDB
-const getLast20Conversations = async ({
-    // thread
-    threadId,
-
-    // auth
-    username,
-}: {
-    threadId: mongoose.Types.ObjectId,
-    username: string;
-}): Promise<Message[]> => {
-    const conversations = await ModelChatLlm
-        .find({
-            username,
-            type: "text",
-            threadId: threadId,
-        })
-        .sort({ createdAtUtc: -1 })
-        .exec();
-
-    return conversations.map((convo: { content: string; }) => ({
-        role: 'user' as 'user',
-        content: convo.content
-    }));
-}
+import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
 
 const funcDoesModalSupportImage = async ({
     modelProvider,
@@ -278,7 +254,7 @@ const getTasks = async ({
         {
             $match: {
                 username: username,
-                referenceFrom: 'task',
+                referenceFrom: 'tasks',
                 referenceId: { $ne: null },
                 threadId: threadId,
             }
@@ -320,8 +296,17 @@ const getTasks = async ({
         {
             $lookup: {
                 from: 'commentsCommon',
-                localField: '_id',
-                foreignField: 'entityId',
+                let: { taskId: '$_id' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $eq: ['$entityId', '$$taskId']
+                            },
+                            commentType: 'task',
+                        }
+                    }
+                ],
                 as: 'taskComments',
             }
         },
@@ -445,7 +430,7 @@ const getNotes = async ({
         {
             $match: {
                 username: username,
-                referenceFrom: 'note',
+                referenceFrom: 'notes',
                 referenceId: { $ne: null },
                 threadId: threadId,
             }
@@ -462,6 +447,7 @@ const getNotes = async ({
     if (contextIds.length >= 1) {
         interface INotesAggregate extends INotes {
             notesWorkspaceArr: INotesWorkspace[];
+            notesComments: any[];
         }
 
         const resultNotes = await ModelNotes.aggregate([
@@ -479,6 +465,23 @@ const getNotes = async ({
                     localField: 'notesWorkspaceId',
                     foreignField: '_id',
                     as: 'notesWorkspaceArr',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'commentsCommon',
+                    let: { noteId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ['$entityId', '$$noteId']
+                                },
+                                commentType: 'note',
+                            }
+                        }
+                    ],
+                    as: 'notesComments',
                 }
             }
         ]) as INotesAggregate[];
@@ -503,12 +506,126 @@ const getNotes = async ({
                     noteStr += `Note ${index + 1} -> workspace: ${element.notesWorkspaceArr[0].title}.\n`;
                 }
 
+                if (element.notesComments && element.notesComments.length >= 1) {
+                    noteStr += `Note ${index + 1} -> comments: \n`;
+                    for (let commentIndex = 0; commentIndex < element.notesComments.length; commentIndex++) {
+                        const comment = element.notesComments[commentIndex];
+                        noteStr += `Note ${index + 1} -> comments ${commentIndex + 1} -> ${comment.commentText} ${comment.isAi ? ' (AI)' : ''} \n`;
+                    }
+                }
+
                 noteStr += '\n';
             }
             noteStr += '\n\n';
         }
     }
     return noteStr;
+}
+
+const getLifeEvents = async ({
+    username,
+    threadId,
+}: {
+    username: string,
+    threadId: mongoose.Types.ObjectId,
+}) => {
+    let lifeEventStr = '';
+
+    // Get context references for life events
+    const contextReferences = await ModelChatLlmThreadContextReference.find({
+        threadId: threadId,
+        username: username,
+        referenceFrom: 'lifeEvents',
+    });
+
+    if (contextReferences.length >= 1) {
+        const contextIds = contextReferences.map((context: IChatLlmThreadContextReference) => context.referenceId).filter((id): id is mongoose.Types.ObjectId => id !== null);
+
+        interface ILifeEventsAggregate extends ILifeEvents {
+            lifeEventComments: any[];
+        }
+
+        const resultLifeEvents = await ModelLifeEvents.aggregate([
+            {
+                $match: {
+                    username: username,
+                    _id: {
+                        $in: contextIds as mongoose.Types.ObjectId[]
+                    },
+                }
+            },
+            {
+                $lookup: {
+                    from: 'commentsCommon',
+                    let: { lifeEventId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ['$entityId', '$$lifeEventId']
+                                },
+                                commentType: 'lifeEvent',
+                            }
+                        }
+                    ],
+                    as: 'lifeEventComments',
+                }
+            }
+        ]) as ILifeEventsAggregate[];
+
+        if (resultLifeEvents && resultLifeEvents.length >= 1) {
+            lifeEventStr = 'Below are the life events added by the user:\n\n';
+            for (let index = 0; index < resultLifeEvents.length; index++) {
+                const element = resultLifeEvents[index];
+                if (element.title && element.title.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> title: ${element.title}.\n`;
+                }
+                if (element.description && element.description.length >= 1) {
+                    const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                    lifeEventStr += `Life Event ${index + 1} -> description: ${markdownContent}.\n`;
+                }
+                if (element.eventDateUtc) {
+                    lifeEventStr += `Life Event ${index + 1} -> event date: ${element.eventDateUtc}.\n`;
+                }
+                if (element.eventImpact) {
+                    lifeEventStr += `Life Event ${index + 1} -> event impact: ${element.eventImpact}.\n`;
+                }
+                if (element.isStar) {
+                    lifeEventStr += `Life Event ${index + 1} -> isStar: Starred life event.\n`;
+                }
+                if (element.aiSummary && element.aiSummary.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> AI summary: ${element.aiSummary}.\n`;
+                }
+                if (element.aiTags && element.aiTags.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> AI tags: ${element.aiTags.join(', ')}.\n`;
+                }
+                if (element.aiSuggestions && element.aiSuggestions.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> AI suggestions: ${element.aiSuggestions}.\n`;
+                }
+                if (element.aiCategory && element.aiCategory.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> AI category: ${element.aiCategory}.\n`;
+                }
+                if (element.aiSubCategory && element.aiSubCategory.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> AI sub category: ${element.aiSubCategory}.\n`;
+                }
+                if (Array.isArray(element.tags) && element.tags.length > 0) {
+                    lifeEventStr += `Life Event ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
+                }
+
+                if (element.lifeEventComments && element.lifeEventComments.length >= 1) {
+                    lifeEventStr += `Life Event ${index + 1} -> comments: \n`;
+                    for (let commentIndex = 0; commentIndex < element.lifeEventComments.length; commentIndex++) {
+                        const comment = element.lifeEventComments[commentIndex];
+                        lifeEventStr += `Life Event ${index + 1} -> comments ${commentIndex + 1} -> ${comment.commentText} ${comment.isAi ? ' (AI)' : ''} \n`;
+                    }
+                }
+
+                lifeEventStr += '\n';
+            }
+            lifeEventStr += '\n\n';
+        }
+    }
+    return lifeEventStr;
 }
 
 const getNextMessageFromLast30Conversation = async ({
@@ -580,6 +697,18 @@ const getNextMessageFromLast30Conversation = async ({
         messages.push({
             role: "user",
             content: noteStr,
+        });
+    }
+
+    // life events list
+    const lifeEventStr = await getLifeEvents({
+        username,
+        threadId,
+    });
+    if (lifeEventStr.length > 0) {
+        messages.push({
+            role: "user",
+            content: lifeEventStr,
         });
     }
 
