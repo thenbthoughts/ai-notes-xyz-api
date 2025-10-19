@@ -166,13 +166,13 @@ const getContextFromNotes = ({
     const matchConditions: any = {
         username: username,
     };
-    let filterNoteWorkspaceIdsObj = [];
+    let filterNotesWorkspaceIdsObj = [];
     for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
         const elementStr = filterNotesWorkspaceIds[i];
-        filterNoteWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
+        filterNotesWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
     }
-    if (filterNoteWorkspaceIdsObj.length > 0) {
-        matchConditions.notesWorkspaceId = { $in: filterNoteWorkspaceIdsObj };
+    if (filterNotesWorkspaceIdsObj.length > 0) {
+        matchConditions.notesWorkspaceId = { $in: filterNotesWorkspaceIdsObj } as any;
     }
     tempStage = {
         $match: matchConditions
