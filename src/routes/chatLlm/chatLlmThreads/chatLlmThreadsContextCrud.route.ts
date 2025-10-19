@@ -240,6 +240,146 @@ router.post(
     }
 );
 
+// Bulk Create Thread Context API
+router.post(
+    '/contextBulkUpsert',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        try {
+            const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
+
+            const {
+                threadId,
+                contexts,
+            } = req.body;
+
+            // Validate threadId
+            const threadIdObj = getMongodbObjectOrNull(threadId);
+            if (threadIdObj === null) {
+                return res.status(400).json({ message: 'Thread ID is invalid' });
+            }
+
+            // Validate contexts array
+            if (!Array.isArray(contexts) || contexts.length === 0) {
+                return res.status(400).json({ message: 'Contexts must be a non-empty array' });
+            }
+
+            // Prepare bulk operations
+            const bulkOps = [];
+            for (const context of contexts) {
+                const { referenceFrom, referenceId } = context;
+
+                // Validate referenceId
+                const referenceIdObj = getMongodbObjectOrNull(referenceId);
+                if (referenceIdObj === null) {
+                    continue; // Skip invalid reference IDs
+                }
+
+                // Validate referenceFrom
+                if (!['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault'].includes(referenceFrom)) {
+                    continue; // Skip invalid reference types
+                }
+
+                bulkOps.push({
+                    updateOne: {
+                        filter: {
+                            username: res.locals.auth_username,
+                            threadId: threadIdObj,
+                            referenceId: referenceIdObj,
+                        },
+                        update: {
+                            $set: {
+                                threadId: threadIdObj,
+                                referenceFrom: referenceFrom,
+                                referenceId: referenceIdObj,
+                                isAddedByAi: false,
+                                username: res.locals.auth_username,
+                                ...actionDatetimeObj,
+                            }
+                        },
+                        upsert: true,
+                    }
+                });
+            }
+
+            if (bulkOps.length === 0) {
+                return res.status(400).json({ message: 'No valid contexts to process' });
+            }
+
+            // Execute bulk write
+            const result = await ModelChatLlmThreadContextReference.bulkWrite(bulkOps);
+
+            return res.status(201).json({
+                message: 'Bulk operation completed successfully',
+                result: {
+                    insertedCount: result.upsertedCount,
+                    modifiedCount: result.modifiedCount,
+                    matchedCount: result.matchedCount,
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
+// Bulk Delete Thread Context API
+router.post(
+    '/contextBulkDelete',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const {
+                threadId,
+                contextIds,
+            } = req.body;
+
+            // Validate threadId
+            const threadIdObj = getMongodbObjectOrNull(threadId);
+            if (threadIdObj === null) {
+                return res.status(400).json({ message: 'Thread ID is invalid' });
+            }
+
+            // Validate contextIds array
+            if (!Array.isArray(contextIds) || contextIds.length === 0) {
+                return res.status(400).json({ message: 'Context IDs must be a non-empty array' });
+            }
+
+            // Convert contextIds to ObjectIds
+            const contextIdObjs = contextIds
+                .map(id => getMongodbObjectOrNull(id))
+                .filter(id => id !== null) as mongoose.Types.ObjectId[];
+
+            if (contextIdObjs.length === 0) {
+                return res.status(400).json({ message: 'No valid context IDs to delete' });
+            }
+
+            // Delete contexts
+            const result = await ModelChatLlmThreadContextReference.deleteMany({
+                username: res.locals.auth_username,
+                threadId: threadIdObj,
+                _id: { $in: contextIdObjs },
+            });
+
+            return res.status(200).json({
+                message: 'Bulk delete completed successfully',
+                result: {
+                    deletedCount: result.deletedCount,
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
 // Select Auto Context Notes by Thread ID API
 router.post(
     '/contextSelectAutoContext',
