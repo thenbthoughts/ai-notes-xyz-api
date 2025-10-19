@@ -11,6 +11,7 @@ const getContextFromTasks = ({
     // filter -> task
     filterTaskIsCompleted,
     filterTaskIsArchived,
+    filterTaskWorkspaceIds,
 }: {
     username: string;
     searchQuery: string;
@@ -18,6 +19,7 @@ const getContextFromTasks = ({
     // filter -> task
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
+    filterTaskWorkspaceIds: string[];
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
 
@@ -37,6 +39,14 @@ const getContextFromTasks = ({
         matchConditions.isArchived = true;
     } else if (filterTaskIsArchived === 'not-archived') {
         matchConditions.isArchived = false;
+    }
+    let filterTaskWorkspaceIdsObj = [];
+    for (let i = 0; i < filterTaskWorkspaceIds.length; i++) {
+        const elementStr = filterTaskWorkspaceIds[i];
+        filterTaskWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
+    }
+    if (filterTaskWorkspaceIdsObj.length > 0) {
+        matchConditions.taskWorkspaceId = { $in: filterTaskWorkspaceIdsObj };
     }
     tempStage = {
         $match: matchConditions
@@ -384,6 +394,7 @@ const searchContext = async ({
     // filter -> task
     filterTaskIsCompleted,
     filterTaskIsArchived,
+    filterTaskWorkspaceIds,
 
     // pagination
     page,
@@ -402,6 +413,7 @@ const searchContext = async ({
     // filter -> task
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
+    filterTaskWorkspaceIds: string[];
 
     // pagination
     page: number;
@@ -424,6 +436,7 @@ const searchContext = async ({
                         // filter -> task
                         filterTaskIsCompleted,
                         filterTaskIsArchived,
+                        filterTaskWorkspaceIds,
                     }),
                 }
             };

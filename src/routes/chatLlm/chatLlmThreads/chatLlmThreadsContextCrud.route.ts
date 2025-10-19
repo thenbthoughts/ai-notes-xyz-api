@@ -481,6 +481,7 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             // filter -> task
             filterTaskIsCompleted,
             filterTaskIsArchived,
+            filterTaskWorkspaceIds,
 
             // pagination
             page,
@@ -503,6 +504,7 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             // filter -> task
             filterTaskIsCompleted,
             filterTaskIsArchived,
+            filterTaskWorkspaceIds,
 
             // pagination
             page,
