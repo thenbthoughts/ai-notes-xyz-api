@@ -11,6 +11,7 @@ const getContextFromTasks = ({
     // filter -> task
     filterTaskIsCompleted,
     filterTaskIsArchived,
+    filterTaskWorkspaceIds,
 }: {
     username: string;
     searchQuery: string;
@@ -18,6 +19,7 @@ const getContextFromTasks = ({
     // filter -> task
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
+    filterTaskWorkspaceIds: string[];
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
 
@@ -37,6 +39,14 @@ const getContextFromTasks = ({
         matchConditions.isArchived = true;
     } else if (filterTaskIsArchived === 'not-archived') {
         matchConditions.isArchived = false;
+    }
+    let filterTaskWorkspaceIdsObj = [];
+    for (let i = 0; i < filterTaskWorkspaceIds.length; i++) {
+        const elementStr = filterTaskWorkspaceIds[i];
+        filterTaskWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
+    }
+    if (filterTaskWorkspaceIdsObj.length > 0) {
+        matchConditions.taskWorkspaceId = { $in: filterTaskWorkspaceIdsObj };
     }
     tempStage = {
         $match: matchConditions
@@ -137,9 +147,15 @@ const getContextFromTasks = ({
 const getContextFromNotes = ({
     username,
     searchQuery,
+
+    // filter -> note
+    filterNotesWorkspaceIds,
 }: {
     username: string;
     searchQuery: string;
+
+    // filter -> note
+    filterNotesWorkspaceIds: string[];
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
 
@@ -150,6 +166,14 @@ const getContextFromNotes = ({
     const matchConditions: any = {
         username: username,
     };
+    let filterNotesWorkspaceIdsObj = [];
+    for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
+        const elementStr = filterNotesWorkspaceIds[i];
+        filterNotesWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
+    }
+    if (filterNotesWorkspaceIdsObj.length > 0) {
+        matchConditions.notesWorkspaceId = { $in: filterNotesWorkspaceIdsObj } as any;
+    }
     tempStage = {
         $match: matchConditions
     };
@@ -384,6 +408,10 @@ const searchContext = async ({
     // filter -> task
     filterTaskIsCompleted,
     filterTaskIsArchived,
+    filterTaskWorkspaceIds,
+
+    // filter -> note
+    filterNotesWorkspaceIds,
 
     // pagination
     page,
@@ -402,6 +430,10 @@ const searchContext = async ({
     // filter -> task
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
+    filterTaskWorkspaceIds: string[];
+
+    // filter -> note
+    filterNotesWorkspaceIds: string[];
 
     // pagination
     page: number;
@@ -424,6 +456,7 @@ const searchContext = async ({
                         // filter -> task
                         filterTaskIsCompleted,
                         filterTaskIsArchived,
+                        filterTaskWorkspaceIds,
                     }),
                 }
             };
@@ -457,6 +490,9 @@ const searchContext = async ({
                     pipeline: getContextFromNotes({
                         username,
                         searchQuery,
+
+                        // filter -> note
+                        filterNotesWorkspaceIds,
                     }),
                 }
             };
