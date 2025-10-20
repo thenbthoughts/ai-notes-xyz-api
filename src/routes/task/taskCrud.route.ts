@@ -347,7 +347,7 @@ router.post(
                 username: res.locals.auth_username,
             } as {
                 username: string;
-                title?: RegExp;
+                title?: string;
                 description?: RegExp;
                 paginationDateLocalYearMonthStr?: string;
                 priority?: string;
@@ -362,6 +362,15 @@ router.post(
                     let tempWorkspaceId = mongoose.Types.ObjectId.createFromHexString(req.body?.taskWorkspaceId);
                     if (tempWorkspaceId) {
                         tempStageMatch.taskWorkspaceId = tempWorkspaceId;
+                    }
+                }
+            }
+
+            // Filter title
+            if (req.body?.title) {
+                if (typeof req.body?.title === 'string') {
+                    if (req.body?.title.trim() !== '') {
+                        tempStageMatch.title = req.body?.title;
                     }
                 }
             }
