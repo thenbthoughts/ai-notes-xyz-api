@@ -68,6 +68,9 @@ import routesSuggestionsCrud from './suggestions/suggestionsCrud.route';
 // common comments
 import routesCommentCommonCrud from './commentCommon/commentCommon.route';
 
+// search
+import routesSearchCrud from './search/search.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -145,6 +148,9 @@ router.use('/suggestions/crud', routesSuggestionsCrud);
 
 // routes -> common comments
 router.use('/comment-common/crud', routesCommentCommonCrud);
+
+// routes -> search
+router.use('/search/crud', routesSearchCrud);
 
 /*
 Example:
