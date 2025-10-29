@@ -7,6 +7,7 @@ import { ModelNotesWorkspace } from '../../schema/schemaNotes/SchemaNotesWorkspa
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
+import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
 
 const router = Router();
 
@@ -361,6 +362,14 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
         }
         if (typeof req.body.aiSuggestions === 'string') {
             updateObj.aiSuggestions = req.body.aiSuggestions;
+        }
+        if (typeof req.body.notesWorkspaceId === 'string') {
+            const notesWorkspaceId = getMongodbObjectOrNull(req.body.notesWorkspaceId);
+            if (notesWorkspaceId) {
+                if (notesWorkspaceId.toHexString().length === 24) {
+                    updateObj.notesWorkspaceId = notesWorkspaceId;
+                }
+            }
         }
         updateObj.updatedAtUtc = new Date();
         updateObj.updatedAtIpAddress = req.ip || '';
