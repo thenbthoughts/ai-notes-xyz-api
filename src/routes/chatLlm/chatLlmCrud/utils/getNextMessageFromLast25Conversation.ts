@@ -10,7 +10,8 @@ import {
 } from "../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema";
 
 import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
-import { fetchLlmUnified, Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
+import { fetchLlmUnifiedStream, Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
+import { ObjectId } from "mongoose";
 
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
@@ -642,6 +643,9 @@ const getNextMessageFromLast30Conversation = async ({
     // model name
     aiModelProvider,
     aiModelName,
+
+    // messageId
+    messageId,
 }: {
     threadId: mongoose.Types.ObjectId,
     threadInfo: IChatLlmThread,
@@ -651,6 +655,9 @@ const getNextMessageFromLast30Conversation = async ({
     // model name
     aiModelProvider: 'groq' | 'openrouter';
     aiModelName: string;
+
+    // messageId
+    messageId: mongoose.Types.ObjectId;
 }) => {
     const messages: Message[] = [];
 
@@ -746,20 +753,60 @@ const getNextMessageFromLast30Conversation = async ({
 
     // fetch llm using unified approach
     if (llmAuthToken.length >= 1) {
-        const result = await fetchLlmUnified({
-            provider: aiModelProvider,
-            apiKey: llmAuthToken,
-            apiEndpoint: llmEndpoint,
-            model: aiModelName,
-            messages: messages,
-            temperature: 1,
-            maxTokens: 8096,
-        });
+        console.log('llmAuthToken: ', llmAuthToken);
+        // If messageId provided, use streaming and update DB every second
+        console.log('messageId: ', messageId);
+        if (messageId) {
+            let fullContent = '';
+            let lastUpdateTime = Date.now();
+            let UPDATE_INTERVAL_MS = 500; // Update every 1 second
 
-        if (result.success) {
-            resultNextMessage = result.content;
-        } else {
-            console.error('LLM fetch failed:', result.error);
+            const streamResult = await fetchLlmUnifiedStream(
+                {
+                    provider: aiModelProvider,
+                    apiKey: llmAuthToken,
+                    apiEndpoint: llmEndpoint,
+                    model: aiModelName,
+                    messages: messages,
+                    temperature: 1,
+                    maxTokens: 8096,
+                },
+                async (token: string) => {
+                    fullContent += token;
+                    const now = Date.now();
+
+                    console.log('fullContent: ', fullContent);
+                    
+                    if (now - lastUpdateTime >= UPDATE_INTERVAL_MS) {
+                        // Update DB every 1 second
+                        UPDATE_INTERVAL_MS = 1000;
+                        lastUpdateTime = now;
+                        await ModelChatLlm.findOneAndUpdate(
+                            { _id: messageId },
+                            {
+                                $set: {
+                                    content: `AI: ${fullContent}`,
+                                }
+                            }
+                        );
+                    }
+                }
+            );
+
+            if (streamResult.success) {
+                resultNextMessage = streamResult.fullContent;
+                // Final update
+                await ModelChatLlm.findOneAndUpdate(
+                    { _id: messageId },
+                    {
+                        $set: {
+                            content: `AI: ${resultNextMessage}`,
+                        }
+                    }
+                );
+            } else {
+                console.error('LLM stream failed:', streamResult.error);
+            }
         }
     }
 
