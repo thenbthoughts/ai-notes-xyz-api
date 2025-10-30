@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import { ObjectId } from 'mongoose';
+import mongoose from 'mongoose';
 import getNextMessageFromLast30Conversation from './utils/getNextMessageFromLast25Conversation';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
@@ -70,44 +71,46 @@ router.post(
             let aiModelProvider = threadInfo.aiModelProvider as 'groq' | 'openrouter';
             let aiModelName = threadInfo.aiModelName;
             let llmAuthToken = '';
+            let llmEndpoint = '';
             if (aiModelProvider === 'groq') {
                 llmAuthToken = apiKeys.apiKeyGroq;
+                llmEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
             } else if (aiModelProvider === 'openrouter') {
                 llmAuthToken = apiKeys.apiKeyOpenrouter;
+                llmEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
             }
 
-            // process message
+            // Create initial message record
+            const resultFromLastConversation = await ModelChatLlm.create({
+                type: 'text',
+                content: 'AI generating in progress...',
+                username: res.locals.auth_username,
+                tags: [],
+                fileUrl: '',
+                fileUrlArr: '',
+                threadId,
+                isAi: true,
+                aiModelProvider: aiModelProvider,
+                aiModelName: aiModelName,
+                ...actionDatetimeObj,
+            });
+
+            const messageId = resultFromLastConversation._id as ObjectId;
+
             if (aiModelProvider === 'groq' || aiModelProvider === 'openrouter') {
-                const nextMessage = await getNextMessageFromLast30Conversation({
-                    // identification
+                await getNextMessageFromLast30Conversation({
                     threadId,
                     threadInfo,
                     username: res.locals.auth_username,
-
-                    // model name
                     aiModelProvider: aiModelProvider,
                     aiModelName: aiModelName,
                     userApiKey: apiKeys,
+                    messageId: messageId as unknown as mongoose.Types.ObjectId,
                 });
-                const resultFromLastConversation = await ModelChatLlm.create({
-                    type: 'text',
-                    content: `AI: ${nextMessage.nextMessage}`,
-                    username: res.locals.auth_username,
-                    tags: [],
-                    fileUrl: '',
-                    fileUrlArr: '',
-                    threadId, // Added threadId here
 
-                    // model name
-                    isAi: true,
-                    aiModelProvider: nextMessage.aiModelProvider,
-                    aiModelName: nextMessage.aiModelName,
-
-                    ...actionDatetimeObj,
-                });
-                // add tags
+                // Generate tags
                 await generateTags({
-                    mongodbRecordId: (resultFromLastConversation._id as ObjectId).toString(),
+                    mongodbRecordId: (messageId as ObjectId).toString(),
                     auth_username,
                 });
             }

@@ -92,6 +92,22 @@ export interface FetchLlmParams {
   }
 }
 
+export interface FetchLlmStreamParams {
+  provider: LlmProvider;
+  apiKey: string;
+  apiEndpoint: string;
+  model: string;
+  messages: Message[];
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  responseFormat?: 'text';
+  headersExtra?: Record<string, string>;
+  openrouterExtras?: {
+    routerTags?: Record<string, string>;
+  };
+}
+
 export interface FetchLlmResult {
   success: boolean;
   content: string; // best-effort normalized assistant text content
@@ -300,6 +316,150 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
 export async function fetchLlmText(params: FetchLlmParams): Promise<string> {
   const result = await fetchLlmUnified(params);
   return result.content;
+}
+
+/**
+ * Streaming LLM chat completion for Groq and OpenRouter providers
+ */
+export async function fetchLlmUnifiedStream(
+  params: FetchLlmStreamParams,
+  onToken: (token: string) => Promise<void>
+): Promise<{ success: boolean; error?: string; fullContent: string }> {
+  try {
+    let finalApiEndpoint = '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (params.provider === 'openrouter') {
+      finalApiEndpoint = params.apiEndpoint || 'https://openrouter.ai/api/v1/chat/completions';
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
+      Object.assign(headers, openrouterMarketing);
+      if (params.openrouterExtras?.routerTags) {
+        Object.assign(headers, params.openrouterExtras.routerTags);
+      }
+    } else if (params.provider === 'groq') {
+      finalApiEndpoint = params.apiEndpoint || 'https://api.groq.com/openai/v1/chat/completions';
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
+    } else {
+      return { success: false, error: 'Streaming only supported for groq and openrouter providers', fullContent: '' };
+    }
+
+    if (params.headersExtra) {
+      Object.assign(headers, params.headersExtra);
+    }
+
+    const data: Record<string, unknown> = {
+      messages: params.messages,
+      model: params.model,
+      temperature: params.temperature ?? 1,
+      max_tokens: params.maxTokens ?? 2048,
+      top_p: params.topP ?? 1,
+      stream: true,
+    };
+
+    const config: AxiosRequestConfig = {
+      method: 'post',
+      url: finalApiEndpoint,
+      headers,
+      data: JSON.stringify(data),
+      responseType: 'stream',
+    };
+
+    let fullContent = '';
+    const response = await axios.request(config);
+
+    // Check for HTTP errors
+    if (response.status !== 200) {
+      return { 
+        success: false, 
+        error: `HTTP ${response.status}: ${response.statusText}`, 
+        fullContent: '' 
+      };
+    }
+
+    // Handle streaming response
+    const stream = response.data;
+    let buffer = '';
+
+    return new Promise<{ success: boolean; error?: string; fullContent: string }>((resolve, reject) => {
+      stream.on('data', async (chunk: Buffer) => {
+        buffer += chunk.toString();
+        
+        // Process complete lines (SSE format: "data: {...}\n\n")
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || trimmedLine === '[DONE]') {
+            continue;
+          }
+
+          // Parse SSE format: "data: {...}"
+          if (trimmedLine.startsWith('data: ')) {
+            try {
+              const jsonStr = trimmedLine.substring(6); // Remove "data: " prefix
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content delta from choices
+              const choice = data?.choices?.[0];
+              if (choice?.delta?.content) {
+                const token = choice.delta.content;
+                fullContent += token;
+                
+                // Call the onToken callback
+                try {
+                  await onToken(token);
+                } catch (tokenError) {
+                  console.error('Error in onToken callback:', tokenError);
+                }
+              }
+            } catch (parseError) {
+              // Skip invalid JSON lines (e.g., empty data lines)
+              console.warn('Failed to parse SSE line:', trimmedLine);
+            }
+          }
+        }
+      });
+
+      stream.on('end', () => {
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          const trimmedLine = buffer.trim();
+          if (trimmedLine.startsWith('data: ') && trimmedLine !== '[DONE]') {
+            try {
+              const jsonStr = trimmedLine.substring(6);
+              const data = JSON.parse(jsonStr);
+              const choice = data?.choices?.[0];
+              if (choice?.delta?.content) {
+                const token = choice.delta.content;
+                fullContent += token;
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse remaining buffer:', trimmedLine);
+            }
+          }
+        }
+        resolve({ success: true, fullContent });
+      });
+
+      stream.on('error', (error: Error) => {
+        console.error('Stream error:', error);
+        resolve({ success: false, error: error.message, fullContent });
+      });
+    });
+  } catch (error) {
+    console.log('Llm stream failed error: ', error);
+    if (isAxiosError(error)) {
+      return { success: false, error: error.message, fullContent: '' };
+    }
+    return { success: false, error: (error as Error)?.message || 'Unknown error', fullContent: '' };
+  }
 }
 
 export default fetchLlmUnified;
