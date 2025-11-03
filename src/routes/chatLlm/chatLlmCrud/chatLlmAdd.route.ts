@@ -15,6 +15,10 @@ import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTas
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
+import XLSX from 'xlsx';
+
 // Router
 const router = Router();
 
@@ -33,6 +37,164 @@ const generateTags = async ({
         });
     } catch (error) {
         console.error(error);
+    }
+};
+
+const getContentFromDocument = async ({
+    fileUrl,
+    apiKeys,
+}: {
+    fileUrl: string;
+    apiKeys: any;
+}) => {
+    const extension = fileUrl.split('.').pop();
+
+    try {
+        const s3File = await getFileFromS3R2({
+            fileName: fileUrl,
+            userApiKey: apiKeys,
+        });
+
+        if (s3File && s3File.Body) {
+            const stream = s3File.Body as Readable;
+            const chunks: Uint8Array[] = [];
+            await new Promise<void>((resolve, reject) => {
+                stream.on('data', (chunk: Uint8Array) => chunks.push(chunk));
+                stream.on('end', () => resolve());
+                stream.on('error', () => reject());
+            });
+
+            // Concatenate all chunks into a single Buffer using set for proper typing
+            const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+            const buffer = Buffer.alloc(totalLength);
+            let offset = 0;
+            for (const c of chunks) {
+                buffer.set(c, offset);
+                offset += c.length;
+            }
+
+            let extractedText = '' as string;
+            const ext = (extension || '').toLowerCase();
+
+            if (['md', 'markdown', 'txt', 'csv', 'json', 'log'].includes(ext)) {
+                extractedText = buffer.toString('utf-8');
+            } else if (ext === 'pdf') {
+                try {
+                    let bufferArray = new Uint8Array(buffer.buffer);
+                    const parser = new PDFParse({ data: bufferArray });
+                    const pdfRes = await parser.getText();
+                    extractedText = pdfRes?.text || '';
+                    await parser.destroy();
+                } catch (err) {
+                    console.error(err);
+                    extractedText = '';
+                }
+            } else if (ext === 'docx') {
+                try {
+                    const resultDoc = await mammoth.extractRawText({ buffer });
+                    extractedText = resultDoc?.value || '';
+                } catch (err) {
+                    extractedText = '';
+                }
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                try {
+                    const wb = XLSX.read(buffer, { type: 'buffer' });
+                    let acc = '' as string;
+                    for (const sheetName of wb.SheetNames) {
+                        const ws = wb.Sheets[sheetName];
+                        if (!ws) continue;
+                        const csv = XLSX.utils.sheet_to_csv(ws);
+                        if (csv && csv.trim().length > 0) {
+                            acc += `\n\n### Sheet: ${sheetName}\n` + csv;
+                        }
+                    }
+                    extractedText = acc.trim();
+                } catch (err) {
+                    extractedText = '';
+                }
+            } else {
+                // Other file types not parsed to text here
+                extractedText = '';
+            }
+
+            return extractedText;
+        }
+
+        return '';
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
+
+const handleUploadTypeDocument = async ({
+    fileUrl,
+    apiKeys,
+    content,
+    type,
+    tags,
+    threadId,
+    actionDatetimeObj,
+    auth_username,
+}: {
+    fileUrl: string;
+    apiKeys: any;
+    content: string;
+    type: string;
+    tags: any;
+    threadId: any;
+    actionDatetimeObj: any;
+    auth_username: string;
+}): Promise<{
+    success: boolean;
+    doc?: any;
+}> => {
+    try {
+
+        // Use extracted text via utility
+        const extractedText = await getContentFromDocument({
+            fileUrl,
+            apiKeys,
+        });
+
+        if (!extractedText || extractedText.length < 1) {
+            return {
+                success: false,
+            };
+        }
+
+        // Cap to avoid oversized records
+        const MAX_CHARS = 200000; // ~200k chars preview
+        const truncated = extractedText.length > MAX_CHARS ? extractedText.slice(0, MAX_CHARS) : extractedText;
+
+        // create base record
+        const result = await ModelChatLlm.create({
+            type,
+            content,
+            username: auth_username,
+            tags,
+            fileUrl,
+            fileContentText: extractedText,
+            fileUrlArr: '',
+            threadId,
+            fileContentAi: '',
+            ...actionDatetimeObj,
+        });
+
+        await generateTags({
+            mongodbRecordId: (result._id as ObjectId).toString(),
+            auth_username,
+        });
+
+        return {
+            success: true,
+            doc: result,
+        };
+    } catch (error) {
+        console.error(error);
+        return {
+            success: false,
+        };
     }
 };
 
@@ -158,20 +320,26 @@ router.post(
                     const stream = response.Body as Readable;
 
                     // Create an empty array to hold the chunks
-                    const chunks: Buffer[] = [];
+                    const chunks: Uint8Array[] = [];
 
                     // Use the 'data' event to collect chunks from the stream
-                    stream.on('data', (chunk) => {
+                    stream.on('data', (chunk: Uint8Array) => {
                         chunks.push(chunk); // Push each chunk to the array
                     });
 
                     // When the stream ends, concatenate the chunks and convert to ArrayBuffer
                     return new Promise((resolve, reject) => {
                         stream.on('end', () => {
-                            // Concatenate all chunks into a single Buffer
-                            const buffer = Buffer.concat(chunks);
+                            // Concatenate all chunks into a single Buffer using set for proper typing
+                            const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+                            const buffer = Buffer.alloc(totalLength);
+                            let offset = 0;
+                            for (const c of chunks) {
+                                buffer.set(c, offset);
+                                offset += c.length;
+                            }
                             // Convert the Buffer to ArrayBuffer
-                            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+                            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
                             resolve(arrayBuffer);
                         });
 
@@ -184,12 +352,10 @@ router.post(
                 if (resultAudio) {
                     const audioBufferT = await getCustomArrayBuffer(resultAudio);
                     if (audioBufferT) {
-                        const buffer = Buffer.from(audioBufferT);
-
                         let contentAudioToText = '';
                         if (provider === 'groq' || provider === 'openrouter') {
                             contentAudioToText = await fetchLlmGroqAudio({
-                                audioArrayBuffer: buffer,
+                                audioArrayBuffer: audioBufferT,
 
                                 provider,
                                 llmAuthToken,
@@ -246,6 +412,23 @@ router.post(
                 });
 
                 return res.status(201).json(newNote);
+            }
+
+            if (type === 'document') {
+                const result = await handleUploadTypeDocument({
+                    fileUrl,
+                    apiKeys,
+                    content,
+                    type,
+                    tags,
+                    threadId,
+                    actionDatetimeObj,
+                    auth_username,
+                });
+                if (result.success ===false) {
+                    return res.status(400).json({ message: 'Failed to add file as file type not supported' });
+                }
+                return res.status(201).json(result.doc);
             }
 
             return res.status(500).json({ message: 'Unexpected error occurred' });

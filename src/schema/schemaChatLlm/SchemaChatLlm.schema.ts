@@ -28,6 +28,10 @@ const chatLlmSchema = new Schema<IChatLlm>({
         type: String,
         default: '',
     },
+    fileContentText: {
+        type: String,
+        default: '',
+    },
     fileContentAi: {
         type: String,
         default: '',

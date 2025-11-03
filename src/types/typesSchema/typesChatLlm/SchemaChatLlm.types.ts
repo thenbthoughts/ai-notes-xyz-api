@@ -20,6 +20,7 @@ export interface IChatLlm extends Document {
 
     // file
     fileUrl: string;
+    fileContentText: string;
     fileContentAi: string;
 
     // auto

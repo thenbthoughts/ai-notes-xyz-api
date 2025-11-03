@@ -177,7 +177,14 @@ const getConversationList = async ({
                 role: 'user',
                 content: element.content,
             });
-        }
+        } else if (element.type === 'document') {
+           if (element?.fileContentText && element?.fileContentText?.length > 0) {
+                conversationList.push({
+                    role: 'user',
+                    content: `Document extracted text: ${element.fileContentText}`,
+                });
+            }
+        } 
     }
 
     return conversationList;
