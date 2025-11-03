@@ -1,5 +1,6 @@
 import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
+import { NodeHtmlMarkdown } from "node-html-markdown";
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
@@ -966,6 +967,22 @@ router.post(
             const resultDocs = await ModelRecordEmptyTable.aggregate(stageDocument);
             const resultCount = await ModelRecordEmptyTable.aggregate(stageCount);
 
+            let resultDocsFinal = resultDocs.map((doc) => {
+                if (doc.fromCollection === 'notes') {
+                    if(doc?.notesInfo && doc?.notesInfo?.description && doc?.notesInfo?.description.length >= 1) {
+                        const markdownContent = NodeHtmlMarkdown.translate(doc?.notesInfo?.description);
+                        return {
+                            ...doc,
+                            notesInfo: {
+                                ...doc?.notesInfo,
+                                descriptionMarkdown: markdownContent,
+                            }
+                        };
+                    }
+                }
+                return doc;
+            });
+
             let totalCount = 0;
             if (resultCount.length === 1) {
                 if (resultCount[0].count) {
@@ -976,7 +993,7 @@ router.post(
             return res.json({
                 message: 'Search result retrieved successfully',
                 count: totalCount,
-                docs: resultDocs,
+                docs: resultDocsFinal,
             });
         } catch (error) {
             console.error(error);
