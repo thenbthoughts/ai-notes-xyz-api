@@ -393,6 +393,13 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
             ...actionDatetimeObj,
         });
 
+        // generate keywords by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+            targetRecordId: newLifeEvent._id,
+        });
+
         return res.json({
             message: 'Life event added successfully',
             doc: newLifeEvent,
@@ -502,6 +509,13 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
             taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiCategoryById,
+            targetRecordId: _id,
+        });
+
+        // generate keywords by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
         });
 

@@ -35,6 +35,9 @@ import executeDailySummaryByUserId from "./page/taskSchedule/timeBasedSummary/ge
 import executeWeeklySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateWeeklySummaryByUserId";
 import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId";
 
+// LlmContext tasks
+import generateKeywordsBySourceId from "./page/llmContext/generateKeywordsBySourceId";
+
 const llmPendingTaskProcessFunc = async ({
     _id,
 }: {
@@ -165,6 +168,13 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_sendMyselfEmail:
                 isTaskDone = await sendMyselfEmail({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            // LlmContext tasks
+            case llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId:
+                isTaskDone = await generateKeywordsBySourceId({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;
