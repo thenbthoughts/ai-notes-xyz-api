@@ -23,6 +23,7 @@ const llmContextKeywordSchema = new Schema<ILlmContextKeyword>({
 
     // has embedding
     hasEmbedding: { type: Boolean, default: false },
+    vectorEmbeddingStr: { type: String, default: '' },
 });
 
 // LlmContextKeyword Model

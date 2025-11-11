@@ -9,7 +9,6 @@ import openrouterMarketing from "../../../../config/openrouterMarketing";
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
 import { ModelLlmContextKeyword } from "../../../../schema/schemaLlmContext/SchemaLlmContextKeyword.schema";
-import { ILlmContextKeyword } from "../../../../types/typesSchema/typesLlmContext/SchemaLlmContextKeyword.types";
 
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
@@ -43,10 +42,10 @@ interface tsKeywordsResponse {
     oneLayerUpKeywords?: string[];
     categoryKeywords?: string[];
     subCategoryKeywords?: string[];
-    aiCategory?: string[];
-    aiSubCategory?: string[];
-    aiTopic?: string[];
-    aiSubTopic?: string[];
+    aiCategory?: string;
+    aiSubCategory?: string;
+    aiTopic?: string;
+    aiSubTopic?: string;
 }
 
 const fetchLlmKeywords = async ({
@@ -85,10 +84,10 @@ Your task is to analyze the provided content and generate various types of keywo
 5. **One Layer Up Keywords**: Broader, more general categories (e.g., if content is about "React hooks", one layer up would be "JavaScript", "Web Development")
 6. **Category Keywords**: Main category classifications (e.g., "Technology", "Health", "Finance", "Education")
 7. **Sub Category Keywords**: More specific sub-classifications (e.g., "Frontend Development", "Nutrition", "Investment")
-8. **AI Category**: Single high-level category (e.g., "Technology", "Business", "Personal Development") - provide only ONE category
-9. **AI Sub Category**: Single more specific categorization (e.g., "Software Development", "Marketing", "Fitness") - provide only ONE sub-category
-10. **AI Topic**: Single specific topic covered (e.g., "React Hooks", "Email Marketing", "Weight Training") - provide only ONE topic
-11. **AI Sub Topic**: Single detailed sub-topic (e.g., "useState Hook", "Email Automation", "Compound Exercises") - provide only ONE sub-topic
+8. **AI Category**: Single high-level category (e.g., "Technology", "Business", "Personal Development") - provide only ONE category as a STRING
+9. **AI Sub Category**: Single more specific categorization (e.g., "Software Development", "Marketing", "Fitness") - provide only ONE sub-category as a STRING
+10. **AI Topic**: Single specific topic covered (e.g., "React Hooks", "Email Marketing", "Weight Training") - provide only ONE topic as a STRING
+11. **AI Sub Topic**: Single detailed sub-topic (e.g., "useState Hook", "Email Automation", "Compound Exercises") - provide only ONE sub-topic as a STRING
 
 Output the result in JSON format as follows:
 {
@@ -99,13 +98,14 @@ Output the result in JSON format as follows:
     "oneLayerUpKeywords": ["broader term 1", "broader term 2", ...],
     "categoryKeywords": ["category 1", "category 2", ...],
     "subCategoryKeywords": ["subcategory 1", "subcategory 2", ...],
-    "aiCategory": ["single category"],
-    "aiSubCategory": ["single subcategory"],
-    "aiTopic": ["single topic"],
-    "aiSubTopic": ["single subtopic"]
+    "aiCategory": "single category string",
+    "aiSubCategory": "single subcategory string",
+    "aiTopic": "single topic string",
+    "aiSubTopic": "single subtopic string"
 }
 
-Generate at least 10-50 keywords for each type (except aiCategory, aiSubCategory, aiTopic, and aiSubTopic which should each have exactly ONE value).
+Generate at least 10-50 keywords for each array type.
+For aiCategory, aiSubCategory, aiTopic, and aiSubTopic, provide exactly ONE string value (not an array).
 Focus on relevance, diversity, and searchability.
 Avoid generic words with no specific relevance.
 Ensure keywords are meaningful and capture different aspects of the content.
@@ -364,17 +364,17 @@ const generateKeywordsBySourceId = async ({
         let aiTopic = '';
         let aiSubTopic = '';
 
-        if (keywordsResponse.aiCategory && Array.isArray(keywordsResponse.aiCategory) && keywordsResponse.aiCategory.length > 0) {
-            aiCategory = keywordsResponse.aiCategory[0];
+        if (keywordsResponse.aiCategory && typeof keywordsResponse.aiCategory === 'string') {
+            aiCategory = keywordsResponse.aiCategory.trim();
         }
-        if (keywordsResponse.aiSubCategory && Array.isArray(keywordsResponse.aiSubCategory) && keywordsResponse.aiSubCategory.length > 0) {
-            aiSubCategory = keywordsResponse.aiSubCategory[0];
+        if (keywordsResponse.aiSubCategory && typeof keywordsResponse.aiSubCategory === 'string') {
+            aiSubCategory = keywordsResponse.aiSubCategory.trim();
         }
-        if (keywordsResponse.aiTopic && Array.isArray(keywordsResponse.aiTopic) && keywordsResponse.aiTopic.length > 0) {
-            aiTopic = keywordsResponse.aiTopic[0];
+        if (keywordsResponse.aiTopic && typeof keywordsResponse.aiTopic === 'string') {
+            aiTopic = keywordsResponse.aiTopic.trim();
         }
-        if (keywordsResponse.aiSubTopic && Array.isArray(keywordsResponse.aiSubTopic) && keywordsResponse.aiSubTopic.length > 0) {
-            aiSubTopic = keywordsResponse.aiSubTopic[0];
+        if (keywordsResponse.aiSubTopic && typeof keywordsResponse.aiSubTopic === 'string') {
+            aiSubTopic = keywordsResponse.aiSubTopic.trim();
         }
 
         if (uniqueKeywords.length === 0) {
@@ -385,6 +385,7 @@ const generateKeywordsBySourceId = async ({
         await ModelLlmContextKeyword.deleteMany({
             username,
             metadataSourceType: sourceType,
+            metadataSourceId: targetRecordIdObj,
         });
 
         const bulkInsert = uniqueKeywords.map(keyword => ({
