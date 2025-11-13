@@ -77,13 +77,13 @@ const fetchLlmKeywords = async ({
 
 Your task is to analyze the provided content and generate various types of keywords:
 
-1. **One Word Keywords**: Single, powerful words that capture the essence (e.g., "productivity", "health", "finance")
-2. **Long Keywords**: Descriptive phrases with 4-6 words (e.g., "how to improve productivity at work", "best practices for healthy living")
-3. **Short Keywords**: 2-3 word phrases (e.g., "productivity tips", "health guide", "finance management")
-4. **SEO Friendly Keywords**: Search-optimized phrases that people would actually search for (e.g., "productivity hacks 2024", "healthy meal prep ideas")
-5. **One Layer Up Keywords**: Broader, more general categories (e.g., if content is about "React hooks", one layer up would be "JavaScript", "Web Development")
-6. **Category Keywords**: Main category classifications (e.g., "Technology", "Health", "Finance", "Education")
-7. **Sub Category Keywords**: More specific sub-classifications (e.g., "Frontend Development", "Nutrition", "Investment")
+1. **One Word Keywords**: Single, powerful words that capture the essence
+2. **Long Keywords**: Descriptive phrases with 4-6 words
+3. **Short Keywords**: 2-3 word phrases
+4. **SEO Friendly Keywords**: Search-optimized phrases that people would actually search for
+5. **One Layer Up Keywords**: Broader, more general categories
+6. **Category Keywords**: Main category classifications
+7. **Sub Category Keywords**: More specific sub-classifications
 8. **AI Category**: Single high-level category (e.g., "Technology", "Business", "Personal Development") - provide only ONE category as a STRING
 9. **AI Sub Category**: Single more specific categorization (e.g., "Software Development", "Marketing", "Fitness") - provide only ONE sub-category as a STRING
 10. **AI Topic**: Single specific topic covered (e.g., "React Hooks", "Email Marketing", "Weight Training") - provide only ONE topic as a STRING
