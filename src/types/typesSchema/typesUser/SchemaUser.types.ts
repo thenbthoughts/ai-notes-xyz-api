@@ -10,6 +10,7 @@ interface IUser extends Document {
     dateOfBirth: string;
     profilePictureLink: string;
     bio: string;
+    languages: string[];
 
     // location
     city: string;

@@ -4,6 +4,7 @@ import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
+import IUser from '../../types/typesSchema/typesUser/SchemaUser.types';
 // import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 
 // Router
@@ -177,25 +178,60 @@ router.post(
     ) => {
         try {
             const { username, ...updateData } = req.body;
-            const updatedUser = await ModelUser.findOneAndUpdate(
-                {
-                    username: res.locals.auth_username
-                },
-                {
-                    name: updateData.name || '',
-                    email: updateData.email || '',
-                    dateOfBirth: updateData.dateOfBirth || '',
-                    profilePictureLink: updateData.profilePictureLink || '',
-                    bio: updateData.bio || '',
-                    city: updateData.city || '',
-                    state: updateData.state || '',
-                    country: updateData.country || '',
-                    zipCode: updateData.zipCode || '',
 
-                    // 
-                    preferredModelProvider: updateData.preferredModelProvider || '',
-                    preferredModelName: updateData.preferredModelName || '',
-                },
+            let updateObj = {} as Partial<IUser>;
+            if (typeof updateData.name === 'string') {
+                updateObj.name = updateData.name;
+            }
+            if (typeof updateData.email === 'string') {
+                updateObj.email = updateData.email;
+            }
+            if (typeof updateData.dateOfBirth === 'string') {
+                updateObj.dateOfBirth = updateData.dateOfBirth;
+            }
+            if (typeof updateData.profilePictureLink === 'string') {
+                updateObj.profilePictureLink = updateData.profilePictureLink;
+            }
+            if (typeof updateData.bio === 'string') {
+                updateObj.bio = updateData.bio;
+            }
+            if (Array.isArray(updateData.languages)) {
+                let tempLanguages = [] as string[];
+                for (const language of updateData.languages) {
+                    if (typeof language === 'string') {
+                        tempLanguages.push(language);
+                    }
+                }
+                if (tempLanguages.length >= 1) {
+                    updateObj.languages = tempLanguages;
+                }
+            }
+            if (typeof updateData.city === 'string') {
+                updateObj.city = updateData.city;
+            }
+            if (typeof updateData.state === 'string') {
+                updateObj.state = updateData.state;
+            }
+            if (typeof updateData.country === 'string') {
+                updateObj.country = updateData.country;
+            }
+            if (typeof updateData.zipCode === 'string') {
+                updateObj.zipCode = updateData.zipCode;
+            }
+            if (typeof updateData.preferredModelProvider === 'string') {
+                updateObj.preferredModelProvider = updateData.preferredModelProvider;
+            }
+            if (typeof updateData.preferredModelName === 'string') {
+                updateObj.preferredModelName = updateData.preferredModelName;
+            }
+
+            if (Object.keys(updateObj).length === 0) {
+                return res.status(400).json({ message: 'No valid fields provided for update' });
+            }
+
+            const updatedUser = await ModelUser.findOneAndUpdate(
+                { username: res.locals.auth_username },
+                { $set: updateObj },
                 {
                     new: true
                 }

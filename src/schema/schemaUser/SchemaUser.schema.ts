@@ -20,6 +20,10 @@ const userSchema = new Schema<IUser>({
         type: String,
         default: ''
     },
+    languages: {
+        type: [String],
+        default: []
+    },
     bio: {
         type: String,
         default: ''
