@@ -15,6 +15,7 @@ import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ModelInfoVault } from "../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { ModelUser } from "../../../../schema/schemaUser/SchemaUser.schema";
 
 interface tsMessage {
     role: string;
@@ -52,10 +53,12 @@ const fetchLlmKeywords = async ({
     argContent,
     llmAuthToken,
     modelProvider,
+    languagesStr,
 }: {
     argContent: string,
     llmAuthToken: string;
     modelProvider: 'groq' | 'openrouter';
+    languagesStr: string;
 }) => {
     try {
         // Validate input
@@ -71,6 +74,12 @@ const fetchLlmKeywords = async ({
         } else if (modelProvider === 'groq') {
             apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
             modelName = 'openai/gpt-oss-20b';
+        }
+
+        let systemPromptLanguages = '';
+        if (languagesStr && languagesStr.length > 0) {
+            systemPromptLanguages = `The user's spoken languages are: ${languagesStr}. `;
+            systemPromptLanguages += `Generate keywords in english and the user's spoken languages. `;
         }
 
         const systemPrompt = `You are a JSON-based AI assistant specialized in generating comprehensive keywords from content.
@@ -109,6 +118,7 @@ For aiCategory, aiSubCategory, aiTopic, and aiSubTopic, provide exactly ONE stri
 Focus on relevance, diversity, and searchability.
 Avoid generic words with no specific relevance.
 Ensure keywords are meaningful and capture different aspects of the content.
+${systemPromptLanguages}
 
 Respond only with the JSON structure.`;
 
@@ -321,11 +331,22 @@ const generateKeywordsBySourceId = async ({
             return true; // No valid API key
         }
 
+        // Get user languages
+        const userInfo = await ModelUser.findOne({ username });
+        if (!userInfo) {
+            return true; // User not found
+        }
+        let languagesStr = '';
+        if (userInfo.languages && userInfo.languages.length > 0) {
+            languagesStr = userInfo.languages.join(', ');
+        }
+
         // Generate keywords using LLM
         const keywordsResponse = await fetchLlmKeywords({
             argContent: content,
             llmAuthToken,
             modelProvider: modelProvider as 'groq' | 'openrouter',
+            languagesStr,
         });
 
         if (!keywordsResponse) {
