@@ -186,6 +186,13 @@ const handleUploadTypeDocument = async ({
             auth_username,
         });
 
+        // generate keywords by id
+        await ModelLlmPendingTaskCron.create({
+            username: auth_username,
+            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+            targetRecordId: result._id,
+        });
+
         return {
             success: true,
             doc: result,
@@ -409,6 +416,13 @@ router.post(
                 await generateTags({
                     mongodbRecordId: (newNote._id as ObjectId).toString(),
                     auth_username,
+                });
+
+                // generate keywords by id
+                await ModelLlmPendingTaskCron.create({
+                    username: auth_username,
+                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    targetRecordId: newNote._id,
                 });
 
                 return res.status(201).json(newNote);

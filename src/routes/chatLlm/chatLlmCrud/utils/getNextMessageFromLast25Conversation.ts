@@ -223,10 +223,12 @@ const getPersonalContext = async ({
                 if (userInfo.zipCode && userInfo.zipCode.length > 0) {
                     promptUserInfo += `My zip code is ${userInfo.zipCode}. `;
                 }
+                if (userInfo?.languages && userInfo.languages.length >= 1) {
+                    promptUserInfo += `My spoken languages are ${userInfo.languages.join(', ')}. `;
+                }
                 if (userInfo.bio && userInfo.bio.length > 0) {
                     promptUserInfo += `Bio: ${userInfo.bio}. `;
                 }
-
             }
         }
 

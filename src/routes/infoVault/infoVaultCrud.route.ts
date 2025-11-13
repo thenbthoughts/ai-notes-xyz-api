@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
+import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
+import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 
 const router = Router();
 
@@ -294,6 +296,13 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
             updatedAtUserAgent: req.headers['user-agent'] || '',
         });
 
+        // generate keywords by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+            targetRecordId: newInfoVault._id,
+        });
+
         return res.json({
             message: 'InfoVault added successfully',
             doc: newInfoVault,
@@ -392,6 +401,13 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
                 }
             );
         }
+
+        // generate keywords by id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+            targetRecordId: _id,
+        });
 
         return res.json({
             message: 'InfoVault edited successfully',

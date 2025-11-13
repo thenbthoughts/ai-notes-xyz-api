@@ -50,6 +50,11 @@ const llmPendingTaskTypes = {
             openRouterModelGet: 'pageSettings_openRouterModelGet',
             groqModelGet: 'pageSettings_groqModelGet',
         },
+
+        // llmContext
+        llmContext: {
+            generateKeywordsBySourceId: 'pageLlmContext_generateKeywordsBySourceId',
+        },
     }
 };
 

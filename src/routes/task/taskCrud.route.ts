@@ -309,6 +309,13 @@ router.post(
                 targetRecordId: newTask._id,
             });
 
+            // generate keywords by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                targetRecordId: newTask._id,
+            });
+
             return res.status(201).json(newTask);
         } catch (error) {
             console.error(error);
@@ -906,6 +913,13 @@ router.post(
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                targetRecordId: updatedTask._id,
+            });
+
+            // generate keywords by id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
                 targetRecordId: updatedTask._id,
             });
 
