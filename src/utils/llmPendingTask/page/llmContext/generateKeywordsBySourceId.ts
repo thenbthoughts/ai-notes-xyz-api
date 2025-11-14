@@ -60,6 +60,20 @@ const fetchLlmKeywords = async ({
     modelProvider: 'groq' | 'openrouter';
     languagesStr: string;
 }) => {
+    let returnObj = {
+        keywords: [],
+        aiCategory: '',
+        aiSubCategory: '',
+        aiTopic: '',
+        aiSubTopic: '',
+    } as {
+        keywords: string[];
+        aiCategory: string;
+        aiSubCategory: string;
+        aiTopic: string;
+        aiSubTopic: string;
+    };
+
     try {
         // Validate input
         if (typeof argContent !== 'string' || argContent.trim() === '') {
@@ -158,14 +172,70 @@ Respond only with the JSON structure.`;
         const response: AxiosResponse = await axios.request(config);
         const keywordsResponse: tsKeywordsResponse = JSON.parse(response.data.choices[0].message.content);
 
-        return keywordsResponse;
+        const allKeywords: string[] = [];
+
+        if (keywordsResponse.oneWordKeywords && Array.isArray(keywordsResponse.oneWordKeywords)) {
+            allKeywords.push(...keywordsResponse.oneWordKeywords.filter(k => typeof k === 'string'));
+        }
+        if (keywordsResponse.shortKeywords && Array.isArray(keywordsResponse.shortKeywords)) {
+            allKeywords.push(...keywordsResponse.shortKeywords.filter(k => typeof k === 'string'));
+        }
+        if (keywordsResponse.longKeywords && Array.isArray(keywordsResponse.longKeywords)) {
+            allKeywords.push(...keywordsResponse.longKeywords.filter(k => typeof k === 'string'));
+        }
+        if (keywordsResponse.seoFriendlyKeywords && Array.isArray(keywordsResponse.seoFriendlyKeywords)) {
+            allKeywords.push(...keywordsResponse.seoFriendlyKeywords.filter(k => typeof k === 'string'));
+        }
+        if (keywordsResponse.oneLayerUpKeywords && Array.isArray(keywordsResponse.oneLayerUpKeywords)) {
+            allKeywords.push(...keywordsResponse.oneLayerUpKeywords.filter(k => typeof k === 'string'));
+        }
+
+        // Remove duplicates and empty strings, trim whitespace
+        const uniqueKeywords = Array.from(new Set(
+            allKeywords
+                .map(k => typeof k === 'string' ? k.trim() : '')
+                .filter(k => k && k.length > 0)
+        ));
+
+        // Extract AI categorization fields - now as single strings
+        let aiCategory = '';
+        let aiSubCategory = '';
+        let aiTopic = '';
+        let aiSubTopic = '';
+
+        if (keywordsResponse.aiCategory && typeof keywordsResponse.aiCategory === 'string') {
+            aiCategory = keywordsResponse.aiCategory.trim();
+        }
+        if (keywordsResponse.aiSubCategory && typeof keywordsResponse.aiSubCategory === 'string') {
+            aiSubCategory = keywordsResponse.aiSubCategory.trim();
+        }
+        if (keywordsResponse.aiTopic && typeof keywordsResponse.aiTopic === 'string') {
+            aiTopic = keywordsResponse.aiTopic.trim();
+        }
+        if (keywordsResponse.aiSubTopic && typeof keywordsResponse.aiSubTopic === 'string') {
+            aiSubTopic = keywordsResponse.aiSubTopic.trim();
+        }
+
+        returnObj.keywords = uniqueKeywords;
+        returnObj.aiCategory = aiCategory;
+        returnObj.aiSubCategory = aiSubCategory;
+        returnObj.aiTopic = aiTopic;
+        returnObj.aiSubTopic = aiSubTopic;
+
+        return returnObj;
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response);
-        return null;
+        return {
+            keywords: [],
+            aiCategory: '',
+            aiSubCategory: '',
+            aiTopic: '',
+            aiSubTopic: '',
+        };
     }
 }
 
@@ -195,17 +265,50 @@ const generateKeywordsBySourceId = async ({
 
         // Execute Notes
         if (!isExecuted) {
-            const note = await ModelNotes.findOne({ _id: targetRecordIdObj });
-            if (note) {
+            const noteAggregate = await ModelNotes.aggregate([
+                {
+                    $match: { _id: targetRecordIdObj }
+                },
+                {
+                    $lookup: {
+                        from: 'notesWorkspace',
+                        localField: 'notesWorkspaceId',
+                        foreignField: '_id',
+                        as: 'notesWorkspace'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        localField: '_id',
+                        foreignField: 'entityId',
+                        as: 'comments'
+                    }
+                },
+                {
+                    $limit: 1
+                }
+            ]);
+
+            if (noteAggregate && noteAggregate.length > 0) {
+                const note = noteAggregate[0];
                 sourceType = 'notes';
                 username = note.username;
                 content = `Title: ${note.title}\n`;
-                content += `Description: ${note.description}\n`;
+                if (note.description) {
+                    content += `Description: ${note.description}\n`;
+                }
                 if (note.tags && note.tags.length > 0) {
                     content += `Tags: ${note.tags.join(', ')}\n`;
                 }
-                if (note.aiSummary) {
-                    content += `AI Summary: ${note.aiSummary}\n`;
+                if (note.notesWorkspace && note.notesWorkspace.length > 0 && note.notesWorkspace[0].name) {
+                    content += `Workspace: ${note.notesWorkspace[0].name}\n`;
+                }
+                if (note.comments && note.comments.length > 0) {
+                    const commentTexts = note.comments.map((c: any) => c.commentText).filter((t: string) => t).slice(0, 5);
+                    if (commentTexts.length > 0) {
+                        content += `Comments: ${commentTexts.join(' | ')}\n`;
+                    }
                 }
                 isExecuted = true;
             }
@@ -213,8 +316,41 @@ const generateKeywordsBySourceId = async ({
 
         // Execute Task
         if (!isExecuted) {
-            const task = await ModelTask.findOne({ _id: targetRecordIdObj });
-            if (task) {
+            const taskAggregate = await ModelTask.aggregate([
+                {
+                    $match: { _id: targetRecordIdObj }
+                },
+                {
+                    $lookup: {
+                        from: 'taskWorkspace',
+                        localField: 'taskWorkspaceId',
+                        foreignField: '_id',
+                        as: 'taskWorkspace'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'taskStatusList',
+                        localField: 'taskStatusListId',
+                        foreignField: '_id',
+                        as: 'taskStatusList'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        localField: '_id',
+                        foreignField: 'entityId',
+                        as: 'comments'
+                    }
+                },
+                {
+                    $limit: 1
+                }
+            ]);
+
+            if (taskAggregate && taskAggregate.length > 0) {
+                const task = taskAggregate[0];
                 sourceType = 'tasks';
                 username = task.username;
                 content = `Title: ${task.title}\n`;
@@ -225,14 +361,43 @@ const generateKeywordsBySourceId = async ({
                 if (task.priority) {
                     content += `Priority: ${task.priority}\n`;
                 }
+                if (task.taskWorkspace && task.taskWorkspace.length > 0 && task.taskWorkspace[0].name) {
+                    content += `Workspace: ${task.taskWorkspace[0].name}\n`;
+                }
+                if (task.taskStatusList && task.taskStatusList.length > 0 && task.taskStatusList[0].statusTitle) {
+                    content += `Status: ${task.taskStatusList[0].statusTitle}\n`;
+                }
+                if (task.comments && task.comments.length > 0) {
+                    const commentTexts = task.comments.map((c: any) => c.commentText).filter((t: string) => t).slice(0, 5);
+                    if (commentTexts.length > 0) {
+                        content += `Comments: ${commentTexts.join(' | ')}\n`;
+                    }
+                }
                 isExecuted = true;
             }
         }
 
         // Execute ChatLlm
         if (!isExecuted) {
-            const chatLlm = await ModelChatLlm.findOne({ _id: targetRecordIdObj });
-            if (chatLlm) {
+            const chatLlmAggregate = await ModelChatLlm.aggregate([
+                {
+                    $match: { _id: targetRecordIdObj }
+                },
+                {
+                    $lookup: {
+                        from: 'chatLlmThread',
+                        localField: 'threadId',
+                        foreignField: '_id',
+                        as: 'thread'
+                    }
+                },
+                {
+                    $limit: 1
+                }
+            ]);
+
+            if (chatLlmAggregate && chatLlmAggregate.length > 0) {
+                const chatLlm = chatLlmAggregate[0];
                 sourceType = 'chatLlm';
                 username = chatLlm.username;
                 content = `Content: ${chatLlm.content}\n`;
@@ -242,14 +407,45 @@ const generateKeywordsBySourceId = async ({
                 if (chatLlm.fileContentText) {
                     content += `File Content: ${chatLlm.fileContentText}\n`;
                 }
+                if (chatLlm.fileContentAi) {
+                    content += `File Content AI: ${chatLlm.fileContentAi}\n`;
+                }
+                if (chatLlm.thread && chatLlm.thread.length > 0) {
+                    if (chatLlm.thread[0].threadTitle) {
+                        content += `Thread Title: ${chatLlm.thread[0].threadTitle}\n`;
+                    }
+                    if (chatLlm.thread[0].tagsAi && chatLlm.thread[0].tagsAi.length > 0) {
+                        content += `Thread AI Tags: ${chatLlm.thread[0].tagsAi.join(', ')}\n`;
+                    }
+                    if (chatLlm.thread[0].aiSummary) {
+                        content += `Thread AI Summary: ${chatLlm.thread[0].aiSummary}\n`;
+                    }
+                }
                 isExecuted = true;
             }
         }
 
         // Execute LifeEvents
         if (!isExecuted) {
-            const lifeEvent = await ModelLifeEvents.findOne({ _id: targetRecordIdObj });
-            if (lifeEvent) {
+            const lifeEventAggregate = await ModelLifeEvents.aggregate([
+                {
+                    $match: { _id: targetRecordIdObj }
+                },
+                {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        localField: '_id',
+                        foreignField: 'entityId',
+                        as: 'comments'
+                    }
+                },
+                {
+                    $limit: 1
+                }
+            ]);
+
+            if (lifeEventAggregate && lifeEventAggregate.length > 0) {
+                const lifeEvent = lifeEventAggregate[0];
                 sourceType = 'lifeEvents';
                 username = lifeEvent.username;
                 content = `Title: ${lifeEvent.title}\n`;
@@ -266,14 +462,37 @@ const generateKeywordsBySourceId = async ({
                 if (lifeEvent.eventImpact) {
                     content += `Event Impact: ${lifeEvent.eventImpact}\n`;
                 }
+                if (lifeEvent.comments && lifeEvent.comments.length > 0) {
+                    const commentTexts = lifeEvent.comments.map((c: any) => c.commentText).filter((t: string) => t).slice(0, 5);
+                    if (commentTexts.length > 0) {
+                        content += `Comments: ${commentTexts.join(' | ')}\n`;
+                    }
+                }
                 isExecuted = true;
             }
         }
 
         // Execute InfoVault
         if (!isExecuted) {
-            const infoVault = await ModelInfoVault.findOne({ _id: targetRecordIdObj });
-            if (infoVault) {
+            const infoVaultAggregate = await ModelInfoVault.aggregate([
+                {
+                    $match: { _id: targetRecordIdObj }
+                },
+                {
+                    $lookup: {
+                        from: 'commentsCommon',
+                        localField: '_id',
+                        foreignField: 'entityId',
+                        as: 'comments'
+                    }
+                },
+                {
+                    $limit: 1
+                }
+            ]);
+
+            if (infoVaultAggregate && infoVaultAggregate.length > 0) {
+                const infoVault = infoVaultAggregate[0];
                 sourceType = 'infoVault';
                 username = infoVault.username;
                 content = `Name: ${infoVault.name}\n`;
@@ -286,14 +505,20 @@ const generateKeywordsBySourceId = async ({
                 if (infoVault.jobTitle) {
                     content += `Job Title: ${infoVault.jobTitle}\n`;
                 }
+                if (infoVault.department) {
+                    content += `Department: ${infoVault.department}\n`;
+                }
                 if (infoVault.notes) {
                     content += `Notes: ${infoVault.notes}\n`;
                 }
                 if (infoVault.tags && infoVault.tags.length > 0) {
                     content += `Tags: ${infoVault.tags.join(', ')}\n`;
                 }
-                if (infoVault.aiSummary) {
-                    content += `AI Summary: ${infoVault.aiSummary}\n`;
+                if (infoVault.comments && infoVault.comments.length > 0) {
+                    const commentTexts = infoVault.comments.map((c: any) => c.commentText).filter((t: string) => t).slice(0, 5);
+                    if (commentTexts.length > 0) {
+                        content += `Comments: ${commentTexts.join(' | ')}\n`;
+                    }
                 }
                 isExecuted = true;
             }
@@ -349,58 +574,15 @@ const generateKeywordsBySourceId = async ({
             languagesStr,
         });
 
-        if (!keywordsResponse) {
+        if (!keywordsResponse.keywords || keywordsResponse.keywords.length === 0) {
             return false;
         }
 
-        // Combine all keywords into one array
-        const allKeywords: string[] = [];
-
-        if (keywordsResponse.oneWordKeywords && Array.isArray(keywordsResponse.oneWordKeywords)) {
-            allKeywords.push(...keywordsResponse.oneWordKeywords.filter(k => typeof k === 'string'));
-        }
-        if (keywordsResponse.shortKeywords && Array.isArray(keywordsResponse.shortKeywords)) {
-            allKeywords.push(...keywordsResponse.shortKeywords.filter(k => typeof k === 'string'));
-        }
-        if (keywordsResponse.longKeywords && Array.isArray(keywordsResponse.longKeywords)) {
-            allKeywords.push(...keywordsResponse.longKeywords.filter(k => typeof k === 'string'));
-        }
-        if (keywordsResponse.seoFriendlyKeywords && Array.isArray(keywordsResponse.seoFriendlyKeywords)) {
-            allKeywords.push(...keywordsResponse.seoFriendlyKeywords.filter(k => typeof k === 'string'));
-        }
-        if (keywordsResponse.oneLayerUpKeywords && Array.isArray(keywordsResponse.oneLayerUpKeywords)) {
-            allKeywords.push(...keywordsResponse.oneLayerUpKeywords.filter(k => typeof k === 'string'));
-        }
-
-        // Remove duplicates and empty strings, trim whitespace
-        const uniqueKeywords = Array.from(new Set(
-            allKeywords
-                .map(k => typeof k === 'string' ? k.trim() : '')
-                .filter(k => k && k.length > 0)
-        ));
-
-        // Extract AI categorization fields - now as single strings
-        let aiCategory = '';
-        let aiSubCategory = '';
-        let aiTopic = '';
-        let aiSubTopic = '';
-
-        if (keywordsResponse.aiCategory && typeof keywordsResponse.aiCategory === 'string') {
-            aiCategory = keywordsResponse.aiCategory.trim();
-        }
-        if (keywordsResponse.aiSubCategory && typeof keywordsResponse.aiSubCategory === 'string') {
-            aiSubCategory = keywordsResponse.aiSubCategory.trim();
-        }
-        if (keywordsResponse.aiTopic && typeof keywordsResponse.aiTopic === 'string') {
-            aiTopic = keywordsResponse.aiTopic.trim();
-        }
-        if (keywordsResponse.aiSubTopic && typeof keywordsResponse.aiSubTopic === 'string') {
-            aiSubTopic = keywordsResponse.aiSubTopic.trim();
-        }
-
-        if (uniqueKeywords.length === 0) {
-            return true; // No keywords generated
-        }
+        const uniqueKeywords = keywordsResponse.keywords;
+        const aiCategory = keywordsResponse.aiCategory;
+        const aiSubCategory = keywordsResponse.aiSubCategory;
+        const aiTopic = keywordsResponse.aiTopic;
+        const aiSubTopic = keywordsResponse.aiSubTopic;
 
         // Delete existing keywords for this source
         await ModelLlmContextKeyword.deleteMany({
