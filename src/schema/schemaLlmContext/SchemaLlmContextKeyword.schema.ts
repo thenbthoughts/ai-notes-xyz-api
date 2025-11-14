@@ -15,7 +15,17 @@ const llmContextKeywordSchema = new Schema<ILlmContextKeyword>({
     aiSubTopic: { type: String, default: '', index: true },
     
     // source
-    metadataSourceType: { type: String, default: '' },
+    metadataSourceType: {
+        type: String,
+        default: '',
+        enum: [
+            'notes',
+            'tasks',
+            'chatLlm',
+            'lifeEvents',
+            'infoVault',
+        ],
+    },
     metadataSourceId: {
         type: mongoose.Schema.Types.ObjectId,
         default: null,
