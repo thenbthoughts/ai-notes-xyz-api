@@ -8,6 +8,8 @@ import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.typ
 import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
+import { ILifeEvents } from '../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
+import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 
 const router = Router();
 
@@ -89,6 +91,88 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
         return res.json({
             message: 'LLM AI tasks triggered successfully',
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Trigger LLM AI Generate Keywords by Source ID
+router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        let auth_username = res.locals.auth_username;
+
+        // by user api
+        let userApi = await ModelUserApiKey.findOne({
+            username: auth_username,
+            $or: [
+                {
+                    apiKeyGroqValid: true,
+                },
+            ],
+        });
+
+        if (!userApi) {
+            return res.status(400).json({
+                status: '',
+                error: 'User API key not found',
+            });
+        }
+
+        // find all notes that have aiSummary or aiTags is null
+        const notes = await ModelNotes.find({
+            username: res.locals.auth_username,
+        }) as INotes[];
+
+        const notesOperations = notes.map(element => ({
+            insertOne: {
+                document: {
+                    username: res.locals.auth_username,
+                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    targetRecordId: element._id,
+                }
+            }
+        }));
+
+        // find all tasks that have aiSummary or aiTags is null
+        const tasks = await ModelTask.find({
+            username: res.locals.auth_username,
+        }) as tsTaskList[];
+
+        const tasksOperations = tasks.map(element => ({
+            insertOne: {
+                document: {
+                    username: res.locals.auth_username,
+                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    targetRecordId: element._id,
+                }
+            }
+        }));
+
+        // find all life events
+        const lifeEvents = await ModelLifeEvents.find({
+            username: res.locals.auth_username,
+        }) as ILifeEvents[];
+
+        const lifeEventsOperations = lifeEvents.map(element => ({
+            insertOne: {
+                document: {
+                    username: res.locals.auth_username,
+                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    targetRecordId: element._id,
+                }
+            }
+        }));
+
+        // Combine all operations and execute bulk write
+        const allOperations = [...notesOperations, ...tasksOperations, ...lifeEventsOperations];
+        if (allOperations.length > 0) {
+            await ModelLlmPendingTaskCron.bulkWrite(allOperations);
+        }
+
+        return res.json({
+            message: 'LLM AI keywords generation tasks triggered successfully',
         });
     } catch (error) {
         console.error(error);
