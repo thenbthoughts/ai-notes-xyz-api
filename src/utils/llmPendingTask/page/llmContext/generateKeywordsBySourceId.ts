@@ -16,6 +16,7 @@ import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ModelInfoVault } from "../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
 import { ModelUser } from "../../../../schema/schemaUser/SchemaUser.schema";
+import { jsonObjRepairCustom } from "../../../common/jsonObjRepairCustom";
 
 interface tsMessage {
     role: string;
@@ -32,7 +33,10 @@ interface tsRequestData {
     stop: null | string;
     response_format?: {
         type: "json_object"
-    }
+    };
+    provider?: {
+        sort: 'price' | 'throughput'
+    };
 }
 
 interface tsKeywordsResponse {
@@ -155,7 +159,10 @@ Respond only with the JSON structure.`;
             response_format: {
                 type: "json_object"
             },
-            stop: null
+            stop: null,
+            provider: {
+                sort: 'price'
+            }
         };
 
         const config: AxiosRequestConfig = {
@@ -170,31 +177,31 @@ Respond only with the JSON structure.`;
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const keywordsResponse: tsKeywordsResponse = JSON.parse(response.data.choices[0].message.content);
+        let keywordsResponseJson = jsonObjRepairCustom(response.data.choices[0].message.content);
 
         const allKeywords: string[] = [];
 
-        if (keywordsResponse.oneWordKeywords && Array.isArray(keywordsResponse.oneWordKeywords)) {
-            allKeywords.push(...keywordsResponse.oneWordKeywords.filter(k => typeof k === 'string'));
+        if (keywordsResponseJson.oneWordKeywords && Array.isArray(keywordsResponseJson.oneWordKeywords)) {
+            allKeywords.push(...keywordsResponseJson.oneWordKeywords.filter((k: string) => typeof k === 'string'));
         }
-        if (keywordsResponse.shortKeywords && Array.isArray(keywordsResponse.shortKeywords)) {
-            allKeywords.push(...keywordsResponse.shortKeywords.filter(k => typeof k === 'string'));
+        if (keywordsResponseJson.shortKeywords && Array.isArray(keywordsResponseJson.shortKeywords)) {
+            allKeywords.push(...keywordsResponseJson.shortKeywords.filter((k: string) => typeof k === 'string'));
         }
-        if (keywordsResponse.longKeywords && Array.isArray(keywordsResponse.longKeywords)) {
-            allKeywords.push(...keywordsResponse.longKeywords.filter(k => typeof k === 'string'));
+        if (keywordsResponseJson.longKeywords && Array.isArray(keywordsResponseJson.longKeywords)) {
+            allKeywords.push(...keywordsResponseJson.longKeywords.filter((k: string) => typeof k === 'string'));
         }
-        if (keywordsResponse.seoFriendlyKeywords && Array.isArray(keywordsResponse.seoFriendlyKeywords)) {
-            allKeywords.push(...keywordsResponse.seoFriendlyKeywords.filter(k => typeof k === 'string'));
+        if (keywordsResponseJson.seoFriendlyKeywords && Array.isArray(keywordsResponseJson.seoFriendlyKeywords)) {
+            allKeywords.push(...keywordsResponseJson.seoFriendlyKeywords.filter((k: string) => typeof k === 'string'));
         }
-        if (keywordsResponse.oneLayerUpKeywords && Array.isArray(keywordsResponse.oneLayerUpKeywords)) {
-            allKeywords.push(...keywordsResponse.oneLayerUpKeywords.filter(k => typeof k === 'string'));
+        if (keywordsResponseJson.oneLayerUpKeywords && Array.isArray(keywordsResponseJson.oneLayerUpKeywords)) {
+            allKeywords.push(...keywordsResponseJson.oneLayerUpKeywords.filter((k: string) => typeof k === 'string'));
         }
 
         // Remove duplicates and empty strings, trim whitespace
         const uniqueKeywords = Array.from(new Set(
             allKeywords
-                .map(k => typeof k === 'string' ? k.trim() : '')
-                .filter(k => k && k.length > 0)
+                .map((k: string) => typeof k === 'string' ? k.trim() : '')
+                .filter((k: string) => k && k.length > 0)
         ));
 
         // Extract AI categorization fields - now as single strings
@@ -203,17 +210,17 @@ Respond only with the JSON structure.`;
         let aiTopic = '';
         let aiSubTopic = '';
 
-        if (keywordsResponse.aiCategory && typeof keywordsResponse.aiCategory === 'string') {
-            aiCategory = keywordsResponse.aiCategory.trim();
+        if (keywordsResponseJson.aiCategory && typeof keywordsResponseJson.aiCategory === 'string') {
+            aiCategory = keywordsResponseJson.aiCategory.trim();
         }
-        if (keywordsResponse.aiSubCategory && typeof keywordsResponse.aiSubCategory === 'string') {
-            aiSubCategory = keywordsResponse.aiSubCategory.trim();
+        if (keywordsResponseJson.aiSubCategory && typeof keywordsResponseJson.aiSubCategory === 'string') {
+            aiSubCategory = keywordsResponseJson.aiSubCategory.trim();
         }
-        if (keywordsResponse.aiTopic && typeof keywordsResponse.aiTopic === 'string') {
-            aiTopic = keywordsResponse.aiTopic.trim();
+        if (keywordsResponseJson.aiTopic && typeof keywordsResponseJson.aiTopic === 'string') {
+            aiTopic = keywordsResponseJson.aiTopic.trim();
         }
-        if (keywordsResponse.aiSubTopic && typeof keywordsResponse.aiSubTopic === 'string') {
-            aiSubTopic = keywordsResponse.aiSubTopic.trim();
+        if (keywordsResponseJson.aiSubTopic && typeof keywordsResponseJson.aiSubTopic === 'string') {
+            aiSubTopic = keywordsResponseJson.aiSubTopic.trim();
         }
 
         returnObj.keywords = uniqueKeywords;
