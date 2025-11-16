@@ -9,6 +9,7 @@ import middlewareActionDatetime from '../../../middleware/middlewareActionDateti
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema';
 import { systemPromptForChatLlmThread } from './constantsChatLlmThread/constantsChatLlmThread';
+import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
 
 // Router
 const router = Router();
@@ -277,6 +278,15 @@ router.post(
                 systemPrompt,
             });
 
+            // reindex for global search
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    entityType: 'chatLlmThread',
+                    documentId: (newThread._id as mongoose.Types.ObjectId).toString(),
+                }],
+                username: res.locals.auth_username,
+            });
+
             return res.status(201).json({ message: 'Thread created successfully', thread: newThread });
         } catch (error) {
             console.error(error);
@@ -375,6 +385,15 @@ router.post(
             if (!updatedThread) {
                 return res.status(404).json({ message: 'Thread not found or not authorized' });
             }
+
+            // reindex for global search
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    entityType: 'chatLlmThread',
+                    documentId: (updatedThread._id as mongoose.Types.ObjectId).toString(),
+                }],
+                username: res.locals.auth_username,
+            });
 
             return res.json({ message: 'Thread updated successfully', thread: updatedThread });
         } catch (error) {

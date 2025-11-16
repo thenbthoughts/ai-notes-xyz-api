@@ -8,6 +8,7 @@ import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskCo
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 
 const router = Router();
 
@@ -326,6 +327,15 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
             targetRecordId: newNote._id,
         });
 
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'note',
+                documentId: (newNote._id as mongoose.Types.ObjectId).toString(),
+            }],
+            username: res.locals.auth_username,
+        });
+
         return res.json({
             message: 'Note added successfully',
             doc: newNote,
@@ -422,6 +432,15 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
             username: res.locals.auth_username,
             taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
+        });
+
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'note',
+                documentId: _id.toString(),
+            }],
+            username: res.locals.auth_username,
         });
 
         return res.json({

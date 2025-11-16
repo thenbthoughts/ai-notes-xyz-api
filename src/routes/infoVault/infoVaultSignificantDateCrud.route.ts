@@ -4,6 +4,7 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelInfoVaultSignificantDate } from '../../schema/schemaInfoVault/SchemaInfoVaultSignificantDate.schema';
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 
 const router = Router();
 
@@ -220,6 +221,15 @@ router.post('/infoVaultSignificantDateAdd', middlewareUserAuth, async (req: Requ
             updatedAtUserAgent: req.headers['user-agent'] || '',
         });
 
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'infoVault',
+                documentId: (newInfoVaultSignificantDate._id as mongoose.Types.ObjectId).toString(),
+            }],
+            username: res.locals.auth_username,
+        });
+
         return res.json({
             message: 'InfoVault Significant Date added successfully',
             doc: newInfoVaultSignificantDate,
@@ -266,6 +276,15 @@ router.post('/infoVaultSignificantDateEdit', middlewareUserAuth, async (req: Req
                 }
             );
         }
+
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'infoVault',
+                documentId: _id.toString(),
+            }],
+            username: res.locals.auth_username,
+        });
 
         return res.json({
             message: 'InfoVault Significant Date edited successfully',

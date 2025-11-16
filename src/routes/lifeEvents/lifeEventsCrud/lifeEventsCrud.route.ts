@@ -7,6 +7,7 @@ import { ModelLlmPendingTaskCron } from '../../../schema/schemaFunctionality/Sch
 import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTaskConstants';
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
+import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
 
 const router = Router();
 
@@ -400,6 +401,15 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
             targetRecordId: newLifeEvent._id,
         });
 
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'lifeEvent',
+                documentId: (newLifeEvent._id as mongoose.Types.ObjectId).toString(),
+            }],
+            username: res.locals.auth_username,
+        });
+
         return res.json({
             message: 'Life event added successfully',
             doc: newLifeEvent,
@@ -517,6 +527,15 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
             username: res.locals.auth_username,
             taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
+        });
+
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'lifeEvent',
+                documentId: _id.toString(),
+            }],
+            username: res.locals.auth_username,
         });
 
         return res.json({

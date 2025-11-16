@@ -5,6 +5,8 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
 import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskConstants';
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
+import { ModelInfoVaultSignificantDate } from '../../schema/schemaInfoVault/SchemaInfoVaultSignificantDate.schema';
 
 const router = Router();
 
@@ -303,6 +305,21 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
             targetRecordId: newInfoVault._id,
         });
 
+        // reindex all significant dates for this InfoVault
+        const significantDates = await ModelInfoVaultSignificantDate.find({
+            infoVaultId: newInfoVault._id,
+            username: res.locals.auth_username,
+        });
+        if (significantDates.length > 0) {
+            await reindexDocument({
+                reindexDocumentArr: significantDates.map(sd => ({
+                    entityType: 'infoVault',
+                    documentId: (sd._id as mongoose.Types.ObjectId).toString(),
+                })),
+                username: res.locals.auth_username,
+            });
+        }
+
         return res.json({
             message: 'InfoVault added successfully',
             doc: newInfoVault,
@@ -408,6 +425,21 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
             taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
         });
+
+        // reindex all significant dates for this InfoVault
+        const significantDates = await ModelInfoVaultSignificantDate.find({
+            infoVaultId: _id,
+            username: res.locals.auth_username,
+        });
+        if (significantDates.length > 0) {
+            await reindexDocument({
+                reindexDocumentArr: significantDates.map(sd => ({
+                    entityType: 'infoVault',
+                    documentId: (sd._id as mongoose.Types.ObjectId).toString(),
+                })),
+                username: res.locals.auth_username,
+            });
+        }
 
         return res.json({
             message: 'InfoVault edited successfully',

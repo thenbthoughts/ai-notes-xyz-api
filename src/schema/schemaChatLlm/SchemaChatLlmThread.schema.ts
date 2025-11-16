@@ -84,7 +84,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
 
 // Chat Model
 const ModelChatLlmThread = mongoose.model<IChatLlmThread>(
-    'chatLlmThread',
+'chatLlmThread',
     chatLlmThreadSchema,
     'chatLlmThread'
 );

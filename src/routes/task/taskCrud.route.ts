@@ -11,6 +11,7 @@ import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskCo
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
 import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaCommentCommon.schema';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 
 // Router
 const router = Router();
@@ -119,6 +120,15 @@ const assignTaskWorkspaceByTaskId = async ({
             }
         );
 
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'task',
+                documentId: _id.toString(),
+            }],
+            username: auth_username,
+        });
+
         return unassignedTaskWorkspace._id as mongoose.Types.ObjectId;
     } catch (error) {
         console.error(error);
@@ -165,6 +175,15 @@ const assignTaskStatusByTaskId = async ({
                 taskStatusId: unassignedTaskStatus._id,
             }
         );
+
+        // reindex for global search
+        await reindexDocument({
+            reindexDocumentArr: [{
+                entityType: 'task',
+                documentId: _id.toString(),
+            }],
+            username: auth_username,
+        });
 
     } catch (error) {
         console.error(error);
@@ -307,6 +326,15 @@ router.post(
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
                 targetRecordId: newTask._id,
+            });
+
+            // reindex for global search
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    entityType: 'task',
+                    documentId: (newTask._id as mongoose.Types.ObjectId).toString(),
+                }],
+                username: res.locals.auth_username,
             });
 
             // generate keywords by id
@@ -921,6 +949,15 @@ router.post(
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
                 targetRecordId: updatedTask._id,
+            });
+
+            // reindex for global search
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    entityType: 'task',
+                    documentId: (updatedTask._id as mongoose.Types.ObjectId).toString(),
+                }],
+                username: res.locals.auth_username,
             });
 
             return res.json(updatedTask);
