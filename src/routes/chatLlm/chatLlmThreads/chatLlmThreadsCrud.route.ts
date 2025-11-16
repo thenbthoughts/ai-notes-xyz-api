@@ -281,7 +281,7 @@ router.post(
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
-                    entityType: 'chatLlmThread',
+                    collectionName: 'chatLlmThread',
                     documentId: (newThread._id as mongoose.Types.ObjectId).toString(),
                 }],
                 username: res.locals.auth_username,
@@ -389,7 +389,7 @@ router.post(
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
-                    entityType: 'chatLlmThread',
+                    collectionName: 'chatLlmThread',
                     documentId: (updatedThread._id as mongoose.Types.ObjectId).toString(),
                 }],
                 username: res.locals.auth_username,

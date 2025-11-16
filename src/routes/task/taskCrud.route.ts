@@ -123,7 +123,7 @@ const assignTaskWorkspaceByTaskId = async ({
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'task',
+                collectionName: 'tasks',
                 documentId: _id.toString(),
             }],
             username: auth_username,
@@ -179,7 +179,7 @@ const assignTaskStatusByTaskId = async ({
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'task',
+                collectionName: 'tasks',
                 documentId: _id.toString(),
             }],
             username: auth_username,
@@ -331,7 +331,7 @@ router.post(
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
-                    entityType: 'task',
+                    collectionName: 'tasks',
                     documentId: (newTask._id as mongoose.Types.ObjectId).toString(),
                 }],
                 username: res.locals.auth_username,
@@ -954,7 +954,7 @@ router.post(
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
-                    entityType: 'task',
+                    collectionName: 'tasks',
                     documentId: (updatedTask._id as mongoose.Types.ObjectId).toString(),
                 }],
                 username: res.locals.auth_username,

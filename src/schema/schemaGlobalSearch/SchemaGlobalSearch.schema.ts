@@ -5,7 +5,6 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
     // Search fields
     text: {
         type: String,
-        required: true,
         default: '',
         index: true,
     },

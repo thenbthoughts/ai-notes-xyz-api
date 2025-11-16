@@ -404,7 +404,7 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'lifeEvent',
+                collectionName: 'lifeEvents',
                 documentId: (newLifeEvent._id as mongoose.Types.ObjectId).toString(),
             }],
             username: res.locals.auth_username,
@@ -532,7 +532,7 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'lifeEvent',
+                collectionName: 'lifeEvents',
                 documentId: _id.toString(),
             }],
             username: res.locals.auth_username,

@@ -330,7 +330,7 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'note',
+                collectionName: 'notes',
                 documentId: (newNote._id as mongoose.Types.ObjectId).toString(),
             }],
             username: res.locals.auth_username,
@@ -437,7 +437,7 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'note',
+                collectionName: 'notes',
                 documentId: _id.toString(),
             }],
             username: res.locals.auth_username,

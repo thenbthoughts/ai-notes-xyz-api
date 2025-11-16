@@ -70,8 +70,8 @@ router.post(
 
             // reindex parent entity when comment is added
             await reindexComments({
-                entities: [{ entityId: entityId, entityType: commentType }],
-                username,
+                entities: [{ entityId: entityId, collectionName: commentType }],
+                username: username,
             });
 
             return res.status(201).json(newComment);
@@ -123,7 +123,7 @@ router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res
 
         // reindex parent entity when comment is deleted
         await reindexComments({
-            entities: [{ entityId: deletedComment.entityId.toString(), entityType: deletedComment.commentType }],
+            entities: [{ entityId: deletedComment.entityId.toString(), collectionName: deletedComment.commentType }],
             username,
         });
 

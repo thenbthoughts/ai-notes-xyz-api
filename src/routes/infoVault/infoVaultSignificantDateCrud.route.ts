@@ -224,7 +224,7 @@ router.post('/infoVaultSignificantDateAdd', middlewareUserAuth, async (req: Requ
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'infoVault',
+                collectionName: 'infoVault',
                 documentId: (newInfoVaultSignificantDate._id as mongoose.Types.ObjectId).toString(),
             }],
             username: res.locals.auth_username,
@@ -280,7 +280,7 @@ router.post('/infoVaultSignificantDateEdit', middlewareUserAuth, async (req: Req
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
-                entityType: 'infoVault',
+                collectionName: 'infoVault',
                 documentId: _id.toString(),
             }],
             username: res.locals.auth_username,

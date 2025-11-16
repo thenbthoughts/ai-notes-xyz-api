@@ -34,7 +34,7 @@ export const generateNgrams = ({ text, minSize = 4, maxSize = 5 }: { text: strin
 };
 
 const getDocuments = async ({ reindexDocumentArr, username }: {
-    reindexDocumentArr: Array<{ entityType: string; documentId: string }>;
+    reindexDocumentArr: Array<{ collectionName: string; documentId: string }>;
     username: string;
 }): Promise<{
     taskArr: any[];
@@ -44,7 +44,7 @@ const getDocuments = async ({ reindexDocumentArr, username }: {
     chatLlmThreadArr: any[];
 }> => {
     try {
-        // Group document IDs by entity type
+        // Group document IDs by collection name
         const taskIds: mongoose.Types.ObjectId[] = [];
         const noteIds: mongoose.Types.ObjectId[] = [];
         const lifeEventIds: mongoose.Types.ObjectId[] = [];
@@ -57,15 +57,15 @@ const getDocuments = async ({ reindexDocumentArr, username }: {
                 continue;
             }
 
-            if (doc.entityType === 'task') {
+            if (doc.collectionName === 'tasks') {
                 taskIds.push(entityIdObj);
-            } else if (doc.entityType === 'note') {
+            } else if (doc.collectionName === 'notes') {
                 noteIds.push(entityIdObj);
-            } else if (doc.entityType === 'lifeEvent') {
+            } else if (doc.collectionName === 'lifeEvents') {
                 lifeEventIds.push(entityIdObj);
-            } else if (doc.entityType === 'infoVault') {
+            } else if (doc.collectionName === 'infoVault') {
                 infoVaultIds.push(entityIdObj);
-            } else if (doc.entityType === 'chatLlmThread') {
+            } else if (doc.collectionName === 'chatLlmThread') {
                 chatLlmThreadIds.push(entityIdObj);
             }
         }
@@ -198,6 +198,7 @@ const getDocuments = async ({ reindexDocumentArr, username }: {
                     }
                 }
             ]);
+            console.log('Info vault length: ', infoVaultArr.length);
         }
 
         // Process chat LLM threads - aggregate with comments lookup
@@ -267,14 +268,13 @@ const getInsertObjectFromTask = (task: any): IGlobalSearch => {
     
     return {
         entityId: task._id,
-        entityType: 'task',
         username: task.username,
         text: searchableText,
         ngram: ngrams,
-        collectionName: 'task',
+        collectionName: 'tasks',
         taskIsCompleted: task.isCompleted,
         taskIsArchived: task.isArchived,
-        taskWorkspaceId: task.workspaceId,
+        taskWorkspaceId: task.taskWorkspaceId,
         updatedAtUtc: task.updatedAtUtc || new Date(),
     } as IGlobalSearch;
 };
@@ -295,12 +295,11 @@ const getInsertObjectFromNote = (note: any): IGlobalSearch => {
     
     return {
         entityId: note._id,
-        entityType: 'note',
         username: note.username,
         text: searchableText,
         ngram: ngrams,
         collectionName: 'notes',
-        notesWorkspaceId: note.workspaceId,
+        notesWorkspaceId: note.notesWorkspaceId,
         updatedAtUtc: note.updatedAtUtc || new Date(),
     } as IGlobalSearch;
 };
@@ -318,15 +317,19 @@ const getInsertObjectFromLifeEvent = (lifeEvent: any): IGlobalSearch => {
     
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
+
+    let isDiary = false;
+    if (lifeEvent.title && /(Daily|Weekly|Monthly) Summary by AI/i.test(lifeEvent.title)) {
+        isDiary = true;
+    }
     
     return {
         entityId: lifeEvent._id,
-        entityType: 'lifeEvent',
         username: lifeEvent.username,
         text: searchableText,
         ngram: ngrams,
         collectionName: 'lifeEvents',
-        lifeEventIsDiary: lifeEvent.isDiary,
+        lifeEventIsDiary: isDiary,
         updatedAtUtc: lifeEvent.updatedAtUtc || new Date(),
     } as IGlobalSearch;
 };
@@ -347,7 +350,6 @@ const getInsertObjectFromInfoVault = (infoVault: any): IGlobalSearch => {
     
     return {
         entityId: infoVault._id,
-        entityType: 'infoVault',
         username: infoVault.username,
         text: searchableText,
         ngram: ngrams,
@@ -370,7 +372,6 @@ const getInsertObjectFromChatLlmThread = (chatLlmThread: any): IGlobalSearch => 
     
     return {
         entityId: chatLlmThread._id,
-        entityType: 'chatLlmThread',
         username: chatLlmThread.username,
         text: searchableText,
         ngram: ngrams,
@@ -387,7 +388,7 @@ export const reindexDocument = async ({
     reindexDocumentArr, 
     username, 
 }: { 
-    reindexDocumentArr: Array<{ entityType: string; documentId: string }>; 
+    reindexDocumentArr: Array<{ collectionName: string; documentId: string }>; 
     username: string;
 }): Promise<void> => {
     try {
@@ -445,20 +446,19 @@ export const reindexDocument = async ({
 
         // insert new records
         if (insertRecords.length > 0) {
-            await ModelGlobalSearch.insertMany(insertRecords);
+            await ModelGlobalSearch.insertMany(insertRecords, { ordered: false });
         }
         
-
     } catch (error) {
         console.error('Error reindexing documents:', error);
     }
 };
 
 // Reindex parent entities when comments change
-export const reindexComments = async ({ entities, username }: { entities: Array<{ entityId: string; entityType: string }>; username: string }): Promise<void> => {
+export const reindexComments = async ({ entities, username }: { entities: Array<{ entityId: string; collectionName: string }>; username: string }): Promise<void> => {
     try {
-        const reindexDocumentArr = entities.map(({ entityId, entityType }) => ({
-            entityType,
+        const reindexDocumentArr = entities.map(({ entityId, collectionName }) => ({
+            collectionName,
             documentId: entityId,
         }));
         await reindexDocument({ reindexDocumentArr, username });
@@ -474,7 +474,7 @@ export const reindexAll = async ({ username }: { username: string }): Promise<vo
         await ModelGlobalSearch.deleteMany({ username: username });
 
         // Get all document IDs for each entity type using aggregation
-        const [tasks, notes, lifeEvents, infoVaultSignificantDates, chatLlmThreads] = await Promise.all([
+        const [tasks, notes, lifeEvents, infoVault, chatLlmThreads] = await Promise.all([
             ModelTask.aggregate([
                 { $match: { username } },
                 { $project: { _id: 1 } }
@@ -498,27 +498,29 @@ export const reindexAll = async ({ username }: { username: string }): Promise<vo
         ]);
 
         // Build reindex document array
-        const reindexDocumentArr: Array<{ entityType: string; documentId: string }> = [];
+        const reindexDocumentArr: Array<{ collectionName: string; documentId: string }> = [];
 
         tasks.forEach(task => {
-            reindexDocumentArr.push({ entityType: 'task', documentId: task._id.toString() });
+            reindexDocumentArr.push({ collectionName: 'tasks', documentId: task._id.toString() });
         });
 
         notes.forEach(note => {
-            reindexDocumentArr.push({ entityType: 'note', documentId: note._id.toString() });
+            reindexDocumentArr.push({ collectionName: 'notes', documentId: note._id.toString() });
         });
 
         lifeEvents.forEach(lifeEvent => {
-            reindexDocumentArr.push({ entityType: 'lifeEvent', documentId: lifeEvent._id.toString() });
+            reindexDocumentArr.push({ collectionName: 'lifeEvents', documentId: lifeEvent._id.toString() });
         });
 
-        infoVaultSignificantDates.forEach(infoVault => {
-            reindexDocumentArr.push({ entityType: 'infoVault', documentId: infoVault._id.toString() });
+        infoVault.forEach(infoVault => {
+            reindexDocumentArr.push({ collectionName: 'infoVault', documentId: infoVault._id.toString() });
         });
 
         chatLlmThreads.forEach(thread => {
-            reindexDocumentArr.push({ entityType: 'chatLlmThread', documentId: thread._id.toString() });
+            reindexDocumentArr.push({ collectionName: 'chatLlmThread', documentId: thread._id.toString() });
         });
+
+        console.log('Info vault length: ', infoVault.length);
 
         console.log(`Total documents to reindex: ${reindexDocumentArr.length}`);
 
