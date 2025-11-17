@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import { IGlobalSearch } from '../../types/typesSchema/typesGlobalSearch/SchemaGlobalSearch.types';
 import { ModelGlobalSearch } from '../../schema/schemaGlobalSearch/SchemaGlobalSearch.schema';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
 
 import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import { ModelNotes } from '../../schema/schemaNotes/SchemaNotes.schema';
@@ -87,6 +88,14 @@ const getDocuments = async ({ reindexDocumentArr, username }: {
                 },
                 {
                     $lookup: {
+                        from: 'taskWorkspace',
+                        localField: 'taskWorkspaceId',
+                        foreignField: '_id',
+                        as: 'taskWorkspace',
+                    }
+                },
+                {
+                    $lookup: {
                         from: 'commentCommon',
                         let: { entityId: '$_id' },
                         pipeline: [
@@ -114,6 +123,14 @@ const getDocuments = async ({ reindexDocumentArr, username }: {
                     $match: {
                         _id: { $in: noteIds },
                         username: username,
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'notesWorkspace',
+                        localField: 'notesWorkspaceId',
+                        foreignField: '_id',
+                        as: 'notesWorkspace',
                     }
                 },
                 {
@@ -262,10 +279,20 @@ const getInsertObjectFromTask = (task: any): IGlobalSearch => {
     if (Array.isArray(task.labelsAi)) {
         textParts.push(...task.labelsAi.map((label: string) => label.toLowerCase()));
     }
-    
+
+    // task workspace
+    if (Array.isArray(task.taskWorkspace) && task.taskWorkspace.length > 0) {
+        let taskWorkspaceObj = task.taskWorkspace[0];
+        if (taskWorkspaceObj) {
+            if (typeof taskWorkspaceObj?.title === 'string') {
+                textParts.push(taskWorkspaceObj.title.toLowerCase());
+            }
+        }
+    }
+
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
-    
+
     return {
         entityId: task._id,
         username: task.username,
@@ -282,17 +309,37 @@ const getInsertObjectFromTask = (task: any): IGlobalSearch => {
 const getInsertObjectFromNote = (note: any): IGlobalSearch => {
     const textParts: string[] = [];
     if (note.title) textParts.push(note.title.toLowerCase());
-    if (note.content) textParts.push(note.content.toLowerCase());
+    if (note.description){
+        const markdownContent = NodeHtmlMarkdown.translate(note.description);
+        textParts.push(markdownContent.toLowerCase());
+    };
+    if (note.aiSummary) textParts.push(note.aiSummary.toLowerCase());
+    if(note.isStar) {
+        if(typeof note.isStar === 'boolean') {
+            textParts.push('star');
+            textParts.push('important');
+        }
+    }
     if (Array.isArray(note.tags)) {
         textParts.push(...note.tags.map((tag: string) => tag.toLowerCase()));
     }
-    if (Array.isArray(note.tagsAi)) {
-        textParts.push(...note.tagsAi.map((tag: string) => tag.toLowerCase()));
+    if (Array.isArray(note.aiTags)) {
+        textParts.push(...note.aiTags.map((tag: string) => tag.toLowerCase()));
     }
-    
+
+    // notes workspace
+    if (Array.isArray(note.notesWorkspace) && note.notesWorkspace.length > 0) {
+        let notesWorkspaceObj = note.notesWorkspace[0];
+        if (notesWorkspaceObj) {
+            if (typeof notesWorkspaceObj?.title === 'string') {
+                textParts.push(notesWorkspaceObj?.title?.toLowerCase());
+            }
+        }
+    }
+
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
-    
+
     return {
         entityId: note._id,
         username: note.username,
@@ -308,13 +355,33 @@ const getInsertObjectFromLifeEvent = (lifeEvent: any): IGlobalSearch => {
     const textParts: string[] = [];
     if (lifeEvent.title) textParts.push(lifeEvent.title.toLowerCase());
     if (lifeEvent.description) textParts.push(lifeEvent.description.toLowerCase());
+    if (lifeEvent.aiSummary) textParts.push(lifeEvent.aiSummary.toLowerCase());
+
+    if(lifeEvent.isStar) {
+        if(typeof lifeEvent.isStar === 'boolean') {
+            textParts.push('star');
+            textParts.push('important');
+        }
+    }
+
+    if(lifeEvent.eventImpact !== 'very-low') {
+        textParts.push(lifeEvent.eventImpact.toLowerCase());
+    }
+
+    if (lifeEvent.aiCategory) {
+        textParts.push(lifeEvent.aiCategory.toLowerCase());
+    }
+    if (lifeEvent.aiSubCategory) {
+        textParts.push(lifeEvent.aiSubCategory.toLowerCase());
+    }
+
     if (Array.isArray(lifeEvent.tags)) {
         textParts.push(...lifeEvent.tags.map((tag: string) => tag.toLowerCase()));
     }
-    if (Array.isArray(lifeEvent.tagsAi)) {
-        textParts.push(...lifeEvent.tagsAi.map((tag: string) => tag.toLowerCase()));
+    if (Array.isArray(lifeEvent.aiTags)) {
+        textParts.push(...lifeEvent.aiTags.map((tag: string) => tag.toLowerCase()));
     }
-    
+
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
@@ -322,7 +389,7 @@ const getInsertObjectFromLifeEvent = (lifeEvent: any): IGlobalSearch => {
     if (lifeEvent.title && /(Daily|Weekly|Monthly) Summary by AI/i.test(lifeEvent.title)) {
         isDiary = true;
     }
-    
+
     return {
         entityId: lifeEvent._id,
         username: lifeEvent.username,
@@ -344,10 +411,10 @@ const getInsertObjectFromInfoVault = (infoVault: any): IGlobalSearch => {
     if (Array.isArray(infoVault.tagsAi)) {
         textParts.push(...infoVault.tagsAi.map((tag: string) => tag.toLowerCase()));
     }
-    
+
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
-    
+
     return {
         entityId: infoVault._id,
         username: infoVault.username,
@@ -366,10 +433,10 @@ const getInsertObjectFromChatLlmThread = (chatLlmThread: any): IGlobalSearch => 
     }
     if (chatLlmThread.aiSummary) textParts.push(chatLlmThread.aiSummary.toLowerCase());
     if (chatLlmThread.systemPrompt) textParts.push(chatLlmThread.systemPrompt.toLowerCase());
-    
+
     const searchableText = textParts.join(' ');
     const ngrams = textParts.flatMap(text => generateNgrams({ text }));
-    
+
     return {
         entityId: chatLlmThread._id,
         username: chatLlmThread.username,
@@ -384,11 +451,11 @@ const getInsertObjectFromChatLlmThread = (chatLlmThread: any): IGlobalSearch => 
 
 
 // Reindex documents
-export const reindexDocument = async ({ 
-    reindexDocumentArr, 
-    username, 
-}: { 
-    reindexDocumentArr: Array<{ collectionName: string; documentId: string }>; 
+export const reindexDocument = async ({
+    reindexDocumentArr,
+    username,
+}: {
+    reindexDocumentArr: Array<{ collectionName: string; documentId: string }>;
     username: string;
 }): Promise<void> => {
     try {
@@ -400,7 +467,7 @@ export const reindexDocument = async ({
 
         // delete old records
         const deleteIds: mongoose.Types.ObjectId[] = [];
-        
+
         for (const doc of reindexDocumentArr) {
             const entityIdObj = getMongodbObjectOrNull(doc.documentId);
             if (!entityIdObj) {
@@ -448,7 +515,6 @@ export const reindexDocument = async ({
         if (insertRecords.length > 0) {
             await ModelGlobalSearch.insertMany(insertRecords, { ordered: false });
         }
-        
     } catch (error) {
         console.error('Error reindexing documents:', error);
     }

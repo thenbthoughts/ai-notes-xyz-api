@@ -587,10 +587,6 @@ router.post(
             const countResult = await ModelRecordEmptyTable.aggregate(pipelineCount);
             const totalCount = countResult.length > 0 ? (countResult[0]?.count || 0) : 0;
 
-            console.log('resultDocs', JSON.stringify(pipelineDocument));
-            console.log('countResult', JSON.stringify(pipelineCount));
-            console.log('totalCount', totalCount);
-
             // Process results and extract first element from arrays
             const resultDocsFiltered = resultDocs.map((doc) => {
                 return {
