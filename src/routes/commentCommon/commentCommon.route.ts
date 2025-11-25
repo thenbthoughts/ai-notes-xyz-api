@@ -5,6 +5,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
+import { reindexComments } from '../../utils/search/reindexGlobalSearch';
 
 // Router
 const router = Router();
@@ -67,6 +68,12 @@ router.post(
                 ...actionDatetimeObj,
             });
 
+            // reindex parent entity when comment is added
+            await reindexComments({
+                entities: [{ entityId: entityId, collectionName: commentType }],
+                username: username,
+            });
+
             return res.status(201).json(newComment);
         } catch (error) {
             console.error(error);
@@ -113,6 +120,12 @@ router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res
         if (!deletedComment) {
             return res.status(404).json({ message: 'Comment Common not found' });
         }
+
+        // reindex parent entity when comment is deleted
+        await reindexComments({
+            entities: [{ entityId: deletedComment.entityId.toString(), collectionName: deletedComment.commentType }],
+            username,
+        });
 
         return res.json({ message: 'Comment Common deleted successfully' });
     } catch (error) {

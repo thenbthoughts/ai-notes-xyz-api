@@ -1,744 +1,221 @@
-import mongoose, { PipelineStage } from 'mongoose';
+import mongoose, { PipelineStage, FilterQuery } from 'mongoose';
 import { Router, Request, Response } from 'express';
 import { NodeHtmlMarkdown } from "node-html-markdown";
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
+import { generateNgrams, reindexAll } from '../../utils/search/reindexGlobalSearch';
+import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 
 // Router
 const router = Router();
 
-const getSearchResultFromTasks = ({
+const getUnionPipeline = ({
     username,
-    searchQuery,
-
-    // filter -> task
+    collectionName,
     filterTaskIsCompleted,
     filterTaskIsArchived,
     filterTaskWorkspaceIds,
-}: {
-    username: string;
-    searchQuery: string;
-
-    // filter -> task
-    filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
-    filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
-    filterTaskWorkspaceIds: string[];
-}) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    if (filterTaskIsCompleted === 'completed') {
-        matchConditions.isCompleted = true;
-    } else if (filterTaskIsCompleted === 'not-completed') {
-        matchConditions.isCompleted = false;
-    }
-    if (filterTaskIsArchived === 'archived') {
-        matchConditions.isArchived = true;
-    } else if (filterTaskIsArchived === 'not-archived') {
-        matchConditions.isArchived = false;
-    }
-    let filterTaskWorkspaceIdsObj = [];
-    for (let i = 0; i < filterTaskWorkspaceIds.length; i++) {
-        const elementStr = filterTaskWorkspaceIds[i];
-        filterTaskWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
-    }
-    if (filterTaskWorkspaceIdsObj.length > 0) {
-        matchConditions.taskWorkspaceId = { $in: filterTaskWorkspaceIdsObj };
-    }
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        // stage -> lookup -> comments
-        const lookupMatchCommentsAnd = [];
-        for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
-            const elementStr = searchQueryArr[iLookup];
-            lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
-        }
-        tempStage = {
-            $lookup: {
-                from: 'commentsCommon',
-                let: { taskId: '$_id' },
-                pipeline: [
-                    {
-                        $match: {
-                            $expr: {
-                                $eq: ['$entityId', '$$taskId']
-                            },
-                            $or: [
-                                ...lookupMatchCommentsAnd,
-                            ],
-                        }
-                    }
-                ],
-                as: 'commentSearch',
-            }
-        };
-        stateDocument.push(tempStage);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // tasks
-                    { title: { $regex: elementStr, $options: 'i' } },
-                    { description: { $regex: elementStr, $options: 'i' } },
-                    { priority: { $regex: elementStr, $options: 'i' } },
-                    { labels: { $regex: elementStr, $options: 'i' } },
-                    { labelsAi: { $regex: elementStr, $options: 'i' } },
-
-                    // comment search
-                    { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
-                ]
-            });
-        }
-
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
-                ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset commentSearch
-        tempStage = {
-            $unset: [
-                'commentSearch',
-            ],
-        };
-        stateDocument.push(tempStage);
-    }
-
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'tasks',
-        }
-    };
-    stateDocument.push(tempStage);
-
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            taskInfo: "$$ROOT"
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
-}
-
-const getSearchResultFromLifeEvents = ({
-    username,
-    searchQuery,
+    filterNotesWorkspaceIds,
     filterLifeEventSearchDiary,
 }: {
     username: string;
-    searchQuery: string;
+    collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
+    filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
+    filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
+    filterTaskWorkspaceIds: string[];
+    filterNotesWorkspaceIds: string[];
     filterLifeEventSearchDiary: boolean;
 }) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    if (filterLifeEventSearchDiary === false) {
-        matchConditions.title = {
-            $not: {
-                $regex: '(Daily|Weekly|Monthly) Summary by AI',
-                $options: 'i',
+    if (collectionName === 'tasks') {
+        let tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
+            taskIsCompleted?: boolean;
+            taskIsArchived?: boolean;
+            taskWorkspaceId?: {
+                $in: mongoose.Types.ObjectId[];
             }
         };
-    }
-
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        // stage -> lookup -> comments
-        const lookupMatchCommentsAnd = [];
-        for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
-            const elementStr = searchQueryArr[iLookup];
-            lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
+        if (filterTaskIsCompleted === 'completed') {
+            tempStage.taskIsCompleted = true;
+        } else if (filterTaskIsCompleted === 'not-completed') {
+            tempStage.taskIsCompleted = false;
         }
-        tempStage = {
-            $lookup: {
-                from: 'commentsCommon',
-                let: { lifeEventId: '$_id' },
+        if (filterTaskIsArchived === 'archived') {
+            tempStage.taskIsArchived = true;
+        } else if (filterTaskIsArchived === 'not-archived') {
+            tempStage.taskIsArchived = false;
+        }
+        if (filterTaskWorkspaceIds.length > 0) {
+            let tempTaskWorkspaceIds = [];
+            for (let i = 0; i < filterTaskWorkspaceIds.length; i++) {
+                const elementStr = filterTaskWorkspaceIds[i];
+                let tempWorkspaceId = getMongodbObjectOrNull(elementStr);
+                if (tempWorkspaceId !== null) {
+                    tempTaskWorkspaceIds.push(tempWorkspaceId as mongoose.Types.ObjectId);
+                }
+            }
+            if (tempTaskWorkspaceIds.length > 0) {
+                tempStage.taskWorkspaceId = { $in: tempTaskWorkspaceIds };
+            }
+        }
+
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $eq: ['$entityId', '$$lifeEventId']
-                            },
-                            $or: [
-                                ...lookupMatchCommentsAnd,
-                            ],
+                            ...tempStage
                         }
-                    }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
                 ],
-                as: 'commentSearch',
+            }
+        }
+    }
+
+    if (collectionName === 'notes') {
+        let tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
+            notesWorkspaceId?: {
+                $in: mongoose.Types.ObjectId[];
             }
         };
-        stateDocument.push(tempStage);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // life events
-                    { title: { $regex: elementStr, $options: 'i' } },
-                    { description: { $regex: elementStr, $options: 'i' } },
-                    { tags: { $regex: elementStr, $options: 'i' } },
-                    { aiSummary: { $regex: elementStr, $options: 'i' } },
-                    { aiTags: { $regex: elementStr, $options: 'i' } },
-                    { aiSuggestions: { $regex: elementStr, $options: 'i' } },
-                    { aiCategory: { $regex: elementStr, $options: 'i' } },
-                    { aiSubCategory: { $regex: elementStr, $options: 'i' } },
-
-                    // comment search
-                    { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
-                ]
-            });
+        if (filterNotesWorkspaceIds.length > 0) {
+            let tempNotesWorkspaceIds = [];
+            for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
+                const elementStr = filterNotesWorkspaceIds[i];
+                let tempWorkspaceId = getMongodbObjectOrNull(elementStr);
+                if (tempWorkspaceId !== null) {
+                    tempNotesWorkspaceIds.push(tempWorkspaceId as mongoose.Types.ObjectId);
+                }
+            }
+            if (tempNotesWorkspaceIds.length > 0) {
+                tempStage.notesWorkspaceId = { $in: tempNotesWorkspaceIds };
+            }
         }
 
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
-                ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset commentSearch
-        tempStage = {
-            $unset: [
-                'commentSearch',
-            ],
-        };
-        stateDocument.push(tempStage);
-    }
-
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'lifeEvents',
-        }
-    };
-    stateDocument.push(tempStage);
-
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            lifeEventInfo: "$$ROOT"
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
-}
-
-const getSearchResultFromNotes = ({
-    username,
-    searchQuery,
-
-    // filter -> note
-    filterNotesWorkspaceIds,
-}: {
-    username: string;
-    searchQuery: string;
-
-    // filter -> note
-    filterNotesWorkspaceIds: string[];
-}) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    let filterNotesWorkspaceIdsObj = [];
-    for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
-        const elementStr = filterNotesWorkspaceIds[i];
-        filterNotesWorkspaceIdsObj.push(getMongodbObjectOrNull(elementStr));
-    }
-    if (filterNotesWorkspaceIdsObj.length > 0) {
-        matchConditions.notesWorkspaceId = { $in: filterNotesWorkspaceIdsObj } as any;
-    }
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        // stage -> lookup -> comments
-        const lookupMatchCommentsAnd = [];
-        for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
-            const elementStr = searchQueryArr[iLookup];
-            lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
-        }
-        tempStage = {
-            $lookup: {
-                from: 'commentsCommon',
-                let: { noteId: '$_id' },
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $eq: ['$entityId', '$$noteId']
-                            },
-                            $or: [
-                                ...lookupMatchCommentsAnd,
-                            ],
+                            ...tempStage
                         }
-                    }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
                 ],
-                as: 'commentSearch',
             }
-        };
-        stateDocument.push(tempStage);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // notes
-                    { title: { $regex: elementStr, $options: 'i' } },
-                    { description: { $regex: elementStr, $options: 'i' } },
-                    { aiSummary: { $regex: elementStr, $options: 'i' } },
-                    { aiTags: { $regex: elementStr, $options: 'i' } },
-                    { aiSuggestions: { $regex: elementStr, $options: 'i' } },
-
-                    // comment search
-                    { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
-                ]
-            })
         }
-
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
-                ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset commentSearch
-        tempStage = {
-            $unset: [
-                'commentSearch',
-            ],
-        };
-        stateDocument.push(tempStage);
     }
 
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'notes',
+    if (collectionName === 'lifeEvents') {
+        let tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
+            lifeEventIsDiary?: boolean;
+        };
+        if (filterLifeEventSearchDiary === true) {
+            // true and false
+        } else if (filterLifeEventSearchDiary === false) {
+            tempStage.lifeEventIsDiary = false;
         }
-    };
-    stateDocument.push(tempStage);
 
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            notesInfo: "$$ROOT"
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
-}
-
-const getSearchResultFromInfoVaultSignificantDate = ({
-    username,
-    searchQuery,
-}: {
-    username: string;
-    searchQuery: string;
-}) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        // stage -> lookup -> comments
-        const lookupMatchCommentsAnd = [];
-        for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
-            const elementStr = searchQueryArr[iLookup];
-            lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
-        }
-        tempStage = {
-            $lookup: {
-                from: 'commentsCommon',
-                let: { infoVaultId: '$_id' },
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $eq: ['$entityId', '$$infoVaultId']
-                            },
-                            $or: [
-                                ...lookupMatchCommentsAnd,
-                            ],
+                            ...tempStage
                         }
-                    }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
                 ],
-                as: 'commentSearch',
             }
-        };
-        stateDocument.push(tempStage);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // info vault
-                    { title: { $regex: elementStr, $options: 'i' } },
-                    { description: { $regex: elementStr, $options: 'i' } },
-                    { tags: { $regex: elementStr, $options: 'i' } },
-                    { name: { $regex: elementStr, $options: 'i' } },
-                    { nickname: { $regex: elementStr, $options: 'i' } },
-                    { company: { $regex: elementStr, $options: 'i' } },
-                    { jobTitle: { $regex: elementStr, $options: 'i' } },
-                    { department: { $regex: elementStr, $options: 'i' } },
-                    { notes: { $regex: elementStr, $options: 'i' } },
-                    { aiSummary: { $regex: elementStr, $options: 'i' } },
-                    { aiTags: { $regex: elementStr, $options: 'i' } },
-                    { aiSuggestions: { $regex: elementStr, $options: 'i' } },
-
-                    // comment search
-                    { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
-                ]
-            });
         }
-
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
-                ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset commentSearch
-        tempStage = {
-            $unset: [
-                'commentSearch',
-            ],
-        };
-        stateDocument.push(tempStage);
     }
 
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'infoVaultSignificantDate',
-        }
-    };
-    stateDocument.push(tempStage);
-
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            infoVaultSignificantDate: "$$ROOT"
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
-}
-
-const getSearchResultFromInfoVaultSignificantDateRepeat = ({
-    username,
-    searchQuery,
-}: {
-    username: string;
-    searchQuery: string;
-}) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        // stage -> lookup -> comments
-        const lookupMatchCommentsAnd = [];
-        for (let iLookup = 0; iLookup < searchQueryArr.length; iLookup++) {
-            const elementStr = searchQueryArr[iLookup];
-            lookupMatchCommentsAnd.push({ commentText: { $regex: elementStr, $options: 'i' } });
-        }
-        tempStage = {
-            $lookup: {
-                from: 'commentsCommon',
-                let: { infoVaultId: '$_id' },
+    if (collectionName === 'infoVault') {
+        let tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
+        };
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $eq: ['$entityId', '$$infoVaultId']
-                            },
-                            $or: [
-                                ...lookupMatchCommentsAnd,
-                            ],
+                            ...tempStage
                         }
-                    }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
                 ],
-                as: 'commentSearch',
             }
-        };
-        stateDocument.push(tempStage);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // info vault
-                    { title: { $regex: elementStr, $options: 'i' } },
-                    { description: { $regex: elementStr, $options: 'i' } },
-                    { tags: { $regex: elementStr, $options: 'i' } },
-                    { name: { $regex: elementStr, $options: 'i' } },
-                    { nickname: { $regex: elementStr, $options: 'i' } },
-                    { company: { $regex: elementStr, $options: 'i' } },
-                    { jobTitle: { $regex: elementStr, $options: 'i' } },
-                    { department: { $regex: elementStr, $options: 'i' } },
-                    { notes: { $regex: elementStr, $options: 'i' } },
-                    { aiSummary: { $regex: elementStr, $options: 'i' } },
-                    { aiTags: { $regex: elementStr, $options: 'i' } },
-                    { aiSuggestions: { $regex: elementStr, $options: 'i' } },
-
-                    // comment search
-                    { 'commentSearch.commentText': { $regex: elementStr, $options: 'i' } },
-                ]
-            });
         }
-
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
-                ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset commentSearch
-        tempStage = {
-            $unset: [
-                'commentSearch',
-            ],
-        };
-        stateDocument.push(tempStage);
     }
 
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'infoVaultSignificantDateRepeat',
-        }
-    };
-    stateDocument.push(tempStage);
-
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            infoVaultSignificantDateRepeat: "$$ROOT",
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
-}
-
-const getSearchResultFromChatLlm = ({
-    username,
-    searchQuery,
-}: {
-    username: string;
-    searchQuery: string;
-}) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unset;
-
-    let tempStage = {} as PipelineStageCustom;
-    const stateDocument = [] as PipelineStageCustom[];
-
-    // stateDocument -> match
-    const matchConditions: any = {
-        username: username,
-    };
-    tempStage = {
-        $match: matchConditions
-    };
-    stateDocument.push(tempStage);
-
-    // stage -> search
-    if (searchQuery && searchQuery.length >= 1) {
-        // lookup -> chatLlm
-        tempStage = {
-            $lookup: {
-                from: 'chatLlm',
-                localField: '_id',
-                foreignField: 'threadId',
-                as: 'chatLlm',
-            }
+    if (collectionName === 'chatLlmThread') {
+        let tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
         };
-        stateDocument.push(tempStage);
-
-        let searchQueryArr = searchQuery
-            .replace('-', ' ')
-            .split(' ')
-            .filter(str => str.length > 0);
-
-        const matchAnd = [];
-        for (let index = 0; index < searchQueryArr.length; index++) {
-            const elementStr = searchQueryArr[index];
-            matchAnd.push({
-                $or: [
-                    // chat llm thread
-                    { threadTitle: { $regex: elementStr, $options: 'i' } },
-                    { tagsAi: { $regex: elementStr, $options: 'i' } },
-                    { aiSummary: { $regex: elementStr, $options: 'i' } },
-                    { systemPrompt: { $regex: elementStr, $options: 'i' } },
-
-                    // chat llm messages
-                    { 'chatLlm.content': { $regex: elementStr, $options: 'i' } },
-                    { 'chatLlm.fileContentAi': { $regex: elementStr, $options: 'i' } },
-                ]
-            });
-        }
-
-        tempStage = {
-            $match: {
-                $and: [
-                    ...matchAnd,
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
+                pipeline: [
+                    {
+                        $match: {
+                            ...tempStage
+                        }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
                 ],
-            },
-        };
-        stateDocument.push(tempStage);
-
-        // stage -> unset chatLlm
-        tempStage = {
-            $unset: [
-                'chatLlm',
-            ],
-        };
-        stateDocument.push(tempStage);
+            }
+        }
     }
 
-    // stateDocument -> addFields -> fromCollection
-    tempStage = {
-        $addFields: {
-            fromCollection: 'chatLlmThread',
-        }
-    };
-    stateDocument.push(tempStage);
-
-    // stateDocument -> project
-    tempStage = {
-        $project: {
-            _id: 1,
-            fromCollection: 1,
-            updatedAtUtcSort: '$updatedAtUtc',
-            chatLlmThreadInfo: "$$ROOT",
-        }
-    };
-    stateDocument.push(tempStage);
-
-    return stateDocument;
+    return null;
 }
 
 // Get Search Result API
@@ -832,144 +309,300 @@ router.post(
                 searchQuery = req.body.search as string;
             }
 
+            // Build aggregation pipeline
             let tempStage = {} as PipelineStage;
-            const stageDocument = [] as PipelineStage[];
-            const stageCount = [] as PipelineStage[];
+            const pipelineDocument: PipelineStage[] = [];
+            const pipelineCount: PipelineStage[] = [];
 
-            // stateDocument -> unionWith
+            // union pipeline -> task
             if (filterEventTypeTasks) {
-                tempStage = {
-                    $unionWith: {
-                        coll: 'tasks',
-                        pipeline: getSearchResultFromTasks({
-                            username: res.locals.auth_username,
-                            searchQuery,
-
-                            // filter -> task
-                            filterTaskIsCompleted,
-                            filterTaskIsArchived,
-                            filterTaskWorkspaceIds,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'tasks',
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
             }
 
-            if (filterEventTypeLifeEvents) {
-                // stateDocument -> unionWith
-                tempStage = {
-                    $unionWith: {
-                        coll: 'lifeEvents',
-                        pipeline: getSearchResultFromLifeEvents({
-                            username: res.locals.auth_username,
-                            searchQuery,
-
-                            // filter -> life event
-                            filterLifeEventSearchDiary,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
-            }
-
+            // union pipeline -> note
             if (filterEventTypeNotes) {
-                // stateDocument -> unionWith
-                tempStage = {
-                    $unionWith: {
-                        coll: 'notes',
-                        pipeline: getSearchResultFromNotes({
-                            username: res.locals.auth_username,
-                            searchQuery,
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'notes',
 
-                            // filter -> note
-                            filterNotesWorkspaceIds,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
+                    // filter
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
             }
 
-            // stateDocument -> unionWith
+            // union pipeline -> lifeEvent
+            if (filterEventTypeLifeEvents) {
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'lifeEvents',
+
+                    // filter
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
+            }
+
+            // union pipeline -> infoVault
             if (filterEventTypeInfoVault) {
-                tempStage = {
-                    $unionWith: {
-                        coll: 'infoVaultSignificantDate',
-                        pipeline: getSearchResultFromInfoVaultSignificantDate({
-                            username: res.locals.auth_username,
-                            searchQuery,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'infoVault',
+
+                    // filter
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
             }
 
-            // stateDocument -> unionWith
-            if (filterEventTypeInfoVault) {
-                tempStage = {
-                    $unionWith: {
-                        coll: 'infoVaultSignificantDate',
-                        pipeline: getSearchResultFromInfoVaultSignificantDateRepeat({
-                            username: res.locals.auth_username,
-                            searchQuery,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
-            }
-
-            // stateDocument -> unionWith
+            // union pipeline -> chatLlmThread
             if (filterEventTypeChatLlm) {
-                tempStage = {
-                    $unionWith: {
-                        coll: 'chatLlmThread',
-                        pipeline: getSearchResultFromChatLlm({
-                            username: res.locals.auth_username,
-                            searchQuery,
-                        }),
-                    }
-                };
-                stageDocument.push(tempStage);
-                stageCount.push(tempStage);
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'chatLlmThread',
+
+                    // filter
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
             }
 
-            // stateDocument -> sort
-            tempStage = {
-                $sort: {
-                    updatedAtUtcSort: -1,
-                },
+            // Build search query conditions
+            let matchConditionsSearch = {
+                username: res.locals.auth_username,
+            } as {
+                username: string;
+                $and?: { text: { $regex: string; $options: string } }[] | undefined;
             };
-            stageDocument.push(tempStage);
-            stageCount.push(tempStage);
+            if (searchQuery && searchQuery.length >= 1) {
+                const searchQueryLower = searchQuery
+                    .toLowerCase()
+                    .trim()
+                    .replace('-', ' ')
+                    .split(' ')
+                    .map(item => item.trim())
+                    .filter(item => item.length >= 1);
+                const searchQueryAndConditions = searchQueryLower.map(item => {
+                    return { text: { $regex: item, $options: 'i' } };
+                });
+                if (searchQueryAndConditions.length > 0) {
+                    matchConditionsSearch.$and = searchQueryAndConditions;
+                    pipelineDocument.push({
+                        $match: matchConditionsSearch
+                    });
+                    pipelineCount.push({
+                        $match: matchConditionsSearch
+                    });
+                }
+            }
 
-            // stateDocument -> skip
+            // Sort stage
             tempStage = {
-                $skip: (page - 1) * perPage,
+                $sort: { updatedAtUtc: -1 }
             };
-            stageDocument.push(tempStage);
+            pipelineDocument.push(tempStage);
+            pipelineCount.push(tempStage);
 
-            // stateDocument -> limit
+            // Pagination
             tempStage = {
-                $limit: perPage,
+                $skip: (page - 1) * perPage
             };
-            stageDocument.push(tempStage);
+            pipelineDocument.push(tempStage);
+            tempStage = {
+                $limit: perPage
+            };
+            pipelineDocument.push(tempStage);
 
-            // stageCount -> count
-            stageCount.push({
-                $count: 'count',
+            // Lookup based on entity type
+            tempStage = {
+                $lookup: {
+                    from: 'tasks',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'taskDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            tempStage = {
+                $lookup: {
+                    from: 'notes',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'noteDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            tempStage = {
+                $lookup: {
+                    from: 'lifeEvents',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'lifeEventDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            tempStage = {
+                $lookup: {
+                    from: 'infoVault',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'infoVaultDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            tempStage = {
+                $lookup: {
+                    from: 'chatLlmThread',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'chatLlmThreadDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            // Filter out documents where lookup didn't find a match
+            tempStage = {
+                $match: {
+                    _id: { $ne: null }
+                }
+            };
+            pipelineDocument.push(tempStage);
+            pipelineCount.push(tempStage);
+
+            // Project to create unified structure
+            tempStage = {
+                $project: {
+                    _id: {
+                        $cond: [
+                            { $eq: ['$entityType', 'task'] },
+                            { $arrayElemAt: ['$taskDoc._id', 0] },
+                            {
+                                $cond: [
+                                    { $eq: ['$entityType', 'note'] },
+                                    { $arrayElemAt: ['$noteDoc._id', 0] },
+                                    {
+                                        $cond: [
+                                            { $eq: ['$entityType', 'lifeEvent'] },
+                                            { $arrayElemAt: ['$lifeEventDoc._id', 0] },
+                                            {
+                                                $cond: [
+                                                    { $eq: ['$entityType', 'infoVault'] },
+                                                    { $arrayElemAt: ['$infoVaultDoc._id', 0] },
+                                                    { $arrayElemAt: ['$chatLlmThreadDoc._id', 0] }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    updatedAtUtcSort: {
+                        $cond: [
+                            { $eq: ['$entityType', 'task'] },
+                            { $arrayElemAt: ['$taskDoc.updatedAtUtc', 0] },
+                            {
+                                $cond: [
+                                    { $eq: ['$entityType', 'note'] },
+                                    { $arrayElemAt: ['$noteDoc.updatedAtUtc', 0] },
+                                    {
+                                        $cond: [
+                                            { $eq: ['$entityType', 'lifeEvent'] },
+                                            { $arrayElemAt: ['$lifeEventDoc.updatedAtUtc', 0] },
+                                            {
+                                                $cond: [
+                                                    { $eq: ['$entityType', 'infoVault'] },
+                                                    { $arrayElemAt: ['$infoVaultDoc.updatedAtUtc', 0] },
+                                                    { $arrayElemAt: ['$chatLlmThreadDoc.updatedAtUtc', 0] }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    taskDoc: 1,
+                    noteDoc: 1,
+                    lifeEventDoc: 1,
+                    infoVaultDoc: 1,
+                    chatLlmThreadDoc: 1,
+                    collectionName: 1,
+                }
+            };
+            pipelineDocument.push(tempStage);
+
+            // Count pipeline
+            tempStage = {
+                $count: 'count'
+            };
+            pipelineCount.push(tempStage);
+
+            // Execute aggregation
+            const resultDocs = await ModelRecordEmptyTable.aggregate(pipelineDocument);
+            const countResult = await ModelRecordEmptyTable.aggregate(pipelineCount);
+            const totalCount = countResult.length > 0 ? (countResult[0]?.count || 0) : 0;
+
+            // Process results and extract first element from arrays
+            const resultDocsFiltered = resultDocs.map((doc) => {
+                return {
+                    ...doc,
+                    taskInfo: doc.taskDoc && doc.taskDoc.length > 0 ? doc.taskDoc[0] : undefined,
+                    notesInfo: doc.noteDoc && doc.noteDoc.length > 0 ? doc.noteDoc[0] : undefined,
+                    lifeEventInfo: doc.lifeEventDoc && doc.lifeEventDoc.length > 0 ? doc.lifeEventDoc[0] : undefined,
+                    infoVaultInfo: doc.infoVaultDoc && doc.infoVaultDoc.length > 0 ? doc.infoVaultDoc[0] : undefined,
+                    chatLlmThreadInfo: doc.chatLlmThreadDoc && doc.chatLlmThreadDoc.length > 0 ? doc.chatLlmThreadDoc[0] : undefined,
+                };
             });
 
-            // pipeline
-            const resultDocs = await ModelRecordEmptyTable.aggregate(stageDocument);
-            const resultCount = await ModelRecordEmptyTable.aggregate(stageCount);
-
-            let resultDocsFinal = resultDocs.map((doc) => {
-                if (doc.fromCollection === 'notes') {
-                    if(doc?.notesInfo && doc?.notesInfo?.description && doc?.notesInfo?.description.length >= 1) {
+            // Process notes description to markdown
+            const resultDocsFinal = resultDocsFiltered.map((doc) => {
+                if (doc.collectionName === 'notes') {
+                    if (doc?.notesInfo && doc?.notesInfo?.description && doc?.notesInfo?.description.length >= 1) {
                         const markdownContent = NodeHtmlMarkdown.translate(doc?.notesInfo?.description);
                         return {
                             ...doc,
@@ -983,17 +616,31 @@ router.post(
                 return doc;
             });
 
-            let totalCount = 0;
-            if (resultCount.length === 1) {
-                if (resultCount[0].count) {
-                    totalCount = resultCount[0].count;
-                }
-            }
-
             return res.json({
                 message: 'Search result retrieved successfully',
                 count: totalCount,
                 docs: resultDocsFinal,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Reindex All API
+router.post(
+    '/reindex-all',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const username = res.locals.auth_username;
+
+            // Start reindexing
+            await reindexAll({ username })
+
+            return res.json({
+                message: 'Reindexing started. This may take a few minutes.',
             });
         } catch (error) {
             console.error(error);
