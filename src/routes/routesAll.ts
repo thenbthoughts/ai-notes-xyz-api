@@ -71,6 +71,9 @@ import routesCommentCommonCrud from './commentCommon/commentCommon.route';
 // search
 import routesSearchCrud from './search/search.route';
 
+// drive
+import routesDrive from './drive/drive.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -151,6 +154,9 @@ router.use('/comment-common/crud', routesCommentCommonCrud);
 
 // routes -> search
 router.use('/search/crud', routesSearchCrud);
+
+// routes -> drive
+router.use('/drive', routesDrive);
 
 /*
 Example:
