@@ -250,6 +250,16 @@ const getCalenderFromTaskSchedule = ({
     };
     stateDocument.push(tempStage);
 
+    // stageDocument -> addFields -> scheduleExecutionTimeArr (limit to first 7 elements)
+    tempStage = {
+        $addFields: {
+            scheduleExecutionTimeArr: {
+                $slice: ['$scheduleExecutionTimeArr', 7]
+            }
+        }
+    };
+    stateDocument.push(tempStage);
+
     // stageDocument -> unwind
     tempStage = {
         $unwind: {
