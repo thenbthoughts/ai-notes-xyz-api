@@ -227,6 +227,77 @@ const getCalenderFromInfoVaultSignificantDateRepeat = ({
     return stateDocument;
 }
 
+const getCalenderFromTaskSchedule = ({
+    username,
+    startDate,
+    endDate,
+}: {
+    username: string;
+    startDate: Date;
+    endDate: Date;
+}) => {
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unwind;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    // stateDocument -> match
+    tempStage = {
+        $match: {
+            username: username,
+            isActive: true,
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stageDocument -> unwind
+    tempStage = {
+        $unwind: {
+            path: '$scheduleExecutionTimeArr',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stageDocument -> addFields -> scheduleExecutionTime
+    tempStage = {
+        $addFields: {
+            scheduleExecutionTime: '$scheduleExecutionTimeArr',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stageDocument -> match
+    tempStage = {
+        $match: {
+            scheduleExecutionTime: {
+                $lte: endDate,
+                $gte: startDate,
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> fromCollection
+    tempStage = {
+        $addFields: {
+            fromCollection: 'taskSchedules',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            taskScheduleInfo: "$$ROOT"
+        }
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+}
+
 // Get CalenderAPI
 router.post(
     '/calenderGet',
@@ -243,6 +314,7 @@ router.post(
             let filterEventTypeLifeEvents = true;
             let filterEventTypeInfoVault = true;
             let filterEventTypeDiary = true;
+            let filterEventTypeTaskSchedule = true;
 
             // set arg -> page
             if (typeof req.body?.page === 'number') {
@@ -272,6 +344,10 @@ router.post(
             // set arg -> filterEventTypeDiary
             if (typeof req.body?.filterEventTypeDiary === 'boolean') {
                 filterEventTypeDiary = req.body.filterEventTypeDiary;
+            }
+            // set arg -> filterEventTypeTaskSchedule
+            if (typeof req.body?.filterEventTypeTaskSchedule === 'boolean') {
+                filterEventTypeTaskSchedule = req.body.filterEventTypeTaskSchedule;
             }
 
             let tempStage = {} as PipelineStage;
@@ -340,6 +416,21 @@ router.post(
                     $unionWith: {
                         coll: 'infoVaultSignificantDate',
                         pipeline: getCalenderFromInfoVaultSignificantDateRepeat({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+            }
+
+            // stateDocument -> unionWith
+            if (filterEventTypeTaskSchedule) {
+                tempStage = {
+                    $unionWith: {
+                        coll: 'taskSchedules',
+                        pipeline: getCalenderFromTaskSchedule({
                             username: res.locals.auth_username,
                             startDate,
                             endDate,
