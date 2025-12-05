@@ -12,7 +12,7 @@ const getMapsLocationInfoVault = ({
 }: {
     username: string;
 }) => {
-    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unwind | PipelineStage.Set;
 
     let tempStage = {} as PipelineStageCustom;
     const stateDocument = [] as PipelineStageCustom[];
@@ -31,7 +31,46 @@ const getMapsLocationInfoVault = ({
             from: 'infoVaultAddress',
             localField: '_id',
             foreignField: 'infoVaultId',
-            as: 'infoVaultAddress',
+            as: 'infoVaultAddressObj',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> unwind -> infoVaultAddressObj
+    tempStage = {
+        $unwind: {
+            path: '$infoVaultAddressObj'
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> infoVaultAddress
+    tempStage = {
+        $addFields: {
+            infoVaultAddress: []
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> set -> infoVaultAddress
+    tempStage = {
+        $set: {
+            infoVaultAddress: {
+                $cond: [
+                    {
+                        $ifNull: [
+                            '$infoVaultAddressObj',
+                            false
+                        ]
+                    },
+                    {
+                        $concatArrays: [
+                            ['$infoVaultAddressObj']
+                        ]
+                    },
+                    []
+                ]
+            }
         }
     };
     stateDocument.push(tempStage);
