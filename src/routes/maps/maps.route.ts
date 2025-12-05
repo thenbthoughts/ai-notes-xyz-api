@@ -111,8 +111,6 @@ const getMapsLocationInfoVault = ({
     };
     stateDocument.push(tempStage);
 
-    console.log(JSON.stringify(stateDocument, null, 2));
-
     return stateDocument;
 }
 
