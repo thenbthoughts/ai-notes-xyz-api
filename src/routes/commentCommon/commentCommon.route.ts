@@ -6,6 +6,7 @@ import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpA
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
 import { reindexComments } from '../../utils/search/reindexGlobalSearch';
+import { deleteFileByPath } from '../upload/uploadFileS3ForFeatures';
 
 // Router
 const router = Router();
@@ -36,7 +37,7 @@ router.post(
             const username = res.locals.auth_username;
 
             // validate comment type
-            if(
+            if (
                 commentType === 'note' ||
                 commentType === 'task' ||
                 commentType === 'lifeEvent' ||
@@ -48,7 +49,7 @@ router.post(
             }
 
             let entityIdObj = getMongodbObjectOrNull(entityId);
-            if(!entityIdObj) {
+            if (!entityIdObj) {
                 return res.status(400).json({ message: 'Invalid entityId.' });
             }
 
@@ -116,6 +117,19 @@ router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res
             _id: mongoose.Types.ObjectId.createFromHexString(id),
             username,
         });
+
+        // delete file from s3
+        if (deletedComment?.fileUrl) {
+            const fileUrlParts = deletedComment.fileUrl.split('/');
+            const fileName = fileUrlParts[fileUrlParts.length - 1];
+            if (fileName) {
+                await deleteFileByPath({
+                    username,
+                    parentEntityId: deletedComment?.entityId?.toString() || '',
+                    fileName: fileName,
+                });
+            }
+        }
 
         if (!deletedComment) {
             return res.status(404).json({ message: 'Comment Common not found' });

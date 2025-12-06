@@ -2,13 +2,16 @@ import { Router, Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import path from 'path';
 import mongoose from 'mongoose';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { PassThrough } from 'stream';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
+import { getApiKeyByObject, tsUserApiKey } from '../../utils/llm/llmCommonFunc';
 import { ModelUserFileUpload } from '../../schema/schemaUser/SchemaUserFileUpload.schema';
 import IUserFileUpload from '../../types/typesSchema/typesUser/SchemaUserFileUpload.types';
+import { deleteFileFromS3 } from '../../utils/drive/s3DeleteFile';
+import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
+import IUserApiKey from '../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 
 // Router
 const router = Router();
@@ -64,21 +67,11 @@ router.get(
     }
 );
 
-// Valid feature types
-const VALID_FEATURE_TYPES = ['chat', 'task', 'notes', 'lifeevent', 'infovault'] as const;
-type FeatureType = typeof VALID_FEATURE_TYPES[number];
-
-// Valid sub-types (same for all features)
-const VALID_SUB_TYPES = ['messages', 'comments'] as const;
-type SubType = typeof VALID_SUB_TYPES[number];
-
 // Helper function to construct file path
 const constructFilePath = (
     username: string,
-    featureType: FeatureType,
     parentEntityId: string,
-    subType: SubType,
-    subEntityId: string,
+    fileName: string,
     fileExtension: string
 ): { filePath: string, success: boolean } => {
     let returnObj = {
@@ -86,44 +79,9 @@ const constructFilePath = (
         filePath: '',
     };
 
-    // Get feature prefix for main record ID and sub-id prefix based on feature type and sub-type
-    let featurePrefix: string = '';
-    let subIdPrefix: string = '';
-
-    if (featureType === 'chat') {
-        featurePrefix = 'chat-thread-';
-        if (subType === 'messages') {
-            subIdPrefix = 'chat-';
-        } else if (subType === 'comments') {
-            subIdPrefix = 'chatcomment-';
-        }
-    } else if (featureType === 'task') {
-        featurePrefix = 'task-';
-        subIdPrefix = 'taskcomment-';
-    } else if (featureType === 'notes') {
-        featurePrefix = 'note-';
-        subIdPrefix = 'notecomments-';
-    } else if (featureType === 'lifeevent') {
-        featurePrefix = 'lifeevent-';
-        subIdPrefix = 'lifeeventcomment-';
-    } else if (featureType === 'infovault') {
-        featurePrefix = 'infovault-';
-        subIdPrefix = 'vaultcomment-';
-    }
-
-    if (featurePrefix === '') {
-        returnObj.success = false;
-        returnObj.filePath = '';
-        return returnObj;
-    }
-    if (subIdPrefix === '') {
-        returnObj.success = false;
-        returnObj.filePath = '';
-        return returnObj;
-    }
-    // Construct: ai-notes-xyz/{username}/{featureType}/{featurePrefix}{parentEntityId}/{subType}/{subIdPrefix}{subEntityId}{extension}
-    // Example: ai-notes-xyz/john123/chat/chat-thread-507f1f77bcf86cd799439011/messages/chat-507f191e810c19729de860ea.pdf
-    returnObj.filePath = `ai-notes-xyz/${username}/${featureType}/${featurePrefix}${parentEntityId}/${subType}/${subIdPrefix}${subEntityId}${fileExtension}`;
+    // Construct: ai-notes-xyz/{username}/features/{parentEntityId}/{fileName}{extension}
+    // Example: ai-notes-xyz/john123/features/507f1f77bcf86cd799439011/myfile.pdf
+    returnObj.filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}${fileExtension}`;
     returnObj.success = true;
     return returnObj;
 };
@@ -153,30 +111,16 @@ router.post(
             }
 
             // Validate request body parameters
-            const { featureType, parentEntityId, subType } = req.body;
+            const { parentEntityId } = req.body;
 
             let fileRecordObj = await ModelUserFileUpload.create({
                 username: username,
                 fileUploadPath: `ai-notes-xyz/${username}/temp/${new Date().valueOf()}.temp`,
             }) as IUserFileUpload;
 
-            if (!featureType || !parentEntityId || !subType) {
+            if (!parentEntityId) {
                 return res.status(400).json({
-                    message: 'Missing required parameters: featureType, parentEntityId, subType, subEntityId'
-                });
-            }
-
-            // Validate feature type
-            if (!VALID_FEATURE_TYPES.includes(featureType as FeatureType)) {
-                return res.status(400).json({
-                    message: `Invalid featureType. Must be one of: ${VALID_FEATURE_TYPES.join(', ')}`
-                });
-            }
-
-            // Validate sub-type
-            if (!VALID_SUB_TYPES.includes(subType as SubType)) {
-                return res.status(400).json({
-                    message: `Invalid subType. Must be one of: ${VALID_SUB_TYPES.join(', ')}`
+                    message: 'Missing required parameters: parentEntityId'
                 });
             }
 
@@ -188,21 +132,18 @@ router.post(
             // Get file extension from original file
             const fileExtension = path.extname(file.name);
 
-            // Construct file path using subEntityId with prefix (not MongoDB _id)
-            // The filename format is: {prefix}{subEntityId}.ext
-            // Example: chat-507f191e810c19729de860ea.pdf
+            // Use the generated MongoDB _id as the filename
+            const fileName = fileRecordObj._id.toString();
+
+            // Construct file path
             const resultConstructFilePath = constructFilePath(
                 username,
-                featureType as FeatureType,
                 parentEntityId,
-                subType as SubType,
-                fileRecordObj._id.toString(),
-                fileExtension
+                fileName,
+                fileExtension,
             );
 
-            if (!resultConstructFilePath.success) {
-                return res.status(400).json({ message: 'Failed to construct file path for the file upload' });
-            }
+            // Use the constructed file path as objectKey
             const objectKey = resultConstructFilePath.filePath;
 
             // Content type
@@ -234,8 +175,7 @@ router.post(
 
             await upload.done();
 
-            // Store file reference in database with the generated MongoDB _id
-            // The _id is used for the database record, but the filename uses subEntityId
+            // Store file reference in database
             const resultInsert = await ModelUserFileUpload.findOneAndUpdate(
                 {
                     _id: fileRecordObj._id,
@@ -261,5 +201,157 @@ router.post(
     }
 );
 
-export default router;
+// Delete File API
+export const deleteFilesByParentEntityId = async ({
+    username,
+    parentEntityId,
+}: {
+    username: string;
+    parentEntityId: string;
+}): Promise<{
+    success: boolean;
+    error: string;
+}> => {
+    try {
+        let userApiKey = await ModelUserApiKey.findOne({ username }) as IUserApiKey;
 
+        if (!userApiKey) {
+            return {
+                success: false,
+                error: 'User API key not found',
+            };
+        }
+
+        let prefix = `ai-notes-xyz/${username}/features/${parentEntityId}/`;
+
+        const s3Client = new S3Client({
+            region: userApiKey.apiKeyS3Region || '',
+            endpoint: userApiKey.apiKeyS3Endpoint || '',
+            credentials: {
+                accessKeyId: userApiKey.apiKeyS3AccessKeyId || '',
+                secretAccessKey: userApiKey.apiKeyS3SecretAccessKey || '',
+            },
+        });
+
+        // Find all files for this parent entity by listing from S3
+        const listCommand = new ListObjectsV2Command({
+            Bucket: userApiKey.apiKeyS3BucketName,
+            Prefix: prefix,
+        });
+
+        const listResponse = await s3Client.send(listCommand) as ListObjectsV2CommandOutput;
+        const s3Objects = listResponse.Contents || [];
+
+        if (s3Objects.length === 0) {
+            return {
+                success: false,
+                error: 'No files found for this entity',
+            };
+        }
+
+        // Get file records from database that match the S3 paths
+        const s3Keys = s3Objects.map(obj => obj.Key).filter(key => key !== undefined);
+        const fileRecords = await ModelUserFileUpload.find({
+            username,
+            fileUploadPath: { $in: s3Keys }
+        });
+
+        // Delete each file from S3 and database
+        const deletePromises = fileRecords.map(async (fileRecord) => {
+            try {
+                // Validate that the file path starts with the expected prefix
+                if (!fileRecord.fileUploadPath.startsWith(prefix)) {
+                    console.error(`File path ${fileRecord.fileUploadPath} does not match expected prefix ${prefix}`);
+                    return;
+                }
+
+                const deleteCommand = new DeleteObjectCommand({
+                    Bucket: userApiKey.apiKeyS3BucketName,
+                    Key: fileRecord.fileUploadPath,
+                });
+                await s3Client.send(deleteCommand);
+
+                // Delete from database
+                await ModelUserFileUpload.deleteOne({ _id: fileRecord._id });
+            } catch (error) {
+                console.error(`Error deleting file ${fileRecord.fileUploadPath}:`, error);
+            }
+        });
+
+        await Promise.all(deletePromises);
+
+        return {
+            success: true,
+            error: '',
+        };
+    } catch (error) {
+        console.error(error);
+        return {
+            success: false,
+            error: error as string || 'Server error',
+        };
+    }
+}
+
+// Delete File by path
+export const deleteFileByPath = async ({
+    username,
+    parentEntityId,
+    fileName,
+}: {
+    username: string;
+    parentEntityId: string;
+    fileName: string;
+}): Promise<{
+    success: boolean;
+    error: string;
+}> => {
+    try {
+        let userApiKey = await ModelUserApiKey.findOne({ username }) as IUserApiKey;
+        
+        if (!userApiKey) {
+            return {
+                success: false,
+                error: 'User API key not found',
+            };
+        }
+
+        // Generate the file path
+        const filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}`;
+
+        // Delete from S3
+        const s3Client = new S3Client({
+            region: userApiKey.apiKeyS3Region || '',
+            endpoint: userApiKey.apiKeyS3Endpoint || '',
+            credentials: {
+                accessKeyId: userApiKey.apiKeyS3AccessKeyId || '',
+                secretAccessKey: userApiKey.apiKeyS3SecretAccessKey || '',
+            },
+        });
+
+        const deleteCommand = new DeleteObjectCommand({
+            Bucket: userApiKey.apiKeyS3BucketName,
+            Key: filePath,
+        });
+        await s3Client.send(deleteCommand);
+
+        // Delete from database
+        await ModelUserFileUpload.deleteOne({
+            username,
+            fileUploadPath: filePath,
+        });
+
+        return {
+            success: true,
+            error: '',
+        };
+    } catch (error) {
+        console.error(error);
+        return {
+            success: false,
+            error: error as string || 'Server error',
+        };
+    }
+}
+
+export default router;
