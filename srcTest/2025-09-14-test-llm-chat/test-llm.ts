@@ -20,7 +20,7 @@ const init = async () => {
 
         // image
         const resultImage = await getFileFromS3R2({
-            fileName: 'userUpload/chat/2025-09-14/1757828973804-114681541.jpeg',
+            fileName: 'ai-notes-xyz/testuser/chat/chat-thread-507f1f77bcf86cd799439011/messages/chat-507f191e810c19729de860ea.jpeg',
             userApiKey: userApiKey,
         })
         const resultImageContent = await resultImage?.Body?.transformToByteArray();
@@ -28,7 +28,7 @@ const init = async () => {
 
         // audio
         const resultAudio = await getFileFromS3R2({
-            fileName: 'userUpload/chat/2025-09-13/1757778983859-928947663.webm',
+            fileName: 'ai-notes-xyz/testuser/chat/chat-thread-507f1f77bcf86cd799439011/messages/chat-507f191e810c19729de860eb.webm',
             userApiKey: userApiKey,
         })
 

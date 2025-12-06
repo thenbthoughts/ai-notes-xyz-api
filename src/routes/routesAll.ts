@@ -47,7 +47,7 @@ import routesLifeEventsCrud from './lifeEvents/lifeEventsCrud/lifeEventsCrud.rou
 import routesLifeEventCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsCategoryCrud.route';
 import routesLifeEventsAiCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEventsAiCategoryCrud.route';
 
-import uploadFileS3 from './upload/uploadFileS3';
+import uploadFileS3ForFeatures from './upload/uploadFileS3ForFeatures';
 
 import apiKeyDefault from './apiKeyDefault/apiKeyDefault.route';
 
@@ -120,7 +120,7 @@ router.use('/life-events/category-crud', routesLifeEventCategoryCrud);
 router.use('/life-events/ai-category-crud', routesLifeEventsAiCategoryCrud);
 
 // uploads
-router.use('/uploads/crudS3', uploadFileS3);
+router.use('/uploads/crudS3', uploadFileS3ForFeatures);
 
 // other
 router.use('/apiKeyDefault/crud', apiKeyDefault);

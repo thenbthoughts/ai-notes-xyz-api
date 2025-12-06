@@ -1,6 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, ObjectId } from 'mongoose';
 
 interface IUserFileUpload extends Document {
+    // _id
+    _id: ObjectId;
+    
     // file uplopd field
     fileUploadPath: string;
 
