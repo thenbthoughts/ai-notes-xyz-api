@@ -86,8 +86,6 @@ const getBase64File = async ({
                 s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
             });
 
-            console.log('resultImage', resultImage);
-
             if (resultImage.success && resultImage.content) {
                 const resultImageContentString = resultImage.content.toString('base64');
                 base64File = `data:image/png;base64,${resultImageContentString}`;
