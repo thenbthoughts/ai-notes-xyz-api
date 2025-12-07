@@ -794,8 +794,6 @@ const getNextMessageFromLast30Conversation = async ({
                 async (token: string) => {
                     fullContent += token;
                     const now = Date.now();
-
-                    console.log('fullContent: ', fullContent);
                     
                     if (now - lastUpdateTime >= UPDATE_INTERVAL_MS) {
                         // Update DB every 1 second

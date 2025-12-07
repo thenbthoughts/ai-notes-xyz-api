@@ -23,7 +23,9 @@ const fetchLlmGroqAudio = async ({
 
         let data = new FormData();
         data.append('model', 'whisper-large-v3');
-        data.append('file', audioArrayBuffer, 'a.wav');
+        // Convert ArrayBuffer to Buffer for FormData
+        const audioBuffer = Buffer.from(audioArrayBuffer);
+        data.append('file', audioBuffer, 'a.wav');
         data.append('response_format', 'verbose_json');
 
         const config: AxiosRequestConfig = {
@@ -124,6 +126,7 @@ const getTextFromAudioByUrlAndUsername = async ({
 
         let contentAudioToText = '';
         if (userApiKeyObj.apiKeyGroqValid === true) {
+            console.log('fetching audio to text from groq');
             contentAudioToText = await fetchLlmGroqAudio({
                 audioArrayBuffer: audioBufferT,
 
