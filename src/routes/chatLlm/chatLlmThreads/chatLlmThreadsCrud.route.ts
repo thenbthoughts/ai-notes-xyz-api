@@ -10,6 +10,7 @@ import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTime
 import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema';
 import { systemPromptForChatLlmThread } from './constantsChatLlmThread/constantsChatLlmThread';
 import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
+import { deleteFilesByParentEntityId } from '../../upload/uploadFileS3ForFeatures';
 
 // Router
 const router = Router();
@@ -198,6 +199,10 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
             return res.status(404).json({ message: 'Thread not found' });
         }
 
+        await deleteFilesByParentEntityId({
+            username: res.locals.auth_username,
+            parentEntityId: threadId.toString(),
+        });
 
         return res.json({ message: 'Thread deleted successfully' });
     } catch (error) {

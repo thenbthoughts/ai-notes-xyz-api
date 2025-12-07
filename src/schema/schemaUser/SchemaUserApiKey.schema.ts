@@ -24,6 +24,9 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyS3SecretAccessKey: { type: String, default: '' },
     apiKeyS3BucketName: { type: String, default: '' },
 
+    // file storage type configuration
+    fileStorageType: { type: String, enum: ['gridfs', 's3'], default: 'gridfs' },
+
     // apikey - ollama
     apiKeyOllamaValid: { type: Boolean, default: false },
     apiKeyOllamaEndpoint: { type: String, default: '' },

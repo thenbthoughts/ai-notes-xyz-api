@@ -3,7 +3,7 @@ import envKeys from "../../src/config/envKeys";
 
 import fetchLlmUnified from "../../src/utils/llmPendingTask/utils/fetchLlmUnified";
 import { ModelUserApiKey } from "../../src/schema/schemaUser/SchemaUserApiKey.schema";
-import { getFileFromS3R2 } from "../../src/utils/files/s3R2GetFile";
+import { getFile, S3Config } from "../../src/utils/upload/uploadFunc";
 
 const init = async () => {
     try {
@@ -18,22 +18,33 @@ const init = async () => {
             throw new Error('User API key not found');
         }
 
+        const s3Config: S3Config = {
+            region: userApiKey.apiKeyS3Region,
+            endpoint: userApiKey.apiKeyS3Endpoint,
+            accessKeyId: userApiKey.apiKeyS3AccessKeyId,
+            secretAccessKey: userApiKey.apiKeyS3SecretAccessKey,
+            bucketName: userApiKey.apiKeyS3BucketName,
+        };
+
         // image
-        const resultImage = await getFileFromS3R2({
-            fileName: 'userUpload/chat/2025-09-14/1757828973804-114681541.jpeg',
-            userApiKey: userApiKey,
-        })
-        const resultImageContent = await resultImage?.Body?.transformToByteArray();
-        const resultImageContentString = resultImageContent ? Buffer.from(resultImageContent).toString('base64') : '';
+        const resultImage = await getFile({
+            fileName: 'ai-notes-xyz/testuser/chat/chat-thread-507f1f77bcf86cd799439011/messages/chat-507f191e810c19729de860ea.jpeg',
+            storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
+            s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
+        });
+        const resultImageContentString = resultImage.success && resultImage.content 
+            ? resultImage.content.toString('base64') 
+            : '';
 
         // audio
-        const resultAudio = await getFileFromS3R2({
-            fileName: 'userUpload/chat/2025-09-13/1757778983859-928947663.webm',
-            userApiKey: userApiKey,
-        })
-
-        const resultAudioContent = await resultAudio?.Body?.transformToByteArray();
-        const resultAudioContentString = resultAudioContent ? Buffer.from(resultAudioContent).toString('base64') : '';
+        const resultAudio = await getFile({
+            fileName: 'ai-notes-xyz/testuser/chat/chat-thread-507f1f77bcf86cd799439011/messages/chat-507f191e810c19729de860eb.webm',
+            storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
+            s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
+        });
+        const resultAudioContentString = resultAudio.success && resultAudio.content 
+            ? resultAudio.content.toString('base64') 
+            : '';
 
         const result = await fetchLlmUnified({
             provider: 'openrouter',

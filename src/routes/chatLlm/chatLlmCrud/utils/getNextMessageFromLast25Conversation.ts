@@ -18,7 +18,7 @@ import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/Schem
 import { IChatLlmThreadContextReference } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThreadContextReference.types";
 import { INotesWorkspace } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
 import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
-import { getFileFromS3R2 } from "../../../../utils/files/s3R2GetFile";
+import { getFile, S3Config } from "../../../../utils/upload/uploadFunc";
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModalityById";
@@ -72,13 +72,24 @@ const getBase64File = async ({
     let base64File = '';
     try {
         if (type === 'image') {
-            const resultImage = await getFileFromS3R2({
+            const s3Config: S3Config = {
+                region: userApiKey.apiKeyS3Region,
+                endpoint: userApiKey.apiKeyS3Endpoint,
+                accessKeyId: userApiKey.apiKeyS3AccessKeyId,
+                secretAccessKey: userApiKey.apiKeyS3SecretAccessKey,
+                bucketName: userApiKey.apiKeyS3BucketName,
+            };
+
+            const resultImage = await getFile({
                 fileName: fileUrl,
-                userApiKey: userApiKey,
-            })
-            const resultImageContent = await resultImage?.Body?.transformToByteArray();
-            const resultImageContentString = resultImageContent ? Buffer.from(resultImageContent).toString('base64') : '';
-            base64File = `data:image/png;base64,${resultImageContentString}`;
+                storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
+                s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
+            });
+
+            if (resultImage.success && resultImage.content) {
+                const resultImageContentString = resultImage.content.toString('base64');
+                base64File = `data:image/png;base64,${resultImageContentString}`;
+            }
         }
     } catch (error) {
         console.error(error);

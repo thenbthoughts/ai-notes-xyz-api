@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
+import { deleteFileByPath } from '../../upload/uploadFileS3ForFeatures';
 
 // Router
 const router = Router();
@@ -74,6 +75,22 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
         if (!note) {
             return res.status(404).json({ message: 'Note not found or unauthorized' });
         }
+
+        // delete file from s3
+        if (note?.fileUrl) {
+            console.log('note.fileUrl: ', note.fileUrl);
+            const fileUrlParts = note.fileUrl.split('/');
+            console.log('fileUrlParts: ', fileUrlParts);
+            const fileName = fileUrlParts[fileUrlParts.length - 1];
+            if (fileName) {
+                await deleteFileByPath({
+                    username: res.locals.auth_username,
+                    parentEntityId: note?.threadId?.toString() || '',
+                    fileName: fileName,
+                });
+            }
+        }
+
         return res.json({ message: 'Note deleted successfully' });
     } catch (error) {
         console.error(error);

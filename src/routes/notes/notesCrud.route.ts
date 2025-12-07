@@ -9,6 +9,7 @@ import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/Schema
 import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
 import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
+import { deleteFilesByParentEntityId } from '../upload/uploadFileS3ForFeatures';
 
 const router = Router();
 
@@ -267,6 +268,12 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
         if (!note) {
             return res.status(404).json({ message: 'Note not found or unauthorized' });
         }
+
+        // delete files from s3
+        await deleteFilesByParentEntityId({
+            username: res.locals.auth_username,
+            parentEntityId: _id.toString(),
+        });
 
         return res.json({ message: 'Note deleted successfully' });
     } catch (error) {
