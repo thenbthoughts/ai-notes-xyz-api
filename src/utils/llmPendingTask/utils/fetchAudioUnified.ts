@@ -1,9 +1,8 @@
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from "axios";
 import FormData from 'form-data';
-import { GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { ModelUserApiKey } from "../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { getFileFromS3R2 } from "../../files/s3R2GetFile";
+import { getFile, S3Config } from "../../upload/uploadFunc";
 import { getApiKeyByObject } from "../../llm/llmCommonFunc";
 
 const fetchLlmGroqAudio = async ({
@@ -50,33 +49,9 @@ const fetchLlmGroqAudio = async ({
     }
 };
 
-const getCustomArrayBuffer = async (response: GetObjectCommandOutput): Promise<ArrayBuffer | null> => {
-    // Step 2: Convert the stream (response.Body) to an ArrayBuffer
-    const stream = response.Body as Readable;
-
-    // Create an empty array to hold the chunks
-    const chunks: Buffer[] = [];
-
-    // Use the 'data' event to collect chunks from the stream
-    stream.on('data', (chunk) => {
-        chunks.push(chunk); // Push each chunk to the array
-    });
-
-    // When the stream ends, concatenate the chunks and convert to ArrayBuffer
-    return new Promise((resolve, reject) => {
-        stream.on('end', () => {
-            // Concatenate all chunks into a single Buffer
-            const buffer = Buffer.concat(chunks);
-            // Convert the Buffer to ArrayBuffer
-            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-            resolve(arrayBuffer);
-        });
-
-        stream.on('error', (err) => {
-            reject(null);
-        });
-    });
-}
+const bufferToArrayBuffer = (buffer: Buffer): ArrayBuffer => {
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+};
 
 const getTextFromAudioByUrlAndUsername = async ({
     fileUrl,
@@ -118,15 +93,22 @@ const getTextFromAudioByUrlAndUsername = async ({
 
         const userApiKeyObj = getApiKeyByObject(userApiKey);
 
-        const resultAudio = await getFileFromS3R2({
+        const s3Config: S3Config = {
+            region: userApiKeyObj.apiKeyS3Region,
+            endpoint: userApiKeyObj.apiKeyS3Endpoint,
+            accessKeyId: userApiKeyObj.apiKeyS3AccessKeyId,
+            secretAccessKey: userApiKeyObj.apiKeyS3SecretAccessKey,
+            bucketName: userApiKeyObj.apiKeyS3BucketName,
+        };
+
+        const resultAudio = await getFile({
             fileName: fileUrl,
-            userApiKey: userApiKeyObj,
+            storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
+            s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
         });
 
-        // validdate file
-        if (resultAudio) {
-            // valid
-        } else {
+        // validate file
+        if (!resultAudio.success || !resultAudio.content) {
             return {
                 success: '',
                 error: 'File not found or not belong to user',
@@ -137,34 +119,24 @@ const getTextFromAudioByUrlAndUsername = async ({
         }
 
         // get audio buffer
-        const audioBufferT = await getCustomArrayBuffer(resultAudio);
-        if (audioBufferT) {
-            const buffer = Buffer.from(audioBufferT);
+        const buffer = resultAudio.content;
+        const audioBufferT = bufferToArrayBuffer(buffer);
 
-            let contentAudioToText = '';
-            if (userApiKeyObj.apiKeyGroqValid === true) {
-                contentAudioToText = await fetchLlmGroqAudio({
-                    audioArrayBuffer: buffer,
+        let contentAudioToText = '';
+        if (userApiKeyObj.apiKeyGroqValid === true) {
+            contentAudioToText = await fetchLlmGroqAudio({
+                audioArrayBuffer: audioBufferT,
 
-                    provider: 'groq',
-                    llmAuthToken: userApiKeyObj.apiKeyGroq,
-                })
-            }
-
-            return {
-                success: 'Success',
-                error: '',
-                data: {
-                    contentAudioToText,
-                },
-            };
+                provider: 'groq',
+                llmAuthToken: userApiKeyObj.apiKeyGroq,
+            })
         }
 
         return {
-            success: '',
-            error: 'File not found',
+            success: 'Success',
+            error: '',
             data: {
-                contentAudioToText: '',
+                contentAudioToText,
             },
         };
     } catch (error) {
@@ -185,7 +157,7 @@ const getTextFromAudioByUrlAndUsername = async ({
 // })
 
 export {
-    getCustomArrayBuffer,
+    bufferToArrayBuffer,
     getTextFromAudioByUrlAndUsername,
 };
 export default fetchLlmGroqAudio;

@@ -2,10 +2,17 @@
 
 ## Overview
 
-All files are organized in a structured format:
+All files uploaded through the `/api/uploads/uploadFile` endpoint are stored in MongoDB GridFS. Files are organized in a structured format:
 ```
 ai-notes-xyz/{username}/{featureType}/{featurePrefix}{entityId}/{subType}/{subPrefix}{subId}.ext
 ```
+
+## Storage
+
+- **Storage Backend**: MongoDB GridFS
+- **Database**: Uses the same MongoDB connection as the application (`MONGODB_URI`)
+- **Bucket Name**: `uploads` (default GridFS bucket)
+- **Metadata**: File metadata (username, parentEntityId, contentType, originalName, size) is stored in the `userFileUpload` collection
 
 ## File Path Structure
 

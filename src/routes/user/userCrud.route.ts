@@ -26,6 +26,7 @@ router.post(
                 clientFrontendUrl: '',
                 apiKeyGroqValid: false,
                 apiKeyOpenrouterValid: false,
+                fileStorageType: 'gridfs',
                 apiKeyS3Valid: false,
                 apiKeyOllamaValid: false,
                 apiKeyQdrantValid: false,
@@ -129,6 +130,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.clientFrontendUrl === 'string') {
                     resultApiKey.clientFrontendUrl = resultUserInfoApi.clientFrontendUrl;
+                }
+            }
+
+            // file storage type
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.fileStorageType === 'string') {
+                    resultApiKey.fileStorageType = resultUserInfoApi.fileStorageType;
                 }
             }
 

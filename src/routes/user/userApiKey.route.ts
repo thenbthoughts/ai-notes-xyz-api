@@ -7,8 +7,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { putFileToS3 } from '../../utils/files/s3PutFile';
-import { getFileFromS3R2 } from '../../utils/files/s3R2GetFile';
+import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
@@ -201,6 +200,47 @@ router.post(
     }
 );
 
+// Update User File Storage Type
+router.post(
+    '/updateUserApiFileStorageType',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { fileStorageType } = req.body;
+
+            if (typeof fileStorageType !== 'string') {
+                return res.status(400).json({ message: 'Invalid file storage type' });
+            }
+
+            if (fileStorageType !== 'gridfs' && fileStorageType !== 's3') {
+                return res.status(400).json({ message: 'Invalid file storage type' });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    fileStorageType: fileStorageType,
+                },
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 // Update User API S3
 router.post(
     '/updateUserApiS3',
@@ -220,25 +260,42 @@ router.post(
 
             console.log(fileName, fileContent);
 
-            const resultPut = await putFileToS3({
+            const s3Config: S3Config = {
+                region: apiKeys.apiKeyS3Region,
+                endpoint: apiKeys.apiKeyS3Endpoint,
+                accessKeyId: apiKeys.apiKeyS3AccessKeyId,
+                secretAccessKey: apiKeys.apiKeyS3SecretAccessKey,
+                bucketName: apiKeys.apiKeyS3BucketName,
+            };
+
+            const resultPut = await putFile({
                 fileName: fileName,
                 fileContent: fileContent,
-                userApiKey: apiKeys,
-            })
-            if (resultPut.uploadStatus === false) {
+                storageType: 's3',
+                s3Config: s3Config,
+            });
+
+            if (!resultPut.success) {
                 return res.status(400).json({
                     success: '',
                     error: `Error uploading file to S3. ${resultPut.error}`,
                 });
             }
 
-            const resultGet = await getFileFromS3R2({
+            const resultGet = await getFile({
                 fileName: fileName,
-                userApiKey: apiKeys,
+                storageType: 's3',
+                s3Config: s3Config,
             });
 
-            const resultGetContent = await resultGet?.Body?.transformToByteArray();
-            const resultGetString = resultGetContent ? Buffer.from(resultGetContent).toString('utf-8') : '';
+            if (!resultGet.success || !resultGet.content) {
+                return res.status(500).json({
+                    success: '',
+                    error: 'Error: Failed to retrieve uploaded file.',
+                });
+            }
+
+            const resultGetString = resultGet.content.toString('utf-8');
 
             if (`${resultGetString}` === fileContent) {
                 console.log('The content matches the uploaded file content.');

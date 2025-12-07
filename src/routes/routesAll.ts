@@ -120,7 +120,7 @@ router.use('/life-events/category-crud', routesLifeEventCategoryCrud);
 router.use('/life-events/ai-category-crud', routesLifeEventsAiCategoryCrud);
 
 // uploads
-router.use('/uploads/crudS3', uploadFileS3ForFeatures);
+router.use('/uploads/crud', uploadFileS3ForFeatures);
 
 // other
 router.use('/apiKeyDefault/crud', apiKeyDefault);

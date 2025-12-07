@@ -15,6 +15,9 @@ export interface tsUserApiKey {
     apiKeyS3SecretAccessKey: string;
     apiKeyS3BucketName: string;
 
+    // file storage type configuration
+    fileStorageType: 'gridfs' | 's3';
+
     // api key ollama
     apiKeyOllamaValid: boolean;
     apiKeyOllamaEndpoint: string;
@@ -42,6 +45,9 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         apiKeyS3AccessKeyId: '',
         apiKeyS3SecretAccessKey: '',
         apiKeyS3BucketName: '',
+
+        // file storage type configuration
+        fileStorageType: 'gridfs' as 'gridfs' | 's3',
 
         // api key ollama
         apiKeyOllamaValid: false,
@@ -96,6 +102,9 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyS3BucketName === 'string') {
                 apiKey.apiKeyS3BucketName = apiKeyObject.apiKeyS3BucketName;
+            }
+            if (apiKeyObject.fileStorageType === 'gridfs' || apiKeyObject.fileStorageType === 's3') {
+                apiKey.fileStorageType = apiKeyObject.fileStorageType;
             }
 
             // api key ollama

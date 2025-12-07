@@ -22,6 +22,9 @@ interface IUserApiKey extends Document {
     apiKeyS3SecretAccessKey: string,
     apiKeyS3BucketName: string,
 
+    // file storage type configuration
+    fileStorageType: 'gridfs' | 's3';
+
     // apikey - ollama
     apiKeyOllamaValid: boolean;
     apiKeyOllamaEndpoint: string;
