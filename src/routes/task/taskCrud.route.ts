@@ -12,6 +12,7 @@ import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/Schema
 import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
 import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaCommentCommon.schema';
 import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
+import { deleteFilesByParentEntityId } from '../upload/uploadFileS3ForFeatures';
 
 // Router
 const router = Router();
@@ -985,6 +986,13 @@ router.post('/taskDelete', middlewareUserAuth, async (req: Request, res: Respons
         }
         // TODO delete task comments
         // TODO delete task list
+
+        // delete files from s3
+        await deleteFilesByParentEntityId({
+            username: res.locals.auth_username,
+            parentEntityId: id,
+        });
+
         return res.json({ message: 'Task deleted successfully' });
     } catch (error) {
         console.error(error);

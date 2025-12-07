@@ -7,6 +7,7 @@ import { llmPendingTaskTypes } from '../../utils/llmPendingTask/llmPendingTaskCo
 import { ModelLlmPendingTaskCron } from '../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 import { ModelInfoVaultSignificantDate } from '../../schema/schemaInfoVault/SchemaInfoVaultSignificantDate.schema';
+import { deleteFilesByParentEntityId } from '../upload/uploadFileS3ForFeatures';
 
 const router = Router();
 
@@ -271,6 +272,12 @@ router.post('/infoVaultDelete', middlewareUserAuth, async (req: Request, res: Re
         if (!infoVault) {
             return res.status(404).json({ message: 'InfoVault not found or unauthorized' });
         }
+
+        // delete files from s3
+        await deleteFilesByParentEntityId({
+            username: res.locals.auth_username,
+            parentEntityId: _id.toString(),
+        });
 
         return res.json({ message: 'InfoVault deleted successfully' });
     } catch (error) {

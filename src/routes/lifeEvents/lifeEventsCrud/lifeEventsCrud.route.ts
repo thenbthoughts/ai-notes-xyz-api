@@ -8,6 +8,7 @@ import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTas
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
+import { deleteFilesByParentEntityId } from '../../upload/uploadFileS3ForFeatures';
 
 const router = Router();
 
@@ -360,6 +361,12 @@ router.post('/lifeEventsDelete', middlewareUserAuth, async (req: Request, res: R
         if (!lifeEvent) {
             return res.status(404).json({ message: 'Life event not found or unauthorized' });
         }
+
+        // delete files from s3
+        await deleteFilesByParentEntityId({
+            username: res.locals.auth_username,
+            parentEntityId: _id.toString(),
+        });
 
         return res.json({ message: 'Life event deleted successfully' });
     } catch (error) {
