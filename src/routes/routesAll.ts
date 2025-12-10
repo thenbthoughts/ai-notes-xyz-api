@@ -74,6 +74,9 @@ import routesSearchCrud from './search/search.route';
 // drive
 import routesDrive from './drive/drive.route';
 
+// ai context
+import routesAiContextKeyword from './aiContext/aiContextKeyword';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -157,6 +160,9 @@ router.use('/search/crud', routesSearchCrud);
 
 // routes -> drive
 router.use('/drive', routesDrive);
+
+// routes -> ai context
+router.use('/ai-context/keyword', routesAiContextKeyword);
 
 /*
 Example:
