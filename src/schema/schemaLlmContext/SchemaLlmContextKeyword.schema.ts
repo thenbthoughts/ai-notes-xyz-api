@@ -13,7 +13,7 @@ const llmContextKeywordSchema = new Schema<ILlmContextKeyword>({
     aiSubCategory: { type: String, default: '', index: true },
     aiTopic: { type: String, default: '', index: true },
     aiSubTopic: { type: String, default: '', index: true },
-    
+
     // source
     metadataSourceType: {
         type: String,
