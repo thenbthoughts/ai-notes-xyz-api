@@ -279,7 +279,7 @@ router.post(
                     let contentAi = '';
                     if (provider === 'groq' || provider === 'openrouter') {
                         contentAi = await fetchLlmGroqVision({
-                            argContent: "What's in the image? Explain in detail like victorian style but in simple words",
+                            argContent: "What's in the image? Explain in detail.",
                             imageBase64: `data:image/png;base64,${imageBase64}`,
 
                             llmAuthToken,
