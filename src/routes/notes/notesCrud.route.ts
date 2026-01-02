@@ -334,6 +334,16 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
             targetRecordId: newNote._id,
         });
 
+        // generate Feature AI Actions by source id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            targetRecordId: newNote._id,
+            taskOutputJson: {
+                sourceType: 'notes',
+            },
+        });
+
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
@@ -439,6 +449,16 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
             username: res.locals.auth_username,
             taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
+        });
+
+        // generate Feature AI Actions by source id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            targetRecordId: _id,
+            taskOutputJson: {
+                sourceType: 'notes',
+            },
         });
 
         // reindex for global search

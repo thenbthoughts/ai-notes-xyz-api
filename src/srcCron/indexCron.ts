@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
+import { executeFaqScheduleForAllUsers } from '../routes/faq/utils/executeFaqScheduleForAllUsers';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
 import { cronTaskSendRemainder } from '../routes/task/cron/taskSendRemainder';
@@ -12,6 +13,7 @@ const initCron = () => {
             try {
                 console.log('running a task every minute');
                 await executeTaskScheduleForAllUsers();
+                await executeFaqScheduleForAllUsers();
             } catch (error) {
                 console.log('error in cron: ', error);
             }
