@@ -345,6 +345,16 @@ router.post(
                 targetRecordId: newTask._id,
             });
 
+            // generate Feature AI Actions by source id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.featureAiActions.all,
+                targetRecordId: newTask._id,
+                taskOutputJson: {
+                    sourceType: 'tasks',
+                },
+            });
+
             return res.status(201).json(newTask);
         } catch (error) {
             console.error(error);
@@ -950,6 +960,16 @@ router.post(
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
                 targetRecordId: updatedTask._id,
+            });
+
+            // generate Feature AI Actions by source id
+            await ModelLlmPendingTaskCron.create({
+                username: res.locals.auth_username,
+                taskType: llmPendingTaskTypes.page.featureAiActions.all,
+                targetRecordId: updatedTask._id,
+                taskOutputJson: {
+                    sourceType: 'tasks',
+                },
             });
 
             // reindex for global search

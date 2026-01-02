@@ -11,7 +11,6 @@ import {
 
 import { tsUserApiKey } from "../../../../utils/llm/llmCommonFunc";
 import { fetchLlmUnifiedStream, Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
-import { ObjectId } from "mongoose";
 
 import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 import { IChatLlmThread } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";

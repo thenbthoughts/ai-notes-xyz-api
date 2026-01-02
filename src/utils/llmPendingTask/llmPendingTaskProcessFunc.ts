@@ -38,6 +38,9 @@ import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/
 // LlmContext tasks
 import generateKeywordsBySourceId from "./page/llmContext/generateKeywordsBySourceId";
 
+// FAQ tasks
+import featureAiActionAll from "./page/featureAiAction/featureAiActionAll/featureAiActionAll";
+
 const llmPendingTaskProcessFunc = async ({
     _id,
 }: {
@@ -176,6 +179,15 @@ const llmPendingTaskProcessFunc = async ({
             case llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId:
                 isTaskDone = await generateKeywordsBySourceId({
                     targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            // Feature AI Actions tasks
+            case llmPendingTaskTypes.page.featureAiActions.all:
+                const sourceType = (resultTask.taskOutputJson as any)?.sourceType || '';
+                isTaskDone = await featureAiActionAll({
+                    targetRecordId: resultTask.targetRecordId,
+                    sourceType: sourceType,
                 });
                 break;
 

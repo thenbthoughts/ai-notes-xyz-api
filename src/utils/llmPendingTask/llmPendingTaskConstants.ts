@@ -1,5 +1,15 @@
 const llmPendingTaskTypes = {
     page: {
+        featureAiActions: {
+            all: 'featureAiActions_all',
+            chatThread: 'featureAiActions_chatThread',
+            chatMessage: 'featureAiActions_chatMessage',
+            notes: 'featureAiActions_notes',
+            task: 'featureAiActions_task',
+            lifeEvents: 'featureAiActions_lifeEvents',
+            infoVault: 'featureAiActions_infoVault',
+        },
+
         chat: {
             // chat threads
             generateChatThreadTitleById: 'pageChat_generateChatThreadTitleById',

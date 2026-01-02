@@ -408,6 +408,16 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
             targetRecordId: newLifeEvent._id,
         });
 
+        // generate Feature AI Actions by source id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            targetRecordId: newLifeEvent._id,
+            taskOutputJson: {
+                sourceType: 'lifeEvents',
+            },
+        });
+
         // reindex for global search
         await reindexDocument({
             reindexDocumentArr: [{
@@ -534,6 +544,16 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
             username: res.locals.auth_username,
             taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
             targetRecordId: _id,
+        });
+
+        // generate Feature AI Actions by source id
+        await ModelLlmPendingTaskCron.create({
+            username: res.locals.auth_username,
+            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            targetRecordId: _id,
+            taskOutputJson: {
+                sourceType: 'lifeEvents',
+            },
         });
 
         // reindex for global search
