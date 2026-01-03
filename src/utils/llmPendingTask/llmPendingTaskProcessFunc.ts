@@ -38,8 +38,8 @@ import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/
 // LlmContext tasks
 import generateKeywordsBySourceId from "./page/llmContext/generateKeywordsBySourceId";
 
-// FAQ tasks
-import featureAiActionAll from "./page/featureAiAction/featureAiActionAll/featureAiActionAll";
+// Feature AI Actions tasks
+import featureAiActionNotesInit from "./page/featureAiAction/featureAiActionNotes/featureAiActionNotesInit";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -99,26 +99,8 @@ const llmPendingTaskProcessFunc = async ({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;
-            
-            // Notes tasks
-            case llmPendingTaskTypes.page.notes.generateNoteAiSummaryById:
-                isTaskDone = await generateNotesAiSummaryById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-            
-            case llmPendingTaskTypes.page.notes.generateNoteAiTagsById:
-                isTaskDone = await generateNotesAiTagsById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
 
-            case llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId:
-                isTaskDone = await generateEmbeddingByNotesId({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-
+            // Task Schedule tasks
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId:
                 try {
                     // daily summary
@@ -183,11 +165,9 @@ const llmPendingTaskProcessFunc = async ({
                 break;
 
             // Feature AI Actions tasks
-            case llmPendingTaskTypes.page.featureAiActions.all:
-                const sourceType = (resultTask.taskOutputJson as any)?.sourceType || '';
-                isTaskDone = await featureAiActionAll({
+            case llmPendingTaskTypes.page.featureAiActions.notes:
+                isTaskDone = await featureAiActionNotesInit({
                     targetRecordId: resultTask.targetRecordId,
-                    sourceType: sourceType,
                 });
                 break;
 

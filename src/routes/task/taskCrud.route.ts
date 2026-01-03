@@ -348,11 +348,8 @@ router.post(
             // generate Feature AI Actions by source id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.all,
+                taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: newTask._id,
-                taskOutputJson: {
-                    sourceType: 'tasks',
-                },
             });
 
             return res.status(201).json(newTask);
@@ -965,11 +962,8 @@ router.post(
             // generate Feature AI Actions by source id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.all,
+                taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: updatedTask._id,
-                taskOutputJson: {
-                    sourceType: 'tasks',
-                },
             });
 
             // reindex for global search

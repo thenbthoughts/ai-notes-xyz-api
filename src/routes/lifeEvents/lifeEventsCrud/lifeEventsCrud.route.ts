@@ -411,11 +411,8 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
             targetRecordId: newLifeEvent._id,
-            taskOutputJson: {
-                sourceType: 'lifeEvents',
-            },
         });
 
         // reindex for global search
@@ -549,11 +546,8 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
             targetRecordId: _id,
-            taskOutputJson: {
-                sourceType: 'lifeEvents',
-            },
         });
 
         // reindex for global search

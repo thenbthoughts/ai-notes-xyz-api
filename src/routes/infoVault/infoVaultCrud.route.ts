@@ -315,11 +315,8 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.infoVault,
             targetRecordId: newInfoVault._id,
-            taskOutputJson: {
-                sourceType: 'infoVault',
-            },
         });
 
         // reindex all significant dates for this InfoVault
@@ -446,11 +443,8 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.infoVault,
             targetRecordId: _id,
-            taskOutputJson: {
-                sourceType: 'infoVault',
-            },
         });
 
         // reindex all significant dates for this InfoVault

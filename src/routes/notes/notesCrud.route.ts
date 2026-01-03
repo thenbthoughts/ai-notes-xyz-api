@@ -337,11 +337,8 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.notes,
             targetRecordId: newNote._id,
-            taskOutputJson: {
-                sourceType: 'notes',
-            },
         });
 
         // reindex for global search
@@ -423,24 +420,10 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
             );
         }
 
-        // generate ai tags by id
+        // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
-            targetRecordId: _id,
-        });
-
-        // generate ai summary by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
-            targetRecordId: _id,
-        });
-
-        // generate embedding by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId,
+            taskType: llmPendingTaskTypes.page.featureAiActions.notes,
             targetRecordId: _id,
         });
 
@@ -454,11 +437,8 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.notes,
             targetRecordId: _id,
-            taskOutputJson: {
-                sourceType: 'notes',
-            },
         });
 
         // reindex for global search

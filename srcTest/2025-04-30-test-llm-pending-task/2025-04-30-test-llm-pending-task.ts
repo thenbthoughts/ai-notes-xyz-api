@@ -12,7 +12,7 @@ const init = async () => {
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
+        "taskType": llmPendingTaskTypes.page.featureAiActions.notes,
         "targetRecordId": "6860cef19714a47f91f932b3",
         "aiModelName": "openai/gpt-oss-20b",
         "aiModelProvider": "groq",
@@ -20,7 +20,7 @@ const init = async () => {
 
     const resultInsert2 = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+        "taskType": llmPendingTaskTypes.page.featureAiActions.notes,
         "targetRecordId": "6860cef19714a47f91f932b3",
         "aiModelName": "openai/gpt-oss-20b",
         "aiModelProvider": "groq",

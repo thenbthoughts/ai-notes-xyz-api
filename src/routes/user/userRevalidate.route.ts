@@ -47,28 +47,13 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
         for (let index = 0; index < notes.length; index++) {
             const element = notes[index];
-            // generate ai tags by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
-                targetRecordId: element._id,
-            });
 
             // generate ai summary by id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+                taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                 targetRecordId: element._id,
             });
-
-            // generate embedding by id
-            if (userApi?.apiKeyOllamaValid && userApi?.apiKeyQdrantValid) {
-                await ModelLlmPendingTaskCron.create({
-                    username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId,
-                    targetRecordId: element._id,
-                });
-            }
         }
 
         // find all task that have aiSummary or aiTags is null

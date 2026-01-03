@@ -1,7 +1,6 @@
 const llmPendingTaskTypes = {
     page: {
         featureAiActions: {
-            all: 'featureAiActions_all',
             chatThread: 'featureAiActions_chatThread',
             chatMessage: 'featureAiActions_chatMessage',
             notes: 'featureAiActions_notes',
@@ -25,15 +24,6 @@ const llmPendingTaskTypes = {
             generateLifeEventAiSummaryById: 'pageLifeEvents_generateLifeEventAiSummaryById',
             generateLifeEventAiTagsById: 'pageLifeEvents_generateLifeEventAiTagsById',
             generateLifeEventAiCategoryById: 'pageLifeEvents_generateLifeEventAiCategoryById',
-        },
-
-        // notes
-        notes: {
-            generateNoteAiSummaryById: 'pageNotes_generateNoteAiSummaryById',
-            generateNoteAiTagsById: 'pageNotes_generateNoteAiTagsById',
-
-            // vector db index by notes id
-            generateEmbeddingByNotesId: 'pageNotes_generateEmbeddingByNotesId',
         },
 
         // task

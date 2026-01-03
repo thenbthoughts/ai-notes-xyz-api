@@ -194,11 +194,8 @@ const handleUploadTypeDocument = async ({
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: result._id,
-            taskOutputJson: {
-                sourceType: 'chatLlm',
-            },
         });
 
         return {
