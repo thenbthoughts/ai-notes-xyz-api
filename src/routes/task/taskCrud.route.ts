@@ -322,13 +322,6 @@ router.post(
                 ...actionDatetimeObj,
             });
 
-            // generate embedding by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
-                targetRecordId: newTask._id,
-            });
-
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
@@ -338,21 +331,11 @@ router.post(
                 username: res.locals.auth_username,
             });
 
-            // generate keywords by id
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: newTask._id,
-            });
-
-            // generate Feature AI Actions by source id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.all,
-                targetRecordId: newTask._id,
-                taskOutputJson: {
-                    sourceType: 'tasks',
-                },
             });
 
             return res.status(201).json(newTask);
@@ -948,28 +931,11 @@ router.post(
                 return res.status(404).json({ message: 'Task not found' });
             }
 
-            // generate embedding by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
-                targetRecordId: updatedTask._id,
-            });
-
-            // generate keywords by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-                targetRecordId: updatedTask._id,
-            });
-
             // generate Feature AI Actions by source id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.all,
+                taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: updatedTask._id,
-                taskOutputJson: {
-                    sourceType: 'tasks',
-                },
             });
 
             // reindex for global search

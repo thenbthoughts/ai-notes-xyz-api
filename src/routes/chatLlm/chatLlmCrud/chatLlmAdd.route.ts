@@ -31,7 +31,7 @@ const generateTags = async ({
     try {
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
-            taskType: llmPendingTaskTypes.page.chat.generateChatTagsById,
+            taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: mongodbRecordId,
         });
     } catch (error) {
@@ -184,21 +184,11 @@ const handleUploadTypeDocument = async ({
             auth_username,
         });
 
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: result._id,
-        });
-
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.all,
+            taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: result._id,
-            taskOutputJson: {
-                sourceType: 'chatLlm',
-            },
         });
 
         return {
@@ -414,7 +404,7 @@ router.post(
                 // generate keywords by id
                 await ModelLlmPendingTaskCron.create({
                     username: auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
                     targetRecordId: newNote._id,
                 });
 

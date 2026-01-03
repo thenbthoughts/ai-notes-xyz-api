@@ -3,10 +3,12 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
+import { IChatLlmThread } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
 
 interface tsMessage {
     role: string;
@@ -26,22 +28,56 @@ interface tsRequestData {
     }
 }
 
-const fetchLlmTags = async ({
-    argContent,
+const fetchLlmSummarise = async ({
+    argContentArr,
 
     llmAuthToken,
     modelProvider,
 }: {
-    argContent: string,
+    argContentArr: IChatLlm[],
 
     llmAuthToken: string;
     modelProvider: 'groq' | 'openrouter';
 }) => {
     try {
         // Validate input
-        if (typeof argContent !== 'string' || argContent.trim() === '') {
-            throw new Error('Invalid input: argContent must be a non-empty string.');
+        if (!Array.isArray(argContentArr) || argContentArr.length === 0) {
+            throw new Error('Invalid input: argContentArr must be a non-empty array.');
         }
+
+        const messages = [] as tsMessage[];
+
+        let systemPrompt = '';
+        systemPrompt += `You are an AI thread summarizer specialized in summarizing multi-message discussion threads. `;
+        systemPrompt += `Given a series of messages labeled as either user or assistant contributions, generate a concise and clear summary that captures the main points, key ideas, and important information shared across the entire thread. `;
+        systemPrompt += `The summary should be brief, easy to understand, and free of added opinions or new information. `;
+        systemPrompt += `Respond only with the summary text.`;
+
+        messages.push({
+            role: "system",
+            content: systemPrompt,
+        });
+
+        for (let index = 0; index < argContentArr.length; index++) {
+            const element = argContentArr[index];
+
+            if (element.content.includes("AI:")) {
+                messages.push({
+                    role: "assistant",
+                    content: `AI -> Conversation ${index + 1}: ${element.content.replace("AI:", "").trim()}`,
+                });
+            } else {
+                messages.push({
+                    role: "user",
+                    content: `User -> Conversation ${index + 1}: ${element.content.replace('Text to audio:', '')}`,
+                });
+            }
+        }
+
+        messages.push({
+            role: "user",
+            content: "Summarize",
+        });
 
         let apiEndpoint = '';
         let modelName = '';
@@ -54,24 +90,12 @@ const fetchLlmTags = async ({
         }
 
         const data: tsRequestData = {
-            messages: [
-                {
-                    role: "system",
-                    content: "You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes. Your task is to identify and generate a list of significant keywords based on the content provided by the user. These keywords should represent the main ideas, themes, or topics covered in the user's input. Output the result in JSON format as follows:\n\n{\n  \"keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]\n}\n\nFocus on capturing nouns, significant verbs, and unique terms relevant to the content.\nAvoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.\nEnsure that the keywords are concise and meaningful for quick reference.\n\nRespond only with the JSON structure.",
-                },
-                {
-                    role: "user",
-                    content: argContent,
-                }
-            ],
+            messages: messages,
             model: modelName,
             temperature: 0,
             max_tokens: 1024,
             top_p: 1,
             stream: false,
-            response_format: {
-                type: "json_object"
-            },
             stop: null
         };
 
@@ -87,42 +111,36 @@ const fetchLlmTags = async ({
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
+        const strResponse = response?.data?.choices[0]?.message?.content;
 
-        const finalTagsOutput = [] as string[];
-
-        if (Array.isArray(keywordsResponse?.keywords)) {
-            const keywords = keywordsResponse?.keywords;
-            for (let index = 0; index < keywords.length; index++) {
-                const element = keywords[index];
-                if (typeof element === 'string') {
-                    finalTagsOutput.push(element.trim());
-                }
+        if (typeof strResponse === 'string') {
+            if (strResponse.length >= 1) {
+                return strResponse;
             }
         }
 
-        return finalTagsOutput; // Return only the array of strings
+        return '';
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response)
-        return [];
+        return '';
     }
 }
 
-const  generateChatTagsById = async ({
+const  generateChatThreadAiSummaryById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
         const messages = await ModelChatLlm.find({
-            _id: targetRecordId,
+            threadId: targetRecordId,
         }) as IChatLlm[];
 
-        if (!messages || messages.length !== 1) {
+        if (!messages || messages.length === 0) {
             return true;
         }
 
@@ -155,21 +173,20 @@ const  generateChatTagsById = async ({
 
         const updateObj = {
         } as {
-            tags?: string[];
+            aiSummary?: string;
         };
 
-        // Use fetchLlmGroqTags to generate tags from the content of the first message
-        const generatedTags = await fetchLlmTags({
-            argContent: messages[0].content,
+        const resultSummary = await fetchLlmSummarise({
+            argContentArr: messages,
             llmAuthToken,
-            modelProvider: modelProvider as 'groq' | 'openrouter',
+            modelProvider,
         });
-        if (generatedTags.length >= 1) {
-            updateObj.tags = generatedTags;
+        if (resultSummary.length >= 1) {
+            updateObj.aiSummary = resultSummary;
         }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelChatLlm.updateOne(
+            await ModelChatLlmThread.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -186,4 +203,5 @@ const  generateChatTagsById = async ({
     }
 };
 
-export default generateChatTagsById;
+export default generateChatThreadAiSummaryById;
+

@@ -3,11 +3,12 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
-import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
-import lifeCategoriesAiJson from "../../../../routes/lifeEvents/lifeEventsCrud/LifeCategoriesAiJson";
+import { NodeHtmlMarkdown } from 'node-html-markdown';
+
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
+import { INotes } from "../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 
 interface tsMessage {
     role: string;
@@ -54,35 +55,19 @@ const fetchLlmTags = async ({
             modelName = 'openai/gpt-oss-20b';
         }
 
-        let lifeCategoriesAiJsonString = '';
-        for (let index = 0; index < lifeCategoriesAiJson.length; index++) {
-            const element = lifeCategoriesAiJson[index];
-            lifeCategoriesAiJsonString += `${index + 1}. Category: ${element.name}\n`;
-            for (let index2 = 0; index2 < element.subcategory.length; index2++) {
-                const element2 = element.subcategory[index2];
-                lifeCategoriesAiJsonString += `${index + 1}. ${index2 + 1}. Subcategory: ${element2}\n`;
-            }
-        }
+        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes.
+        Your task is to identify and generate a list of significant keywords based on the content provided by the user.
+        These keywords should represent the main ideas, themes, or topics covered in the user's input.
 
-        let systemPrompt = `
-        You are a JSON-based AI assistant trained to classify life events into structured categories.
-        Your task is to analyze the user's life event description and suggest the most appropriate "category" and "subcategory" based strictly on the provided list.
-
-        The list of categories and their subcategories is as follows:
-        ${lifeCategoriesAiJsonString}
-
-        Your response must:
-        - Select only one most relevant category and subcategory.
-        - Ensure the values are exact matches from the list (no new values or variants).
-        - Avoid generic or vague matches if a more specific one exists.
-        - Default to category "Other" and subcategory "Other" if no good match is found.
-
-        Respond only with the following JSON format (no extra text):
+        Output the result in JSON format as follows:
         {
-            "category": "",
-            "subcategory": ""
+            "keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]
         }
-        `;
+        
+        Avoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.
+        Ensure that the keywords are concise and meaningful for quick reference.
+
+        Respond only with the JSON structure.`;
 
         const data: tsRequestData = {
             messages: [
@@ -120,56 +105,47 @@ const fetchLlmTags = async ({
         const response: AxiosResponse = await axios.request(config);
         const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
 
-        const returnObj = {
-            category: '',
-            subcategory: '',
-        } as {
-            category: string;
-            subcategory: string;
-        };
+        const finalTagsOutput = [] as string[];
 
-        if (typeof keywordsResponse?.category === 'string') {
-            returnObj.category = keywordsResponse.category;
-        }
-        if (typeof keywordsResponse?.subcategory === 'string') {
-            returnObj.subcategory = keywordsResponse.subcategory;
+        if (Array.isArray(keywordsResponse?.keywords)) {
+            const keywords = keywordsResponse?.keywords;
+            for (let index = 0; index < keywords.length; index++) {
+                const element = keywords[index];
+                if (typeof element === 'string') {
+                    finalTagsOutput.push(element.trim());
+                }
+            }
         }
 
-        return returnObj;
+        return finalTagsOutput; // Return only the array of strings
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response)
-        return {
-            category: 'Other',
-            subcategory: 'Other',
-        } as {
-            category: string;
-            subcategory: string;
-        };
+        return [];
     }
 }
 
-const generateLifeEventAiCategoryById = async ({
+const  generateNotesAiTagsById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const lifeEventRecords = await ModelLifeEvents.find({
+        const notesRecords = await ModelNotes.find({
             _id: targetRecordId,
-        }) as ILifeEvents[];
+        }) as INotes[];
 
-        if (!lifeEventRecords || lifeEventRecords.length !== 1) {
+        if (!notesRecords || notesRecords.length !== 1) {
             return true;
         }
 
-        const lifeEventFirst = lifeEventRecords[0];
+        const notesFirst = notesRecords[0];
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: lifeEventFirst.username,
+            username: notesFirst.username,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -194,37 +170,36 @@ const generateLifeEventAiCategoryById = async ({
         }
 
         const updateObj = {
-            aiCategory: 'Other',
-            aiSubCategory: 'Other',
         } as {
-            aiCategory: string;
-            aiSubCategory: string;
+            aiTags?: string[];
         };
 
-        let argContent = `Title: ${lifeEventFirst.title}`;
-        argContent += `Description: ${lifeEventFirst.description}\n`;
-        argContent += `Event Impact: ${lifeEventFirst.eventImpact}\n`;
-        if (lifeEventFirst.isStar) {
-            argContent += `Is Star: Starred life event\n`;
+        let argContent = `Title: ${notesFirst.title}`;
+        
+        if(notesFirst.description.length >= 1) {
+            const markdownContent = NodeHtmlMarkdown.translate(notesFirst.description);
+            argContent += `Description: ${markdownContent}\n`;
         }
-        if (lifeEventFirst.tags.length >= 1) {
-            argContent += `Tags: ${lifeEventFirst.tags.join(', ')}\n`;
+        if(notesFirst.isStar) {
+            argContent += `Is Star: Starred note\n`;
         }
-        argContent += `Event Date: ${lifeEventFirst.eventDateUtc}\n`;
-        argContent += `Event Date Year: ${lifeEventFirst.eventDateYearStr}\n`;
-        argContent += `Event Date Year Month: ${lifeEventFirst.eventDateYearMonthStr}\n`;
+        if(notesFirst.tags.length >= 1) {
+            argContent += `Tags: ${notesFirst.tags.join(', ')}\n`;
+        }
 
         // Use fetchLlmGroqTags to generate tags from the content of the first message
-        const generatedCategory = await fetchLlmTags({
+        const generatedTags = await fetchLlmTags({
             argContent: argContent,
             llmAuthToken,
             modelProvider: modelProvider as 'groq' | 'openrouter',
         });
-        updateObj.aiCategory = generatedCategory.category;
-        updateObj.aiSubCategory = generatedCategory.subcategory;
+        if (generatedTags.length >= 1) {
+            updateObj.aiTags = generatedTags;
+            updateObj.aiTags = updateObj.aiTags.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelLifeEvents.updateOne(
+            await ModelNotes.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -241,4 +216,4 @@ const generateLifeEventAiCategoryById = async ({
     }
 };
 
-export default generateLifeEventAiCategoryById;
+export default generateNotesAiTagsById;

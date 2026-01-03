@@ -47,28 +47,13 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
         for (let index = 0; index < notes.length; index++) {
             const element = notes[index];
-            // generate ai tags by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.notes.generateNoteAiTagsById,
-                targetRecordId: element._id,
-            });
 
             // generate ai summary by id
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.notes.generateNoteAiSummaryById,
+                taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                 targetRecordId: element._id,
             });
-
-            // generate embedding by id
-            if (userApi?.apiKeyOllamaValid && userApi?.apiKeyQdrantValid) {
-                await ModelLlmPendingTaskCron.create({
-                    username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.notes.generateEmbeddingByNotesId,
-                    targetRecordId: element._id,
-                });
-            }
         }
 
         // find all task that have aiSummary or aiTags is null
@@ -79,11 +64,11 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
         for (let index = 0; index < tasks.length; index++) {
             const element = tasks[index];
 
-            // generate embedding by id
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             if (userApi?.apiKeyOllamaValid && userApi?.apiKeyQdrantValid) {
                 await ModelLlmPendingTaskCron.create({
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 });
             }
@@ -129,7 +114,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                     targetRecordId: element._id,
                 }
             }
@@ -144,7 +129,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 }
             }
@@ -159,7 +144,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
                     targetRecordId: element._id,
                 }
             }

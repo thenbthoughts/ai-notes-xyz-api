@@ -1,44 +1,13 @@
 const llmPendingTaskTypes = {
     page: {
+        // Consolidated Feature AI Actions - runs all AI actions together (FAQ, Summary, Tags, Embedding)
         featureAiActions: {
-            all: 'featureAiActions_all',
             chatThread: 'featureAiActions_chatThread',
             chatMessage: 'featureAiActions_chatMessage',
             notes: 'featureAiActions_notes',
             task: 'featureAiActions_task',
             lifeEvents: 'featureAiActions_lifeEvents',
             infoVault: 'featureAiActions_infoVault',
-        },
-
-        chat: {
-            // chat threads
-            generateChatThreadTitleById: 'pageChat_generateChatThreadTitleById',
-
-            // chat
-            generateChatTagsById: 'pageChat_generateChatTagsById',
-            generateAudioById: 'pageChat_generateAudioById',
-            generateNextResponseById: 'pageChat_generateNextResponseById',
-        },
-
-        lifeEvents: {
-            // life events
-            generateLifeEventAiSummaryById: 'pageLifeEvents_generateLifeEventAiSummaryById',
-            generateLifeEventAiTagsById: 'pageLifeEvents_generateLifeEventAiTagsById',
-            generateLifeEventAiCategoryById: 'pageLifeEvents_generateLifeEventAiCategoryById',
-        },
-
-        // notes
-        notes: {
-            generateNoteAiSummaryById: 'pageNotes_generateNoteAiSummaryById',
-            generateNoteAiTagsById: 'pageNotes_generateNoteAiTagsById',
-
-            // vector db index by notes id
-            generateEmbeddingByNotesId: 'pageNotes_generateEmbeddingByNotesId',
-        },
-
-        // task
-        task: {
-            generateEmbeddingByTaskId: 'pageTask_generateEmbeddingByTaskId',
         },
 
         // task schedule
@@ -59,11 +28,6 @@ const llmPendingTaskTypes = {
         settings: {
             openRouterModelGet: 'pageSettings_openRouterModelGet',
             groqModelGet: 'pageSettings_groqModelGet',
-        },
-
-        // llmContext
-        llmContext: {
-            generateKeywordsBySourceId: 'pageLlmContext_generateKeywordsBySourceId',
         },
     }
 };

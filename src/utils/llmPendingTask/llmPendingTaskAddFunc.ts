@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { ModelLlmPendingTaskCron } from "../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
-import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById";
+import featureAiActionChatThreadInit from "./page/featureAiAction/featureAiActionChatThread/featureAiActionChatThreadInit";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -28,8 +28,8 @@ const llmPendingTaskProcessFunc = async ({
         // TODO is task lock
         let isTaskLock = false;
 
-        if(resultTask.taskType === llmPendingTaskTypes.page.chat.generateChatThreadTitleById) {
-            isTaskDone = await generateChatThreadTitleById({
+        if(resultTask.taskType === llmPendingTaskTypes.page.featureAiActions.chatThread) {
+            isTaskDone = await featureAiActionChatThreadInit({
                 targetRecordId: resultTask.targetRecordId,
             });
         }
