@@ -327,13 +327,6 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
             updatedAtUserAgent: req.headers['user-agent'] || '',
         });
 
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: newNote._id,
-        });
-
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
@@ -419,20 +412,6 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
                 }
             );
         }
-
-        // generate Feature AI Actions by source id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.notes,
-            targetRecordId: _id,
-        });
-
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: _id,
-        });
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({

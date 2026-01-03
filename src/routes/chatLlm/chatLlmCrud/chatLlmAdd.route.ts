@@ -184,13 +184,6 @@ const handleUploadTypeDocument = async ({
             auth_username,
         });
 
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: result._id,
-        });
-
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
@@ -411,7 +404,7 @@ router.post(
                 // generate keywords by id
                 await ModelLlmPendingTaskCron.create({
                     username: auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
                     targetRecordId: newNote._id,
                 });
 

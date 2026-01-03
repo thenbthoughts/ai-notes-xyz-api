@@ -114,7 +114,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                     targetRecordId: element._id,
                 }
             }
@@ -129,7 +129,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 }
             }
@@ -144,7 +144,7 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
             insertOne: {
                 document: {
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
                     targetRecordId: element._id,
                 }
             }

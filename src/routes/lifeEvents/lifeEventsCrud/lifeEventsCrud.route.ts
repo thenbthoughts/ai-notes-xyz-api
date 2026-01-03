@@ -401,13 +401,6 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
             ...actionDatetimeObj,
         });
 
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: newLifeEvent._id,
-        });
-
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
@@ -514,20 +507,6 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
             );
             console.log(newLifeEvent);
         }
-
-        // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Category, Embedding)
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
-            targetRecordId: _id,
-        });
-
-        // generate keywords by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-            targetRecordId: _id,
-        });
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({

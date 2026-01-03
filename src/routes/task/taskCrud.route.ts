@@ -331,13 +331,6 @@ router.post(
                 username: res.locals.auth_username,
             });
 
-            // generate keywords by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-                targetRecordId: newTask._id,
-            });
-
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
@@ -937,20 +930,6 @@ router.post(
             if (!updatedTask) {
                 return res.status(404).json({ message: 'Task not found' });
             }
-
-            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.task,
-                targetRecordId: updatedTask._id,
-            });
-
-            // generate keywords by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId,
-                targetRecordId: updatedTask._id,
-            });
 
             // generate Feature AI Actions by source id
             await ModelLlmPendingTaskCron.create({

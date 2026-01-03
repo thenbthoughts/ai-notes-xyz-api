@@ -19,9 +19,6 @@ import executeDailySummaryByUserId from "./page/taskSchedule/timeBasedSummary/ge
 import executeWeeklySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateWeeklySummaryByUserId";
 import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId";
 
-// LlmContext tasks
-import generateKeywordsBySourceId from "./page/featureAiAction/featureAiActionAll/keyword/generateKeywordsBySourceId";
-
 // Feature AI Actions tasks
 import featureAiActionNotesInit from "./page/featureAiAction/featureAiActionNotes/featureAiActionNotesInit";
 import featureAiActionTaskInit from "./page/featureAiAction/featureAiActionTask/featureAiActionTaskInit";
@@ -103,13 +100,6 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_sendMyselfEmail:
                 isTaskDone = await sendMyselfEmail({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-
-            // LlmContext tasks
-            case llmPendingTaskTypes.page.llmContext.generateKeywordsBySourceId:
-                isTaskDone = await generateKeywordsBySourceId({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;
