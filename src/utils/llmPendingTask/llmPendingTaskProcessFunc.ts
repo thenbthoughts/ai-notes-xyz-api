@@ -4,22 +4,12 @@ import mongoose from "mongoose";
 import { ModelLlmPendingTaskCron } from "../../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
 
-// Chat tasks
-import generateChatThreadTitleById from "./page/chat/generateChatThreadTitleById";
-import generateChatTagsById from "./page/chat/generateChatTagsById";
-
-// Life Events tasks
-import generateLifeEventAiTagsById from "./page/lifeEvents/generateLifeEventAiTagsById";
-import generateLifeEventAiSummaryById from "./page/lifeEvents/generateLifeEventAiSummaryById";
-import generateLifeEventAiCategoryById from "./page/lifeEvents/generateLifeEventAiCategoryById";
 
 // Notes tasks
-import generateNotesAiSummaryById from "./page/notes/generateNotesAiSummaryById";
-import generateNotesAiTagsById from "./page/notes/generateNotesAiTagsById";
-import generateEmbeddingByNotesId from "./page/notes/generateEmbeddingByNotesId";
+import generateNotesAiSummaryById from "./page/featureAiAction/featureAiActionNotes/generateNotesAiSummaryById";
+import generateNotesAiTagsById from "./page/featureAiAction/featureAiActionNotes/generateNotesAiTagsById";
+import generateEmbeddingByNotesId from "./page/featureAiAction/featureAiActionNotes/generateEmbeddingByNotesId";
 
-// Task tasks
-import generateEmbeddingByTaskId from "./page/task/generateEmbeddingByTaskId";
 
 // Settings tasks
 import openRouterModelGet from "./page/settings/openRouterModelGet";
@@ -40,6 +30,11 @@ import generateKeywordsBySourceId from "./page/llmContext/generateKeywordsBySour
 
 // Feature AI Actions tasks
 import featureAiActionNotesInit from "./page/featureAiAction/featureAiActionNotes/featureAiActionNotesInit";
+import featureAiActionTaskInit from "./page/featureAiAction/featureAiActionTask/featureAiActionTaskInit";
+import featureAiActionLifeEventsInit from "./page/featureAiAction/featureAiActionLifeEvents/featureAiActionLifeEventsInit";
+import featureAiActionInfoVaultInit from "./page/featureAiAction/featureAiActionInfoVault/featureAiActionInfoVaultInit";
+import featureAiActionChatThreadInit from "./page/featureAiAction/featureAiActionChatThread/featureAiActionChatThreadInit";
+import featureAiActionChatMessageInit from "./page/featureAiAction/featureAiActionChatMessage/featureAiActionChatMessageInit";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -67,39 +62,6 @@ const llmPendingTaskProcessFunc = async ({
         let isTaskLock = false;
 
         switch (resultTask.taskType) {
-            // Chat tasks
-            case llmPendingTaskTypes.page.chat.generateChatThreadTitleById:
-                isTaskDone = await generateChatThreadTitleById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-            
-            case llmPendingTaskTypes.page.chat.generateChatTagsById:
-                isTaskDone = await generateChatTagsById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-            
-            // Life Events tasks
-            case llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById:
-                isTaskDone = await generateLifeEventAiSummaryById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-            
-            case llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById:
-                console.log('generateLifeEventAiTagsById', resultTask.targetRecordId);
-                isTaskDone = await generateLifeEventAiTagsById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-            
-            case llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiCategoryById:
-                isTaskDone = await generateLifeEventAiCategoryById({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
-
             // Task Schedule tasks
             case llmPendingTaskTypes.page.taskSchedule.taskSchedule_generateDailySummaryByUserId:
                 try {
@@ -120,12 +82,6 @@ const llmPendingTaskProcessFunc = async ({
                 }
                 break;
 
-            // Task tasks
-            case llmPendingTaskTypes.page.task.generateEmbeddingByTaskId:
-                isTaskDone = await generateEmbeddingByTaskId({
-                    targetRecordId: resultTask.targetRecordId,
-                });
-                break;
 
             // Settings tasks
             case llmPendingTaskTypes.page.settings.openRouterModelGet:
@@ -167,6 +123,36 @@ const llmPendingTaskProcessFunc = async ({
             // Feature AI Actions tasks
             case llmPendingTaskTypes.page.featureAiActions.notes:
                 isTaskDone = await featureAiActionNotesInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.featureAiActions.task:
+                isTaskDone = await featureAiActionTaskInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.featureAiActions.lifeEvents:
+                isTaskDone = await featureAiActionLifeEventsInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.featureAiActions.infoVault:
+                isTaskDone = await featureAiActionInfoVaultInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.featureAiActions.chatThread:
+                isTaskDone = await featureAiActionChatThreadInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.featureAiActions.chatMessage:
+                isTaskDone = await featureAiActionChatMessageInit({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

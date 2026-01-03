@@ -25,7 +25,7 @@ const generateTags = async ({
     try {
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
-            taskType: llmPendingTaskTypes.page.chat.generateChatTagsById,
+            taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: mongodbRecordId,
         });
     } catch (error) {
@@ -61,10 +61,10 @@ router.post(
             // does thread have personal context enabled?
             const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
 
-            // update title
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Title, Embedding)
             await ModelLlmPendingTaskCron.create({
                 username: auth_username,
-                taskType: llmPendingTaskTypes.page.chat.generateChatThreadTitleById,
+                taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
                 targetRecordId: threadId,
             });
 

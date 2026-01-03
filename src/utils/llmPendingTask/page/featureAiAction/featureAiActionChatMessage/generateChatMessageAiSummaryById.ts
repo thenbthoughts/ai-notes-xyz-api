@@ -3,10 +3,10 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
-import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 interface tsMessage {
     role: string;
@@ -53,19 +53,12 @@ const fetchLlmTags = async ({
             modelName = 'openai/gpt-oss-20b';
         }
 
-        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes.
-        Your task is to identify and generate a list of significant keywords based on the content provided by the user.
-        These keywords should represent the main ideas, themes, or topics covered in the user's input.
-
-        Output the result in JSON format as follows:
-        {
-            "keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]
-        }
-        
-        Avoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.
-        Ensure that the keywords are concise and meaningful for quick reference.
-
-        Respond only with the JSON structure.`;
+        let systemPrompt = `From the below content, generate a very detailed summary in simple language.
+        Only output the summary, no other text. No markdown.
+        Suggest out of the box ideas.
+        Suggest few actions that can be taken.
+        Suggestions for chat messages.
+        Suggest few thoughtful questions that can be asked to the user to gather more information, uncover hidden needs, or improve the contents relevance and impact.`;
 
         const data: tsRequestData = {
             messages: [
@@ -83,9 +76,6 @@ const fetchLlmTags = async ({
             max_tokens: 1024,
             top_p: 1,
             stream: false,
-            response_format: {
-                type: "json_object"
-            },
             stop: null
         };
 
@@ -101,49 +91,37 @@ const fetchLlmTags = async ({
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
+        const summaryResponse = response.data.choices[0].message.content;
 
-        const finalTagsOutput = [] as string[];
-
-        if (Array.isArray(keywordsResponse?.keywords)) {
-            const keywords = keywordsResponse?.keywords;
-            for (let index = 0; index < keywords.length; index++) {
-                const element = keywords[index];
-                if (typeof element === 'string') {
-                    finalTagsOutput.push(element.trim());
-                }
-            }
-        }
-
-        return finalTagsOutput; // Return only the array of strings
+        return summaryResponse; // Return only the array of strings
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response)
-        return [];
+        return '';
     }
 }
 
-const  generateLifeEventAiTagsById = async ({
+const  generateChatMessageAiSummaryById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const lifeEventRecords = await ModelLifeEvents.find({
+        const chatMessageRecords = await ModelChatLlm.find({
             _id: targetRecordId,
-        }) as ILifeEvents[];
+        }) as IChatLlm[];
 
-        if (!lifeEventRecords || lifeEventRecords.length !== 1) {
+        if (!chatMessageRecords || chatMessageRecords.length !== 1) {
             return true;
         }
 
-        const lifeEventFirst = lifeEventRecords[0];
+        const chatMessageFirst = chatMessageRecords[0];
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: lifeEventFirst.username,
+            username: chatMessageFirst.username,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -169,35 +147,26 @@ const  generateLifeEventAiTagsById = async ({
 
         const updateObj = {
         } as {
-            aiTags?: string[];
+            aiSummary?: string;
         };
 
-        let argContent = `Title: ${lifeEventFirst.title}`;
-        argContent += `Description: ${lifeEventFirst.description}\n`;
-        argContent += `Event Impact: ${lifeEventFirst.eventImpact}\n`;
-        if(lifeEventFirst.isStar) {
-            argContent += `Is Star: Starred life event\n`;
+        let argContent = chatMessageFirst.content.replace('Text to audio:', '');
+        if(chatMessageFirst.fileContentText && chatMessageFirst.fileContentText.length >= 1) {
+            argContent += `\nFile Content: ${chatMessageFirst.fileContentText}`;
         }
-        if(lifeEventFirst.tags.length >= 1) {
-            argContent += `Tags: ${lifeEventFirst.tags.join(', ')}\n`;
-        }
-        argContent += `Event Date: ${lifeEventFirst.eventDateUtc}\n`;
-        argContent += `Event Date Year: ${lifeEventFirst.eventDateYearStr}\n`;
-        argContent += `Event Date Year Month: ${lifeEventFirst.eventDateYearMonthStr}\n`;
 
-        // Use fetchLlmGroqTags to generate tags from the content of the first message
-        const generatedTags = await fetchLlmTags({
+        // Use fetchLlmTags to generate summary from the content
+        const generatedSummary = await fetchLlmTags({
             argContent: argContent,
             llmAuthToken,
             modelProvider: modelProvider as 'groq' | 'openrouter',
         });
-        if (generatedTags.length >= 1) {
-            updateObj.aiTags = generatedTags;
-            updateObj.aiTags = updateObj.aiTags.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        if (generatedSummary.length >= 1) {
+            updateObj.aiSummary = generatedSummary;
         }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelLifeEvents.updateOne(
+            await ModelChatLlm.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -214,4 +183,5 @@ const  generateLifeEventAiTagsById = async ({
     }
 };
 
-export default generateLifeEventAiTagsById;
+export default generateChatMessageAiSummaryById;
+

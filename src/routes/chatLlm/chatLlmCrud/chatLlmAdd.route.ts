@@ -31,7 +31,7 @@ const generateTags = async ({
     try {
         await ModelLlmPendingTaskCron.create({
             username: auth_username,
-            taskType: llmPendingTaskTypes.page.chat.generateChatTagsById,
+            taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: mongodbRecordId,
         });
     } catch (error) {

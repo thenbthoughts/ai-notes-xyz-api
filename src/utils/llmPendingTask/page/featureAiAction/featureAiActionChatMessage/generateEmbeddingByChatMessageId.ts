@@ -1,33 +1,32 @@
 import { ObjectId } from 'mongodb';
-import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
-import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
-import { getQdrantClient } from '../../../../config/qdrantConfig';
-import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../llm/ollamaCommonFunc';
+import { getQdrantClient } from '../../../../../config/qdrantConfig';
+import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../../llm/ollamaCommonFunc';
 
 /**
- * Find and validate notes record by ID
+ * Find and validate chat message record by ID
  */
-const findNotesRecord = async (targetRecordId: string | null): Promise<INotes | null> => {
+const findChatMessageRecord = async (targetRecordId: string | null): Promise<IChatLlm | null> => {
     if (!targetRecordId) {
         console.log('Target record ID is null');
         return null;
     }
 
-    const notesRecords = await ModelNotes.find({
+    const chatMessageRecords = await ModelChatLlm.find({
         _id: targetRecordId,
-    }) as INotes[];
+    }) as IChatLlm[];
 
-    if (!notesRecords || notesRecords.length !== 1) {
-        console.log('notesRecords not found');
+    if (!chatMessageRecords || chatMessageRecords.length !== 1) {
+        console.log('chatMessageRecords not found');
         return null;
     }
 
-    return notesRecords[0];
+    return chatMessageRecords[0];
 };
 
 /**
@@ -44,22 +43,19 @@ const validateApiKeys = async (username: string) => {
 };
 
 /**
- * Build content string from notes data
+ * Build content string from chat message data
  */
-const buildContentFromNotes = (notesRecord: INotes): string => {
-    let content = `Title: ${notesRecord.title}\n`;
+const buildContentFromChatMessage = (chatMessageRecord: IChatLlm): string => {
+    let content = chatMessageRecord.content.replace('Text to audio:', '');
     
-    if (notesRecord.description.length >= 1) {
-        const markdownContent = NodeHtmlMarkdown.translate(notesRecord.description);
-        content += `Description: ${markdownContent}\n`;
+    if (chatMessageRecord.fileContentText && chatMessageRecord.fileContentText.length >= 1) {
+        content += `\nFile Content: ${chatMessageRecord.fileContentText}`;
     }
-    
-    if (notesRecord.isStar) {
-        content += `Is Star: Starred\n`;
+    if (chatMessageRecord.fileContentAi && chatMessageRecord.fileContentAi.length >= 1) {
+        content += `\nFile Content AI: ${chatMessageRecord.fileContentAi}`;
     }
-    
-    if (notesRecord.tags.length >= 1) {
-        content += `Tags: ${notesRecord.tags.join(', ')}\n`;
+    if (chatMessageRecord.tags.length >= 1) {
+        content += `\nTags: ${chatMessageRecord.tags.join(', ')}`;
     }
 
     return content;
@@ -86,8 +82,8 @@ const generateEmbeddingVector = async (content: string, apiKeyOllamaEndpoint: st
 /**
  * Create vector point with UUID
  */
-const createVectorPoint = (notesId: ObjectId, embedding: number[], content: string) => {
-    const uuid = uuidv5(`notes-record-${notesId.toString()}`, generateUuidNamespaceDefaultDomain());
+const createVectorPoint = (chatMessageId: ObjectId, embedding: number[], content: string) => {
+    const uuid = uuidv5(`chatMessage-record-${chatMessageId.toString()}`, generateUuidNamespaceDefaultDomain());
     console.log('uuid: ', uuid);
 
     return {
@@ -95,9 +91,9 @@ const createVectorPoint = (notesId: ObjectId, embedding: number[], content: stri
         vector: embedding,
         payload: {
             text: content,
-            collectionName: 'notes',
-            recordId: notesId.toString(),
-            recordType: 'notes-record',
+            collectionName: 'chatMessage',
+            recordId: chatMessageId.toString(),
+            recordType: 'chatMessage-record',
         }
     };
 };
@@ -132,37 +128,37 @@ const upsertToVectorDb = async (qdrantClient: any, collectionName: string, point
 };
 
 /**
- * Main function to generate embedding by notes ID
+ * Main function to generate embedding by chat message ID
  */
-const generateEmbeddingByNotesId = async ({
+const generateEmbeddingByChatMessageId = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        // Step 1: Find and validate notes record
-        const notesRecord = await findNotesRecord(targetRecordId);
-        if (!notesRecord) {
-            // TODO delete notes from vector db
+        // Step 1: Find and validate chat message record
+        const chatMessageRecord = await findChatMessageRecord(targetRecordId);
+        if (!chatMessageRecord) {
+            // TODO delete chat message from vector db
             return true;
         }
 
-        const notesId = notesRecord._id as ObjectId;
+        const chatMessageId = chatMessageRecord._id as ObjectId;
 
         // Step 2: Validate API keys
-        const apiKeys = await validateApiKeys(notesRecord.username);
+        const apiKeys = await validateApiKeys(chatMessageRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        // Step 3: Build content from notes
-        const content = buildContentFromNotes(notesRecord);
+        // Step 3: Build content from chat message
+        const content = buildContentFromChatMessage(chatMessageRecord);
 
         // Step 4: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
         // Step 5: Create vector point
-        const point = createVectorPoint(notesId, embedding, content);
+        const point = createVectorPoint(chatMessageId, embedding, content);
 
         // Step 6: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
@@ -175,7 +171,7 @@ const generateEmbeddingByNotesId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${notesRecord.username}`;
+        const collectionName = `index-user-${chatMessageRecord.username}`;
 
         // Step 7: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
@@ -190,4 +186,5 @@ const generateEmbeddingByNotesId = async ({
     }
 };
 
-export default generateEmbeddingByNotesId;
+export default generateEmbeddingByChatMessageId;
+

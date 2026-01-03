@@ -3,10 +3,12 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
-import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import { NodeHtmlMarkdown } from 'node-html-markdown';
+
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { IInfoVaultContact } from "../../../../../types/typesSchema/typesSchemaInfoVault/SchemaInfoVault.types";
 
 interface tsMessage {
     role: string;
@@ -53,10 +55,19 @@ const fetchLlmTags = async ({
             modelName = 'openai/gpt-oss-20b';
         }
 
-        let systemPrompt = `From the below content, generate a detailed summary in simple language.
-        Only output the summary, no other text. No markdown.
-        Also give few suggestions for the life event.
-        Also suggest out of the box ideas.`;
+        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes.
+        Your task is to identify and generate a list of significant keywords based on the content provided by the user.
+        These keywords should represent the main ideas, themes, or topics covered in the user's input.
+
+        Output the result in JSON format as follows:
+        {
+            "keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]
+        }
+        
+        Avoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.
+        Ensure that the keywords are concise and meaningful for quick reference.
+
+        Respond only with the JSON structure.`;
 
         const data: tsRequestData = {
             messages: [
@@ -74,6 +85,9 @@ const fetchLlmTags = async ({
             max_tokens: 1024,
             top_p: 1,
             stream: false,
+            response_format: {
+                type: "json_object"
+            },
             stop: null
         };
 
@@ -89,37 +103,49 @@ const fetchLlmTags = async ({
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const summaryResponse = response.data.choices[0].message.content;
+        const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
 
-        return summaryResponse; // Return only the array of strings
+        const finalTagsOutput = [] as string[];
+
+        if (Array.isArray(keywordsResponse?.keywords)) {
+            const keywords = keywordsResponse?.keywords;
+            for (let index = 0; index < keywords.length; index++) {
+                const element = keywords[index];
+                if (typeof element === 'string') {
+                    finalTagsOutput.push(element.trim());
+                }
+            }
+        }
+
+        return finalTagsOutput; // Return only the array of strings
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response)
-        return '';
+        return [];
     }
 }
 
-const  generateLifeEventAiSummaryById = async ({
+const  generateInfoVaultAiTagsById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const lifeEventRecords = await ModelLifeEvents.find({
+        const infoVaultRecords = await ModelInfoVault.find({
             _id: targetRecordId,
-        }) as ILifeEvents[];
+        }) as IInfoVaultContact[];
 
-        if (!lifeEventRecords || lifeEventRecords.length !== 1) {
+        if (!infoVaultRecords || infoVaultRecords.length !== 1) {
             return true;
         }
 
-        const lifeEventFirst = lifeEventRecords[0];
+        const infoVaultFirst = infoVaultRecords[0];
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: lifeEventFirst.username,
+            username: infoVaultFirst.username,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -145,34 +171,47 @@ const  generateLifeEventAiSummaryById = async ({
 
         const updateObj = {
         } as {
-            aiSummary?: string;
+            aiTags?: string[];
         };
 
-        let argContent = `Title: ${lifeEventFirst.title}`;
-        argContent += `Description: ${lifeEventFirst.description}\n`;
-        argContent += `Event Impact: ${lifeEventFirst.eventImpact}\n`;
-        if(lifeEventFirst.isStar) {
-            argContent += `Is Star: Starred life event\n`;
+        let argContent = `Name: ${infoVaultFirst.name}`;
+        
+        if(infoVaultFirst.nickname) {
+            argContent += `Nickname: ${infoVaultFirst.nickname}\n`;
         }
-        if(lifeEventFirst.tags.length >= 1) {
-            argContent += `Tags: ${lifeEventFirst.tags.join(', ')}\n`;
+        if(infoVaultFirst.company) {
+            argContent += `Company: ${infoVaultFirst.company}\n`;
         }
-        argContent += `Event Date: ${lifeEventFirst.eventDateUtc}\n`;
-        argContent += `Event Date Year: ${lifeEventFirst.eventDateYearStr}\n`;
-        argContent += `Event Date Year Month: ${lifeEventFirst.eventDateYearMonthStr}\n`;
+        if(infoVaultFirst.jobTitle) {
+            argContent += `Job Title: ${infoVaultFirst.jobTitle}\n`;
+        }
+        if(infoVaultFirst.notes && infoVaultFirst.notes.length >= 1) {
+            const markdownContent = NodeHtmlMarkdown.translate(infoVaultFirst.notes);
+            argContent += `Notes: ${markdownContent}\n`;
+        }
+        if(infoVaultFirst.tags.length >= 1) {
+            argContent += `Tags: ${infoVaultFirst.tags.join(', ')}\n`;
+        }
+        if(infoVaultFirst.infoVaultType) {
+            argContent += `Type: ${infoVaultFirst.infoVaultType}\n`;
+        }
+        if(infoVaultFirst.relationshipType) {
+            argContent += `Relationship Type: ${infoVaultFirst.relationshipType}\n`;
+        }
 
-        // Use fetchLlmGroqTags to generate tags from the content of the first message
-        const generatedSummary = await fetchLlmTags({
+        // Use fetchLlmTags to generate tags from the content
+        const generatedTags = await fetchLlmTags({
             argContent: argContent,
             llmAuthToken,
             modelProvider: modelProvider as 'groq' | 'openrouter',
         });
-        if (generatedSummary.length >= 1) {
-            updateObj.aiSummary = generatedSummary;
+        if (generatedTags.length >= 1) {
+            updateObj.aiTags = generatedTags;
+            updateObj.aiTags = updateObj.aiTags.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
         }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelLifeEvents.updateOne(
+            await ModelInfoVault.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -189,4 +228,5 @@ const  generateLifeEventAiSummaryById = async ({
     }
 };
 
-export default generateLifeEventAiSummaryById;
+export default generateInfoVaultAiTagsById;
+

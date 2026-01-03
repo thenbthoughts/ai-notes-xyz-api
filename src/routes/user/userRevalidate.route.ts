@@ -64,11 +64,11 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
         for (let index = 0; index < tasks.length; index++) {
             const element = tasks[index];
 
-            // generate embedding by id
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             if (userApi?.apiKeyOllamaValid && userApi?.apiKeyQdrantValid) {
                 await ModelLlmPendingTaskCron.create({
                     username: res.locals.auth_username,
-                    taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 });
             }

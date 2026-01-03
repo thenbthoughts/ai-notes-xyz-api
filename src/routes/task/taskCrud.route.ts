@@ -322,13 +322,6 @@ router.post(
                 ...actionDatetimeObj,
             });
 
-            // generate embedding by id
-            await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
-                targetRecordId: newTask._id,
-            });
-
             // reindex for global search
             await reindexDocument({
                 reindexDocumentArr: [{
@@ -345,7 +338,7 @@ router.post(
                 targetRecordId: newTask._id,
             });
 
-            // generate Feature AI Actions by source id
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
                 taskType: llmPendingTaskTypes.page.featureAiActions.task,
@@ -945,10 +938,10 @@ router.post(
                 return res.status(404).json({ message: 'Task not found' });
             }
 
-            // generate embedding by id
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
                 username: res.locals.auth_username,
-                taskType: llmPendingTaskTypes.page.task.generateEmbeddingByTaskId,
+                taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: updatedTask._id,
             });
 

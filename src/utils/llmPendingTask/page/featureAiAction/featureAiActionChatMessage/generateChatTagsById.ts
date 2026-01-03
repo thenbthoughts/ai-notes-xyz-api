@@ -3,11 +3,10 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import { NodeHtmlMarkdown } from 'node-html-markdown';
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
-import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 interface tsMessage {
     role: string;
@@ -54,18 +53,11 @@ const fetchLlmTags = async ({
             modelName = 'openai/gpt-oss-20b';
         }
 
-        let systemPrompt = `From the below content, generate a very detailed summary in simple language.
-        Only output the summary, no other text. No markdown.
-        Suggest out of the box ideas.
-        Suggest few actions that can be taken.
-        Suggestions for life events.
-        Suggest few thoughtful questions that can be asked to the user to gather more information, uncover hidden needs, or improve the contents relevance and impact.`;
-
         const data: tsRequestData = {
             messages: [
                 {
                     role: "system",
-                    content: systemPrompt,
+                    content: "You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes. Your task is to identify and generate a list of significant keywords based on the content provided by the user. These keywords should represent the main ideas, themes, or topics covered in the user's input. Output the result in JSON format as follows:\n\n{\n  \"keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]\n}\n\nFocus on capturing nouns, significant verbs, and unique terms relevant to the content.\nAvoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.\nEnsure that the keywords are concise and meaningful for quick reference.\n\nRespond only with the JSON structure.",
                 },
                 {
                     role: "user",
@@ -77,6 +69,9 @@ const fetchLlmTags = async ({
             max_tokens: 1024,
             top_p: 1,
             stream: false,
+            response_format: {
+                type: "json_object"
+            },
             stop: null
         };
 
@@ -92,37 +87,49 @@ const fetchLlmTags = async ({
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const summaryResponse = response.data.choices[0].message.content;
+        const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
 
-        return summaryResponse; // Return only the array of strings
+        const finalTagsOutput = [] as string[];
+
+        if (Array.isArray(keywordsResponse?.keywords)) {
+            const keywords = keywordsResponse?.keywords;
+            for (let index = 0; index < keywords.length; index++) {
+                const element = keywords[index];
+                if (typeof element === 'string') {
+                    finalTagsOutput.push(element.trim());
+                }
+            }
+        }
+
+        return finalTagsOutput; // Return only the array of strings
     } catch (error: any) {
         console.error(error);
         if (isAxiosError(error)) {
             console.error(error.message);
         }
         console.error(error.response)
-        return '';
+        return [];
     }
 }
 
-const  generateNotesAiSummaryById = async ({
+const  generateChatTagsById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const notesRecords = await ModelNotes.find({
+        const messages = await ModelChatLlm.find({
             _id: targetRecordId,
-        }) as INotes[];
+        }) as IChatLlm[];
 
-        if (!notesRecords || notesRecords.length !== 1) {
+        if (!messages || messages.length !== 1) {
             return true;
         }
 
-        const notesFirst = notesRecords[0];
+        const messageFirst = messages[0];
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: notesFirst.username,
+            username: messageFirst.username,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -148,33 +155,21 @@ const  generateNotesAiSummaryById = async ({
 
         const updateObj = {
         } as {
-            aiSummary?: string;
+            tags?: string[];
         };
 
-        let argContent = `Title: ${notesFirst.title}`;
-        if(notesFirst.description.length >= 1) {
-            const markdownContent = NodeHtmlMarkdown.translate(notesFirst.description);
-            argContent += `Description: ${markdownContent}\n`;
-        }
-        if(notesFirst.isStar) {
-            argContent += `Is Star: Starred life event\n`;
-        }
-        if(notesFirst.tags.length >= 1) {
-            argContent += `Tags: ${notesFirst.tags.join(', ')}\n`;
-        }
-
-        // Use fetchLlmGroqTags to generate tags from the content of the first message
-        const generatedSummary = await fetchLlmTags({
-            argContent: argContent,
+        // Use fetchLlmTags to generate tags from the content of the message
+        const generatedTags = await fetchLlmTags({
+            argContent: messages[0].content,
             llmAuthToken,
             modelProvider: modelProvider as 'groq' | 'openrouter',
         });
-        if (generatedSummary.length >= 1) {
-            updateObj.aiSummary = generatedSummary;
+        if (generatedTags.length >= 1) {
+            updateObj.tags = generatedTags;
         }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelNotes.updateOne(
+            await ModelChatLlm.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -191,4 +186,5 @@ const  generateNotesAiSummaryById = async ({
     }
 };
 
-export default generateNotesAiSummaryById;
+export default generateChatTagsById;
+

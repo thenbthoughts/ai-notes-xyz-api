@@ -1,5 +1,6 @@
 const llmPendingTaskTypes = {
     page: {
+        // Consolidated Feature AI Actions - runs all AI actions together (FAQ, Summary, Tags, Embedding)
         featureAiActions: {
             chatThread: 'featureAiActions_chatThread',
             chatMessage: 'featureAiActions_chatMessage',
@@ -7,28 +8,6 @@ const llmPendingTaskTypes = {
             task: 'featureAiActions_task',
             lifeEvents: 'featureAiActions_lifeEvents',
             infoVault: 'featureAiActions_infoVault',
-        },
-
-        chat: {
-            // chat threads
-            generateChatThreadTitleById: 'pageChat_generateChatThreadTitleById',
-
-            // chat
-            generateChatTagsById: 'pageChat_generateChatTagsById',
-            generateAudioById: 'pageChat_generateAudioById',
-            generateNextResponseById: 'pageChat_generateNextResponseById',
-        },
-
-        lifeEvents: {
-            // life events
-            generateLifeEventAiSummaryById: 'pageLifeEvents_generateLifeEventAiSummaryById',
-            generateLifeEventAiTagsById: 'pageLifeEvents_generateLifeEventAiTagsById',
-            generateLifeEventAiCategoryById: 'pageLifeEvents_generateLifeEventAiCategoryById',
-        },
-
-        // task
-        task: {
-            generateEmbeddingByTaskId: 'pageTask_generateEmbeddingByTaskId',
         },
 
         // task schedule

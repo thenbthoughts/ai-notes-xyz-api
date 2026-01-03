@@ -3,11 +3,11 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
-import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 interface tsMessage {
     role: string;
@@ -215,89 +215,7 @@ const fetchLlmSummarise = async ({
     }
 }
 
-const fetchLlmTitle = async ({
-    argContent,
-
-    llmAuthToken,
-    modelProvider,
-}: {
-    argContent: string,
-
-    llmAuthToken: string;
-    modelProvider: 'groq' | 'openrouter';
-}) => {
-    try {
-        // Validate input
-        if (typeof argContent !== 'string' || argContent.trim() === '') {
-            throw new Error('Invalid input: argContent must be a non-empty string.');
-        }
-
-        let apiEndpoint = '';
-        let modelName = '';
-        if (modelProvider === 'openrouter') {
-            apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        } else if (modelProvider === 'groq') {
-            apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        }
-
-        let systemPrompt = '';
-        systemPrompt += `You are an AI assistant specialized in creating concise and descriptive titles based on user notes. `;
-        systemPrompt += `Your task is to generate a clear and meaningful title that captures the main idea or theme of the content provided by the user. `;
-        systemPrompt += `The title should be brief, relevant, and informative. Respond only with the title text, without any additional formatting or explanation. `;
-
-        const data: tsRequestData = {
-            messages: [
-                {
-                    role: "system",
-                    content: systemPrompt,
-                },
-                {
-                    role: "user",
-                    content: argContent,
-                },
-            ],
-            model: modelName,
-            temperature: 0,
-            max_tokens: 1024,
-            top_p: 1,
-            stream: false,
-            stop: null
-        };
-
-        const config: AxiosRequestConfig = {
-            method: 'post',
-            url: apiEndpoint,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${llmAuthToken}`,
-                ...openrouterMarketing,
-            },
-            data: JSON.stringify(data)
-        };
-
-        const response: AxiosResponse = await axios.request(config);
-        const strResponse = response?.data?.choices[0]?.message?.content;
-
-        if (typeof strResponse === 'string') {
-            if (strResponse.length >= 1) {
-                return strResponse;
-            }
-        }
-
-        return '';
-    } catch (error: any) {
-        console.error(error);
-        if (isAxiosError(error)) {
-            console.error(error.message);
-        }
-        console.error(error.response)
-        return '';
-    }
-}
-
-const  generateChatThreadTitleById = async ({
+const  generateChatThreadAiTagsById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
@@ -340,20 +258,16 @@ const  generateChatThreadTitleById = async ({
 
         const updateObj = {
         } as {
-            threadTitle?: string;
             tagsAi?: string[];
-            aiSummary?: string;
         };
 
         const resultSummary = await fetchLlmSummarise({
             argContentArr: messages,
             llmAuthToken,
             modelProvider,
-        })
+        });
         if (resultSummary.length >= 1) {
-            updateObj.aiSummary = resultSummary;
-
-            // Use fetchLlmGroqTags to generate tags from the content of the first message
+            // Use fetchLlmTags to generate tags from the summary
             const generatedTags = await fetchLlmTags({
                 argContent: resultSummary,
                 llmAuthToken,
@@ -361,15 +275,7 @@ const  generateChatThreadTitleById = async ({
             });
             if (generatedTags.length >= 1) {
                 updateObj.tagsAi = generatedTags;
-            }
-
-            const generatedTitle = await fetchLlmTitle({
-                argContent: resultSummary,
-                llmAuthToken,
-                modelProvider: modelProvider as 'groq' | 'openrouter',
-            });
-            if (generatedTitle.length >= 1) {
-                updateObj.threadTitle = generatedTitle;
+                updateObj.tagsAi = updateObj.tagsAi.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
             }
         }
 
@@ -391,4 +297,5 @@ const  generateChatThreadTitleById = async ({
     }
 };
 
-export default generateChatThreadTitleById;
+export default generateChatThreadAiTagsById;
+

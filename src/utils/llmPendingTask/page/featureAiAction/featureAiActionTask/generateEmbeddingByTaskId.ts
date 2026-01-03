@@ -2,13 +2,12 @@ import { ObjectId } from 'mongodb';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
-import { tsTaskList } from "../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
+import { tsTaskList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
 
-import { getQdrantClient } from '../../../../config/qdrantConfig';
-import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../llm/ollamaCommonFunc';
-import { ModelChatLlmThreadContextReference } from '../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema';
+import { getQdrantClient } from '../../../../../config/qdrantConfig';
+import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../../llm/ollamaCommonFunc';
 import mongoose from 'mongoose';
 
 /**
@@ -198,7 +197,7 @@ const buildContentFromTask = async ({
     }
 
     return taskStr;
-}
+};
 
 /**
  * Generate embedding vector from content
@@ -276,32 +275,31 @@ const generateEmbeddingByTaskId = async ({
 }) => {
     try {
         // Step 1: Find and validate task record
-        const taskInfo = await ModelTask.findOne({
-            _id: targetRecordId,
-        }) as tsTaskList;
-        if (!taskInfo) {
+        const taskRecord = await findTaskRecord(targetRecordId);
+        if (!taskRecord) {
+            // TODO delete task from vector db
             return true;
         }
 
+        const taskId = taskRecord._id as ObjectId;
+
         // Step 2: Validate API keys
-        const apiKeys = await validateApiKeys(taskInfo.username);
+        const apiKeys = await validateApiKeys(taskRecord.username);
         if (!apiKeys) {
             return true;
         }
 
         // Step 3: Build content from task
         const content = await buildContentFromTask({
-            username: taskInfo.username,
-            taskId: taskInfo._id as mongoose.Types.ObjectId,
+            username: taskRecord.username,
+            taskId: taskRecord._id as mongoose.Types.ObjectId,
         });
-
-        console.log('content: ', content);
 
         // Step 4: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
         // Step 5: Create vector point
-        const point = createVectorPoint(taskInfo._id as ObjectId, embedding, content);
+        const point = createVectorPoint(taskId, embedding, content);
 
         // Step 6: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
@@ -314,7 +312,7 @@ const generateEmbeddingByTaskId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${taskInfo.username}`;
+        const collectionName = `index-user-${taskRecord.username}`;
 
         // Step 7: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
@@ -330,3 +328,4 @@ const generateEmbeddingByTaskId = async ({
 };
 
 export default generateEmbeddingByTaskId;
+

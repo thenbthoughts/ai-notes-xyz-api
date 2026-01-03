@@ -515,24 +515,10 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
             console.log(newLifeEvent);
         }
 
-        // generate ai tags by id
+        // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Category, Embedding)
         await ModelLlmPendingTaskCron.create({
             username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiTagsById,
-            targetRecordId: _id,
-        });
-
-        // generate ai summary by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiSummaryById,
-            targetRecordId: _id,
-        });
-
-        // generate ai category by id
-        await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
-            taskType: llmPendingTaskTypes.page.lifeEvents.generateLifeEventAiCategoryById,
+            taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
             targetRecordId: _id,
         });
 

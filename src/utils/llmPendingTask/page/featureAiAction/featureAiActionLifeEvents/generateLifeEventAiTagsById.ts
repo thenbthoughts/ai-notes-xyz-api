@@ -3,12 +3,10 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import { NodeHtmlMarkdown } from 'node-html-markdown';
-
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
-import { INotes } from "../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ILifeEvents } from "../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
 
 interface tsMessage {
     role: string;
@@ -128,24 +126,24 @@ const fetchLlmTags = async ({
     }
 }
 
-const  generateNotesAiTagsById = async ({
+const  generateLifeEventAiTagsById = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
 }) => {
     try {
-        const notesRecords = await ModelNotes.find({
+        const lifeEventRecords = await ModelLifeEvents.find({
             _id: targetRecordId,
-        }) as INotes[];
+        }) as ILifeEvents[];
 
-        if (!notesRecords || notesRecords.length !== 1) {
+        if (!lifeEventRecords || lifeEventRecords.length !== 1) {
             return true;
         }
 
-        const notesFirst = notesRecords[0];
+        const lifeEventFirst = lifeEventRecords[0];
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: notesFirst.username,
+            username: lifeEventFirst.username,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -174,20 +172,20 @@ const  generateNotesAiTagsById = async ({
             aiTags?: string[];
         };
 
-        let argContent = `Title: ${notesFirst.title}`;
-        
-        if(notesFirst.description.length >= 1) {
-            const markdownContent = NodeHtmlMarkdown.translate(notesFirst.description);
-            argContent += `Description: ${markdownContent}\n`;
+        let argContent = `Title: ${lifeEventFirst.title}`;
+        argContent += `Description: ${lifeEventFirst.description}\n`;
+        argContent += `Event Impact: ${lifeEventFirst.eventImpact}\n`;
+        if(lifeEventFirst.isStar) {
+            argContent += `Is Star: Starred life event\n`;
         }
-        if(notesFirst.isStar) {
-            argContent += `Is Star: Starred note\n`;
+        if(lifeEventFirst.tags.length >= 1) {
+            argContent += `Tags: ${lifeEventFirst.tags.join(', ')}\n`;
         }
-        if(notesFirst.tags.length >= 1) {
-            argContent += `Tags: ${notesFirst.tags.join(', ')}\n`;
-        }
+        argContent += `Event Date: ${lifeEventFirst.eventDateUtc}\n`;
+        argContent += `Event Date Year: ${lifeEventFirst.eventDateYearStr}\n`;
+        argContent += `Event Date Year Month: ${lifeEventFirst.eventDateYearMonthStr}\n`;
 
-        // Use fetchLlmGroqTags to generate tags from the content of the first message
+        // Use fetchLlmTags to generate tags from the content
         const generatedTags = await fetchLlmTags({
             argContent: argContent,
             llmAuthToken,
@@ -199,7 +197,7 @@ const  generateNotesAiTagsById = async ({
         }
 
         if (Object.keys(updateObj).length >= 1) {
-            await ModelNotes.updateOne(
+            await ModelLifeEvents.updateOne(
                 { _id: targetRecordId },
                 {
                     $set: {
@@ -216,4 +214,5 @@ const  generateNotesAiTagsById = async ({
     }
 };
 
-export default generateNotesAiTagsById;
+export default generateLifeEventAiTagsById;
+
