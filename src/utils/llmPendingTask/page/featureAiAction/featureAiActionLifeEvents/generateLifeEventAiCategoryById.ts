@@ -3,11 +3,11 @@ import axios, {
     AxiosResponse,
     isAxiosError,
 } from "axios";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
-import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
-import lifeCategoriesAiJson from "../../../../routes/lifeEvents/lifeEventsCrud/LifeCategoriesAiJson";
+import openrouterMarketing from "../../../../../config/openrouterMarketing";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ILifeEvents } from "../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import lifeCategoriesAiJson from "../../../../../routes/lifeEvents/lifeEventsCrud/LifeCategoriesAiJson";
 
 interface tsMessage {
     role: string;
@@ -242,3 +242,4 @@ const generateLifeEventAiCategoryById = async ({
 };
 
 export default generateLifeEventAiCategoryById;
+

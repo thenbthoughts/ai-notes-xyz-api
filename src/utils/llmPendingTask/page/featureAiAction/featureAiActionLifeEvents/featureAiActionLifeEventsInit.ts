@@ -1,6 +1,7 @@
 import generateFaqBySourceId from "../featureAiActionAll/faq/generateFaqBySourceId";
 import generateLifeEventAiSummaryById from "./generateLifeEventAiSummaryById";
 import generateLifeEventAiTagsById from "./generateLifeEventAiTagsById";
+import generateLifeEventAiCategoryById from "./generateLifeEventAiCategoryById";
 import generateEmbeddingByLifeEventsId from "./generateEmbeddingByLifeEventsId";
 
 const featureAiActionLifeEventsInit = async ({
@@ -33,7 +34,13 @@ const featureAiActionLifeEventsInit = async ({
         });
         console.log('resultLifeEventsAiTags', resultLifeEventsAiTags);
 
-        // 4. lifeEvents - generate embedding by life events id
+        // 4. lifeEvents - generate life events ai category by id
+        const resultLifeEventsAiCategory = await generateLifeEventAiCategoryById({
+            targetRecordId,
+        });
+        console.log('resultLifeEventsAiCategory', resultLifeEventsAiCategory);
+
+        // 5. lifeEvents - generate embedding by life events id
         const resultEmbedding = await generateEmbeddingByLifeEventsId({
             targetRecordId,
         });
@@ -48,6 +55,9 @@ const featureAiActionLifeEventsInit = async ({
             finalReturn = false;
         }
         if (!resultLifeEventsAiTags) {
+            finalReturn = false;
+        }
+        if (!resultLifeEventsAiCategory) {
             finalReturn = false;
         }
         if (!resultEmbedding) {
