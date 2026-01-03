@@ -1,4 +1,5 @@
 import generateFaqBySourceId from "../featureAiActionAll/faq/generateFaqBySourceId";
+import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKeywordsBySourceId";
 import generateTaskAiSummaryById from "./generateTaskAiSummaryById";
 import generateTaskAiTagsById from "./generateTaskAiTagsById";
 import generateEmbeddingByTaskId from "./generateEmbeddingByTaskId";
@@ -39,6 +40,12 @@ const featureAiActionTaskInit = async ({
         });
         console.log('resultEmbedding', resultEmbedding);
 
+        // 5. common - generate keywords by source id
+        const resultKeywords = await generateKeywordsBySourceId({
+            targetRecordId,
+        });
+        console.log('resultKeywords', resultKeywords);
+
         // return result of all feature ai actions
         let finalReturn = true;
         if (!resultFaq) {
@@ -51,6 +58,9 @@ const featureAiActionTaskInit = async ({
             finalReturn = false;
         }
         if (!resultEmbedding) {
+            finalReturn = false;
+        }
+        if (!resultKeywords) {
             finalReturn = false;
         }
 

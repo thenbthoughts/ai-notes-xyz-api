@@ -4,19 +4,19 @@ import axios, {
     isAxiosError,
 } from "axios";
 import mongoose from "mongoose";
-import openrouterMarketing from "../../../../config/openrouterMarketing";
+import openrouterMarketing from "../../../../../../config/openrouterMarketing";
 
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
-import { ModelLlmContextKeyword } from "../../../../schema/schemaLlmContext/SchemaLlmContextKeyword.schema";
+import { ModelLlmContextKeyword } from "../../../../../../schema/schemaLlmContext/SchemaLlmContextKeyword.schema";
 
-import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
-import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
-import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
-import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
-import { ModelInfoVault } from "../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
-import { ModelUser } from "../../../../schema/schemaUser/SchemaUser.schema";
-import { jsonObjRepairCustom } from "../../../common/jsonObjRepairCustom";
+import { ModelNotes } from "../../../../../../schema/schemaNotes/SchemaNotes.schema";
+import { ModelTask } from "../../../../../../schema/schemaTask/SchemaTask.schema";
+import { ModelChatLlm } from "../../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelLifeEvents } from "../../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ModelInfoVault } from "../../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { ModelUser } from "../../../../../../schema/schemaUser/SchemaUser.schema";
+import { jsonObjRepairCustom } from "../../../../../common/jsonObjRepairCustom";
 
 interface tsMessage {
     role: string;

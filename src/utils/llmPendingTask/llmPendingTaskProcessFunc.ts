@@ -5,12 +5,6 @@ import { ModelLlmPendingTaskCron } from "../../schema/schemaFunctionality/Schema
 import { llmPendingTaskTypes } from "./llmPendingTaskConstants";
 
 
-// Notes tasks
-import generateNotesAiSummaryById from "./page/featureAiAction/featureAiActionNotes/generateNotesAiSummaryById";
-import generateNotesAiTagsById from "./page/featureAiAction/featureAiActionNotes/generateNotesAiTagsById";
-import generateEmbeddingByNotesId from "./page/featureAiAction/featureAiActionNotes/generateEmbeddingByNotesId";
-
-
 // Settings tasks
 import openRouterModelGet from "./page/settings/openRouterModelGet";
 import groqModelGet from "./page/settings/groqModelGet";
@@ -26,7 +20,7 @@ import executeWeeklySummaryByUserId from "./page/taskSchedule/timeBasedSummary/g
 import executeMonthlySummaryByUserId from "./page/taskSchedule/timeBasedSummary/generateMonthlySummaryByUserId";
 
 // LlmContext tasks
-import generateKeywordsBySourceId from "./page/llmContext/generateKeywordsBySourceId";
+import generateKeywordsBySourceId from "./page/featureAiAction/featureAiActionAll/keyword/generateKeywordsBySourceId";
 
 // Feature AI Actions tasks
 import featureAiActionNotesInit from "./page/featureAiAction/featureAiActionNotes/featureAiActionNotesInit";

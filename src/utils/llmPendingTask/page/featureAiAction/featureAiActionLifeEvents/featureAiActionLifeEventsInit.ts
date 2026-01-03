@@ -1,4 +1,5 @@
 import generateFaqBySourceId from "../featureAiActionAll/faq/generateFaqBySourceId";
+import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKeywordsBySourceId";
 import generateLifeEventAiSummaryById from "./generateLifeEventAiSummaryById";
 import generateLifeEventAiTagsById from "./generateLifeEventAiTagsById";
 import generateLifeEventAiCategoryById from "./generateLifeEventAiCategoryById";
@@ -46,6 +47,12 @@ const featureAiActionLifeEventsInit = async ({
         });
         console.log('resultEmbedding', resultEmbedding);
 
+        // 6. common - generate keywords by source id
+        const resultKeywords = await generateKeywordsBySourceId({
+            targetRecordId,
+        });
+        console.log('resultKeywords', resultKeywords);
+
         // return result of all feature ai actions
         let finalReturn = true;
         if (!resultFaq) {
@@ -61,6 +68,9 @@ const featureAiActionLifeEventsInit = async ({
             finalReturn = false;
         }
         if (!resultEmbedding) {
+            finalReturn = false;
+        }
+        if (!resultKeywords) {
             finalReturn = false;
         }
 

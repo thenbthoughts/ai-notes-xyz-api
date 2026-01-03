@@ -7,7 +7,7 @@ import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
-import generateKeywordsBySourceId from '../../utils/llmPendingTask/page/llmContext/generateKeywordsBySourceId';
+import generateKeywordsBySourceId from '../../utils/llmPendingTask/page/featureAiAction/featureAiActionAll/keyword/generateKeywordsBySourceId';
 
 const router = Router();
 

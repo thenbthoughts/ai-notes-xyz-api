@@ -1,4 +1,5 @@
 import generateFaqBySourceId from "../featureAiActionAll/faq/generateFaqBySourceId";
+import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKeywordsBySourceId";
 import generateChatThreadAiSummaryById from "./generateChatThreadAiSummaryById";
 import generateChatThreadAiTagsById from "./generateChatThreadAiTagsById";
 import generateChatThreadAiTitleById from "./generateChatThreadAiTitleById";
@@ -46,6 +47,12 @@ const featureAiActionChatThreadInit = async ({
         });
         console.log('resultEmbedding', resultEmbedding);
 
+        // 6. common - generate keywords by source id
+        const resultKeywords = await generateKeywordsBySourceId({
+            targetRecordId,
+        });
+        console.log('resultKeywords', resultKeywords);
+
         // return result of all feature ai actions
         let finalReturn = true;
         if (!resultFaq) {
@@ -61,6 +68,9 @@ const featureAiActionChatThreadInit = async ({
             finalReturn = false;
         }
         if (!resultEmbedding) {
+            finalReturn = false;
+        }
+        if (!resultKeywords) {
             finalReturn = false;
         }
 
