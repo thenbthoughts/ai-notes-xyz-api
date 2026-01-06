@@ -77,6 +77,9 @@ import routesDrive from './drive/drive.route';
 // ai context
 import routesAiContextKeyword from './aiContext/aiContextKeyword';
 
+// timeline
+import routesTimeline from './timeline/timeline.route';
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
@@ -163,6 +166,9 @@ router.use('/drive', routesDrive);
 
 // routes -> ai context
 router.use('/ai-context/keyword', routesAiContextKeyword);
+
+// routes -> timeline
+router.use('/timeline/crud', routesTimeline);
 
 /*
 Example:
