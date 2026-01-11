@@ -76,6 +76,7 @@ import routesDrive from './drive/drive.route';
 
 // ai context
 import routesAiContextKeyword from './aiContext/aiContextKeyword';
+import routesAiContextFaq from './aiContext/aiContextFaq';
 
 // timeline
 import routesTimeline from './timeline/timeline.route';
@@ -166,6 +167,7 @@ router.use('/drive', routesDrive);
 
 // routes -> ai context
 router.use('/ai-context/keyword', routesAiContextKeyword);
+router.use('/ai-context/faq', routesAiContextFaq);
 
 // routes -> timeline
 router.use('/timeline/crud', routesTimeline);

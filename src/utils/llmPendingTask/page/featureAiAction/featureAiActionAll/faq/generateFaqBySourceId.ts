@@ -26,7 +26,7 @@ interface tsFaqResponse {
  * Extract content from source record based on source type
  */
 const extractContentFromSource = async (
-    sourceType: string,
+    sourceType: 'notes' | 'tasks' | 'chatThread' | 'chatLlm' | 'lifeEvents' | 'infoVault',
     targetRecordIdObj: mongoose.Types.ObjectId
 ): Promise<{ username: string; content: string } | null> => {
     let username = '';
@@ -229,17 +229,12 @@ const generateFaqsWithLlm = async ({
 
     const systemPrompt = `You are an AI assistant specialized in generating Frequently Asked Questions (FAQs) from content.
 
-Your task is to analyze the provided content and generate relevant FAQs that would help users understand:
-1. How to use features related to this content
-2. Common questions about the content structure and fields
-3. Best practices and tips
-4. Troubleshooting common issues
-
-Generate 5-10 high-quality FAQs based on the content. Each FAQ should have:
-- A clear, specific question
-- A detailed, helpful answer
-- Relevant category and subcategory
-- Appropriate tags
+Guidelines:
+- Base all questions and answers strictly on the provided content.
+- Do not make assumptions or include information not explicitly stated in the source.
+- Provide detailed, helpful answers that address the question directly.
+- Include relevant category and subcategory for each FAQ.
+- Use appropriate tags to categorize FAQs.
 
 Output the result in JSON format:
 {
@@ -252,9 +247,7 @@ Output the result in JSON format:
             "tags": ["tag1", "tag2"]
         }
     ]
-}
-
-Focus on practical, actionable FAQs that would genuinely help users understand and use the features effectively.`;
+}`;
 
     const messages: Message[] = [
         {
@@ -308,7 +301,7 @@ const generateFaqBySourceId = async ({
     sourceType,
 }: {
     targetRecordId: string | null;
-    sourceType: string;
+    sourceType: 'notes' | 'tasks' | 'chatThread' | 'chatLlm' | 'lifeEvents' | 'infoVault';
 }) => {
     try {
         if (!targetRecordId || !sourceType) {
@@ -396,6 +389,8 @@ const generateFaqBySourceId = async ({
             metadataSourceType: sourceType,
             metadataSourceId: targetRecordIdObj,
         });
+
+        console.log('faqsToCreate: ', faqsToCreate);
 
         // insert new FAQs
         await ModelFaq.insertMany(faqsToCreate);

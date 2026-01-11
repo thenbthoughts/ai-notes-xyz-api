@@ -19,7 +19,7 @@ const featureAiActionChatMessageInit = async ({
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({
             targetRecordId,
-            sourceType: 'chatMessage',
+            sourceType: 'chatLlm',
         });
 
         // 2. chatMessage - generate chat message ai summary by id
