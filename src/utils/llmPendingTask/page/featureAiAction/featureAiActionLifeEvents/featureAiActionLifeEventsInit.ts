@@ -4,6 +4,8 @@ import generateLifeEventAiSummaryById from "./generateLifeEventAiSummaryById";
 import generateLifeEventAiTagsById from "./generateLifeEventAiTagsById";
 import generateLifeEventAiCategoryById from "./generateLifeEventAiCategoryById";
 import generateEmbeddingByLifeEventsId from "./generateEmbeddingByLifeEventsId";
+import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionLifeEventsInit = async ({
     targetRecordId,
@@ -52,6 +54,18 @@ const featureAiActionLifeEventsInit = async ({
             targetRecordId,
         });
         console.log('resultKeywords', resultKeywords);
+
+        // reindex the document in global search after all AI actions are complete
+        const lifeEventRecord = await ModelLifeEvents.findById(targetRecordId).select('username').lean();
+        if (lifeEventRecord) {
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: 'lifeEvents',
+                    documentId: targetRecordId,
+                }],
+                username: lifeEventRecord.username,
+            });
+        }
 
         // return result of all feature ai actions
         let finalReturn = true;

@@ -8,11 +8,6 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
         default: '',
         index: true,
     },
-    ngram: {
-        type: [String],
-        default: [],
-        index: true,
-    },
 
     // Reference fields
     entityId: {
