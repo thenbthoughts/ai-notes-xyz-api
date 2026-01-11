@@ -26,7 +26,7 @@ interface tsFaqResponse {
  * Extract content from source record based on source type
  */
 const extractContentFromSource = async (
-    sourceType: string,
+    sourceType: 'notes' | 'tasks' | 'chatThread' | 'chatLlm' | 'lifeEvents' | 'infoVault',
     targetRecordIdObj: mongoose.Types.ObjectId
 ): Promise<{ username: string; content: string } | null> => {
     let username = '';
@@ -301,7 +301,7 @@ const generateFaqBySourceId = async ({
     sourceType,
 }: {
     targetRecordId: string | null;
-    sourceType: string;
+    sourceType: 'notes' | 'tasks' | 'chatThread' | 'chatLlm' | 'lifeEvents' | 'infoVault';
 }) => {
     try {
         if (!targetRecordId || !sourceType) {
@@ -389,6 +389,8 @@ const generateFaqBySourceId = async ({
             metadataSourceType: sourceType,
             metadataSourceId: targetRecordIdObj,
         });
+
+        console.log('faqsToCreate: ', faqsToCreate);
 
         // insert new FAQs
         await ModelFaq.insertMany(faqsToCreate);

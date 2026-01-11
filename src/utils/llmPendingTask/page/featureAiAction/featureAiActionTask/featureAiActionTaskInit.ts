@@ -19,8 +19,9 @@ const featureAiActionTaskInit = async ({
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({
             targetRecordId,
-            sourceType: 'task',
+            sourceType: 'tasks',
         });
+        console.log('resultFaq', resultFaq);
 
         // 2. task - generate task ai summary by id
         const resultTaskAiSummary = await generateTaskAiSummaryById({

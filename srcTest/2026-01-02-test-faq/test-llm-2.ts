@@ -12,8 +12,8 @@ const init = async () => {
 
         const resultInsert = await ModelLlmPendingTaskCron.create({
             "username": "gridfstest",
-            "taskType": llmPendingTaskTypes.page.featureAiActions.notes,
-            "targetRecordId": "69592d424499b626a0a9b3a9",
+            "taskType": llmPendingTaskTypes.page.featureAiActions.task,
+            "targetRecordId": "6963ae9ce6c8989223a95da4",
         });
 
         console.log('resultInsert', resultInsert);
