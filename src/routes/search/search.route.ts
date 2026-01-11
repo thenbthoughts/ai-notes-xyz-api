@@ -4,7 +4,7 @@ import { NodeHtmlMarkdown } from "node-html-markdown";
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
-import { generateNgrams, reindexAll } from '../../utils/search/reindexGlobalSearch';
+import { reindexAll } from '../../utils/search/reindexGlobalSearch';
 import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 
 // Router

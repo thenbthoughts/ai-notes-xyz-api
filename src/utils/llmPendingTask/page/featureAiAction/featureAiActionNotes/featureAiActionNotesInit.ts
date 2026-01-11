@@ -3,6 +3,8 @@ import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKe
 import generateNotesAiSummaryById from "./generateNotesAiSummaryById";
 import generateNotesAiTagsById from "./generateNotesAiTagsById";
 import generateEmbeddingByNotesId from "./generateEmbeddingByNotesId";
+import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
+import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionNotesInit = async ({
     targetRecordId,
@@ -45,6 +47,18 @@ const featureAiActionNotesInit = async ({
             targetRecordId,
         });
         console.log('resultKeywords', resultKeywords);
+
+        // reindex the document in global search after all AI actions are complete
+        const notesRecord = await ModelNotes.findById(targetRecordId).select('username').lean();
+        if (notesRecord) {
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: 'notes',
+                    documentId: targetRecordId,
+                }],
+                username: notesRecord.username,
+            });
+        }
 
         // return result of all feature ai actions
         let finalReturn = true;

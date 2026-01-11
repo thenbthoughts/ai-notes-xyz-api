@@ -12,28 +12,6 @@ import { ModelChatLlmThread } from '../../schema/schemaChatLlm/SchemaChatLlmThre
 
 import { getMongodbObjectOrNull } from '../common/getMongodbObjectOrNull';
 
-
-// Generate ngrams from text
-export const generateNgrams = ({ text, minSize = 4, maxSize = 5 }: { text: string; minSize?: number; maxSize?: number }): string[] => {
-    if (!text || text.length === 0) {
-        return [];
-    }
-
-    const normalizedText = text.toLowerCase().replace(/\s+/g, ' ');
-    const ngrams: string[] = [];
-
-    for (let size = minSize; size <= maxSize; size++) {
-        for (let i = 0; i <= normalizedText.length - size; i++) {
-            const ngram = normalizedText.substring(i, i + size);
-            if (ngram.trim().length > 0) {
-                ngrams.push(ngram);
-            }
-        }
-    }
-
-    return [...new Set(ngrams)]; // Remove duplicates
-};
-
 const getDocuments = async ({ reindexDocumentArr, username }: {
     reindexDocumentArr: Array<{ collectionName: string; documentId: string }>;
     username: string;
@@ -291,13 +269,11 @@ const getInsertObjectFromTask = (task: any): IGlobalSearch => {
     }
 
     const searchableText = textParts.join(' ');
-    const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
     return {
         entityId: task._id,
         username: task.username,
         text: searchableText,
-        ngram: ngrams,
         collectionName: 'tasks',
         taskIsCompleted: task.isCompleted,
         taskIsArchived: task.isArchived,
@@ -338,13 +314,11 @@ const getInsertObjectFromNote = (note: any): IGlobalSearch => {
     }
 
     const searchableText = textParts.join(' ');
-    const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
     return {
         entityId: note._id,
         username: note.username,
         text: searchableText,
-        ngram: ngrams,
         collectionName: 'notes',
         notesWorkspaceId: note.notesWorkspaceId,
         updatedAtUtc: note.updatedAtUtc || new Date(),
@@ -383,7 +357,6 @@ const getInsertObjectFromLifeEvent = (lifeEvent: any): IGlobalSearch => {
     }
 
     const searchableText = textParts.join(' ');
-    const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
     let isDiary = false;
     if (lifeEvent.title && /(Daily|Weekly|Monthly) Summary by AI/i.test(lifeEvent.title)) {
@@ -394,7 +367,6 @@ const getInsertObjectFromLifeEvent = (lifeEvent: any): IGlobalSearch => {
         entityId: lifeEvent._id,
         username: lifeEvent.username,
         text: searchableText,
-        ngram: ngrams,
         collectionName: 'lifeEvents',
         lifeEventIsDiary: isDiary,
         updatedAtUtc: lifeEvent.updatedAtUtc || new Date(),
@@ -413,13 +385,11 @@ const getInsertObjectFromInfoVault = (infoVault: any): IGlobalSearch => {
     }
 
     const searchableText = textParts.join(' ');
-    const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
     return {
         entityId: infoVault._id,
         username: infoVault.username,
         text: searchableText,
-        ngram: ngrams,
         collectionName: 'infoVault',
         updatedAtUtc: infoVault.updatedAtUtc || new Date(),
     } as IGlobalSearch;
@@ -435,13 +405,11 @@ const getInsertObjectFromChatLlmThread = (chatLlmThread: any): IGlobalSearch => 
     if (chatLlmThread.systemPrompt) textParts.push(chatLlmThread.systemPrompt.toLowerCase());
 
     const searchableText = textParts.join(' ');
-    const ngrams = textParts.flatMap(text => generateNgrams({ text }));
 
     return {
         entityId: chatLlmThread._id,
         username: chatLlmThread.username,
         text: searchableText,
-        ngram: ngrams,
         collectionName: 'chatLlmThread',
         updatedAtUtc: chatLlmThread.updatedAtUtc || new Date(),
     } as IGlobalSearch;

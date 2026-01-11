@@ -3,6 +3,8 @@ import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKe
 import generateTaskAiSummaryById from "./generateTaskAiSummaryById";
 import generateTaskAiTagsById from "./generateTaskAiTagsById";
 import generateEmbeddingByTaskId from "./generateEmbeddingByTaskId";
+import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
+import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionTaskInit = async ({
     targetRecordId,
@@ -46,6 +48,18 @@ const featureAiActionTaskInit = async ({
             targetRecordId,
         });
         console.log('resultKeywords', resultKeywords);
+
+        // reindex the document in global search after all AI actions are complete
+        const taskRecord = await ModelTask.findById(targetRecordId).select('username').lean();
+        if (taskRecord) {
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: 'tasks',
+                    documentId: targetRecordId,
+                }],
+                username: taskRecord.username,
+            });
+        }
 
         // return result of all feature ai actions
         let finalReturn = true;

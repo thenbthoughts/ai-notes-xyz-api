@@ -3,6 +3,8 @@ import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKe
 import generateInfoVaultAiSummaryById from "./generateInfoVaultAiSummaryById";
 import generateInfoVaultAiTagsById from "./generateInfoVaultAiTagsById";
 import generateEmbeddingByInfoVaultId from "./generateEmbeddingByInfoVaultId";
+import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionInfoVaultInit = async ({
     targetRecordId,
@@ -45,6 +47,18 @@ const featureAiActionInfoVaultInit = async ({
             targetRecordId,
         });
         console.log('resultKeywords', resultKeywords);
+
+        // reindex the document in global search after all AI actions are complete
+        const infoVaultRecord = await ModelInfoVault.findById(targetRecordId).select('username').lean();
+        if (infoVaultRecord) {
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: 'infoVault',
+                    documentId: targetRecordId,
+                }],
+                username: infoVaultRecord.username,
+            });
+        }
 
         // return result of all feature ai actions
         let finalReturn = true;
