@@ -96,8 +96,9 @@ const fetchLlmKeywords = async ({
 
         let systemPromptLanguages = '';
         if (languagesStr && languagesStr.length > 0) {
-            systemPromptLanguages = `The user's spoken languages are: ${languagesStr}. `;
-            systemPromptLanguages += `Generate keywords in english and the user's spoken languages. `;
+            systemPromptLanguages = `The user speaks the following languages: English and ${languagesStr}. `;
+            systemPromptLanguages += `Generate keywords in multiple language formats: `;
+            systemPromptLanguages += `Distribute keywords evenly across three formats: pure English, code-mixed bilingual (e.g., Hinglish, Spanglish, ${languagesStr}-English hybrid), and pure ${languagesStr}. `;
         }
 
         const systemPrompt = `You are a JSON-based AI assistant specialized in generating comprehensive keywords from content.
