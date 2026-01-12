@@ -680,6 +680,10 @@ const getNextMessageFromLast30Conversation = async ({
 }) => {
     const messages: Message[] = [];
 
+    // 
+    const chatLlmTemperature = threadInfo.chatLlmTemperature || 1;
+    const chatLlmMaxTokens = threadInfo.chatLlmMaxTokens || 8096;
+
     // system prompt
     const systemPrompt = threadInfo.systemPrompt || "";
     if (systemPrompt.length >= 1) {
@@ -787,10 +791,16 @@ const getNextMessageFromLast30Conversation = async ({
                     apiEndpoint: llmEndpoint,
                     model: aiModelName,
                     messages: messages,
-                    temperature: 1,
-                    maxTokens: 8096,
+                    temperature: chatLlmTemperature,
+                    maxTokens: chatLlmMaxTokens,
                 },
-                async (token: string) => {
+                async ({
+                    token,
+                    reasoningContent,
+                }: {
+                    token: string;
+                    reasoningContent: string;
+                }) => {
                     fullContent += token;
                     const now = Date.now();
                     
@@ -803,6 +813,14 @@ const getNextMessageFromLast30Conversation = async ({
                             {
                                 $set: {
                                     content: `AI: ${fullContent}`,
+                                    reasoningContent: reasoningContent,
+
+                                    // stats
+                                    promptTokens: 0,
+                                    completionTokens: 0,
+                                    reasoningTokens: 0,
+                                    totalTokens: 0,
+                                    costInUsd: 0,
                                 }
                             }
                         );
@@ -811,13 +829,21 @@ const getNextMessageFromLast30Conversation = async ({
             );
 
             if (streamResult.success) {
-                resultNextMessage = streamResult.fullContent;
+                console.log('streamResult Success: ', streamResult);
                 // Final update
                 await ModelChatLlm.findOneAndUpdate(
                     { _id: messageId },
                     {
                         $set: {
-                            content: `AI: ${resultNextMessage}`,
+                            content: `AI: ${streamResult.fullContent}`,
+                            reasoningContent: streamResult.reasoningContent,
+
+                            // stats
+                            promptTokens: streamResult.promptTokens,
+                            completionTokens: streamResult.completionTokens,
+                            reasoningTokens: streamResult.reasoningTokens,
+                            totalTokens: streamResult.totalTokens,
+                            costInUsd: streamResult.costInUsd,
                         }
                     }
                 );

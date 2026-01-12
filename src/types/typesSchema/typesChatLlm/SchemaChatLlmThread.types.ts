@@ -10,6 +10,9 @@ export interface IChatLlmThread extends Document {
     isAutoAiContextSelectEnabled: boolean,
     systemPrompt: string,
 
+    chatLlmTemperature: number,
+    chatLlmMaxTokens: number,
+
     // classification
     isFavourite: boolean,
 

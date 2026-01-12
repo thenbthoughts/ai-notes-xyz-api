@@ -20,6 +20,14 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: String,
         default: ''
     },
+    chatLlmTemperature: {
+        type: Number,
+        default: 1,
+    },
+    chatLlmMaxTokens: {
+        type: Number,
+        default: 8096,
+    },
 
     // classification
     isFavourite: {
