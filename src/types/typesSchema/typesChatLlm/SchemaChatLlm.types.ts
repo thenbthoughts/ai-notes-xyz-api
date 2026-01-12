@@ -8,6 +8,7 @@ export interface IChatLlm extends Document {
     // ai
     type: string,
     content: string;
+    reasoningContent: string;
     username: string;
     tags: string[];
     visibility: string;
@@ -33,4 +34,11 @@ export interface IChatLlm extends Document {
 
     // auto ai
     tagsAutoAi: string[];
+
+    // stats
+    promptTokens: number;
+    completionTokens: number;
+    reasoningTokens: number;
+    totalTokens: number;
+    costInUsd: number;
 };

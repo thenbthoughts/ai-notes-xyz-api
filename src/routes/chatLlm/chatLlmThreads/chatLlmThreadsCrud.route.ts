@@ -331,6 +331,9 @@ router.post(
 
                 systemPrompt,
 
+                chatLlmTemperature,
+                chatLlmMaxTokens,
+
                 // classification
                 isFavourite,
             } = req.body;
@@ -359,6 +362,14 @@ router.post(
 
             if (typeof systemPrompt === 'string') {
                 updateData.systemPrompt = systemPrompt;
+            };
+
+            if (typeof chatLlmTemperature === 'number') {
+                updateData.chatLlmTemperature = chatLlmTemperature;
+            };
+
+            if (typeof chatLlmMaxTokens === 'number') {
+                updateData.chatLlmMaxTokens = chatLlmMaxTokens;
             };
 
             if (typeof isFavourite === 'boolean') {

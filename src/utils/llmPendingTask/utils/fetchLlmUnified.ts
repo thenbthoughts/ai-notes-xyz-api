@@ -156,8 +156,8 @@ function buildOpenAiPayload(params: FetchLlmParams) {
   }
 
   if (params.provider === 'openrouter' && params.openRouterApi) {
-    if(params?.openRouterApi?.provider) {
-      if(params?.openRouterApi?.provider?.sort) {
+    if (params?.openRouterApi?.provider) {
+      if (params?.openRouterApi?.provider?.sort) {
         data.provider = {
           sort: params?.openRouterApi?.provider?.sort
         }
@@ -302,7 +302,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
     const toolCalls: ToolCall[] | undefined = choice?.message?.tool_calls;
     return { success: content.length > 0 || !!toolCalls?.length, content, raw: response.data, error: '', toolCalls };
   } catch (error) {
-    console.log('Llm failed error: ', error);
+    console.error('Llm failed error: ', error);
     if (isAxiosError(error)) {
       return { success: false, content: '', raw: error.response?.data, error: error.message };
     }
@@ -323,8 +323,31 @@ export async function fetchLlmText(params: FetchLlmParams): Promise<string> {
  */
 export async function fetchLlmUnifiedStream(
   params: FetchLlmStreamParams,
-  onToken: (token: string) => Promise<void>
-): Promise<{ success: boolean; error?: string; fullContent: string }> {
+  onToken: ({
+    token,
+    reasoningContent,
+  }: {
+    token: string;
+    reasoningContent: string;
+  }) => Promise<void>
+): Promise<{
+  success: boolean; error?: string; fullContent: string, reasoningContent: string;
+
+  // stats
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  costInUsd: number;
+}> {
+  let returnStatsObj = {
+    promptTokens: 0,
+    completionTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    costInUsd: 0
+  }
+
   try {
     let finalApiEndpoint = '';
     const headers: Record<string, string> = {
@@ -346,7 +369,17 @@ export async function fetchLlmUnifiedStream(
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
     } else {
-      return { success: false, error: 'Streaming only supported for groq and openrouter providers', fullContent: '' };
+      return {
+        success: false,
+        error: 'Streaming only supported for groq and openrouter providers',
+        fullContent: '',
+        reasoningContent: '',
+        promptTokens: 0,
+        completionTokens: 0,
+        reasoningTokens: 0,
+        totalTokens: 0,
+        costInUsd: 0,
+      }
     }
 
     if (params.headersExtra) {
@@ -371,14 +404,17 @@ export async function fetchLlmUnifiedStream(
     };
 
     let fullContent = '';
+    let reasoningContent = '';
     const response = await axios.request(config);
 
     // Check for HTTP errors
     if (response.status !== 200) {
-      return { 
-        success: false, 
-        error: `HTTP ${response.status}: ${response.statusText}`, 
-        fullContent: '' 
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${response.statusText}`,
+        fullContent: '',
+        reasoningContent: '',
+        ...returnStatsObj,
       };
     }
 
@@ -386,10 +422,22 @@ export async function fetchLlmUnifiedStream(
     const stream = response.data;
     let buffer = '';
 
-    return new Promise<{ success: boolean; error?: string; fullContent: string }>((resolve, reject) => {
+    return new Promise<{
+      success: boolean;
+      error?: string;
+      fullContent: string;
+      reasoningContent: string;
+
+      // stats
+      promptTokens: number;
+      completionTokens: number;
+      reasoningTokens: number;
+      totalTokens: number;
+      costInUsd: number;
+    }>((resolve, reject) => {
       stream.on('data', async (chunk: Buffer) => {
         buffer += chunk.toString();
-        
+
         // Process complete lines (SSE format: "data: {...}\n\n")
         const lines = buffer.split('\n');
         buffer = lines.pop() || ''; // Keep incomplete line in buffer
@@ -405,20 +453,43 @@ export async function fetchLlmUnifiedStream(
             try {
               const jsonStr = trimmedLine.substring(6); // Remove "data: " prefix
               const data = JSON.parse(jsonStr);
-              
+
               // Extract content delta from choices
               const choice = data?.choices?.[0];
-              if (choice?.delta?.content) {
-                const token = choice.delta.content;
-                fullContent += token;
-                
+              if (choice?.delta?.reasoning) {
+                reasoningContent += choice.delta.reasoning;
+
                 // Call the onToken callback
                 try {
-                  await onToken(token);
+                  await onToken({
+                    token: '',
+                    reasoningContent,
+                  });
                 } catch (tokenError) {
                   console.error('Error in onToken callback:', tokenError);
                 }
               }
+              if (choice?.delta?.content) {
+                const token = choice.delta.content;
+                fullContent += token;
+
+                // Call the onToken callback
+                try {
+                  await onToken({
+                    token,
+                    reasoningContent,
+                  });
+                } catch (tokenError) {
+                  console.error('Error in onToken callback:', tokenError);
+                }
+              }
+
+              // update stats
+              returnStatsObj.promptTokens = data?.usage?.prompt_tokens ?? 0;
+              returnStatsObj.completionTokens = data?.usage?.completion_tokens ?? 0;
+              returnStatsObj.reasoningTokens = data?.usage?.reasoning_tokens ?? 0;
+              returnStatsObj.totalTokens = data?.usage?.total_tokens ?? 0;
+              returnStatsObj.costInUsd = data?.usage?.cost ?? 0;
             } catch (parseError) {
               // Skip invalid JSON lines (e.g., empty data lines)
               console.warn('Failed to parse SSE line:', trimmedLine);
@@ -445,20 +516,44 @@ export async function fetchLlmUnifiedStream(
             }
           }
         }
-        resolve({ success: true, fullContent });
+
+        resolve({
+          success: true,
+          fullContent,
+          reasoningContent,
+          ...returnStatsObj,
+        });
       });
 
       stream.on('error', (error: Error) => {
         console.error('Stream error:', error);
-        resolve({ success: false, error: error.message, fullContent });
+        resolve({
+          success: false,
+          error: error.message,
+          fullContent,
+          reasoningContent,
+          ...returnStatsObj,
+        });
       });
     });
   } catch (error) {
-    console.log('Llm stream failed error: ', error);
+    console.error('Llm stream failed error: ', error);
     if (isAxiosError(error)) {
-      return { success: false, error: error.message, fullContent: '' };
+      return {
+        success: false,
+        error: error.message,
+        fullContent: '',
+        reasoningContent: '',
+        ...returnStatsObj,
+      };
     }
-    return { success: false, error: (error as Error)?.message || 'Unknown error', fullContent: '' };
+    return {
+      success: false,
+      error: (error as Error)?.message || 'Unknown error',
+      fullContent: '',
+      reasoningContent: '',
+      ...returnStatsObj,
+    };
   }
 }
 

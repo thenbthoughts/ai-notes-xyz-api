@@ -390,8 +390,6 @@ const generateFaqBySourceId = async ({
             metadataSourceId: targetRecordIdObj,
         });
 
-        console.log('faqsToCreate: ', faqsToCreate);
-
         // insert new FAQs
         await ModelFaq.insertMany(faqsToCreate);
 

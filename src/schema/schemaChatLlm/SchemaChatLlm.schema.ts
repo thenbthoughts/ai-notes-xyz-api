@@ -14,7 +14,8 @@ const chatLlmSchema = new Schema<IChatLlm>({
         type: String, required: true, default: ''
         // types are text, image, video, location, contacts, file etc.
     },
-    content: { type: String, required: true, default: '' },
+    content: { type: String, default: '' },
+    reasoningContent: { type: String, default: '' },
     username: { type: String, required: true, default: '', index: true, },
     tags: { type: [String], default: [] },
     visibility: {
@@ -83,6 +84,28 @@ const chatLlmSchema = new Schema<IChatLlm>({
 
     // auto ai
     tagsAutoAi: { type: [String], default: [] },
+
+    // stats
+    promptTokens: {
+        type: Number,
+        default: 0,
+    },
+    completionTokens: {
+        type: Number,
+        default: 0,
+    },
+    reasoningTokens: {
+        type: Number,
+        default: 0,
+    },
+    totalTokens: {
+        type: Number,
+        default: 0,
+    },
+    costInUsd: {
+        type: Number,
+        default: 0,
+    },
 });
 
 // Chat Model
