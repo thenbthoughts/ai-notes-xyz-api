@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { PipelineStage } from "mongoose";
 import { NodeHtmlMarkdown } from "node-html-markdown";
 
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
@@ -102,11 +102,14 @@ const getConversationList = async ({
 
     modelProvider,
     modelName,
+
+    threadInfo,
 }: {
     username: string,
     threadId: mongoose.Types.ObjectId,
     modelProvider: 'groq' | 'openrouter',
     modelName: string,
+    threadInfo: IChatLlmThread,
 }) => {
     interface IChatLlmTemp extends IChatLlm {
         temp_base64_file: string;
@@ -121,10 +124,37 @@ const getConversationList = async ({
 
     let conversationList = [] as Message[];
 
-    const resultConversations = await ModelChatLlm.find({
-        username,
-        threadId,
-    }) as IChatLlmTemp[];
+    let pipelineGetConversations = [] as PipelineStage[];
+
+    // match by username and threadId
+    pipelineGetConversations.push({
+        $match: {
+            username,
+            threadId,
+        }
+    });
+
+    // sort by createdAtUtc descending
+    if (threadInfo.chatMemoryLimit >= 1) {
+        pipelineGetConversations.push({
+            $sort: {
+                createdAtUtc: -1,
+            }
+        });
+
+        pipelineGetConversations.push({
+            $limit: threadInfo.chatMemoryLimit,
+        });
+    }
+
+    // sort by createdAtUtc ascending
+    pipelineGetConversations.push({
+        $sort: {
+            createdAtUtc: 1,
+        }
+    });
+
+    const resultConversations = await ModelChatLlm.aggregate(pipelineGetConversations) as IChatLlmTemp[];
 
     let isContainImages = false;
     for (let index = 0; index < resultConversations.length; index++) {
@@ -748,6 +778,7 @@ const getNextMessageFromLast30Conversation = async ({
         threadId,
         modelProvider: aiModelProvider,
         modelName: aiModelName,
+        threadInfo,
     });
     for (let index = 0; index < conversationList.length; index++) {
         const element = conversationList[index];

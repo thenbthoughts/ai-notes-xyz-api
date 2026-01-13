@@ -3,22 +3,24 @@ import { Document } from 'mongoose';
 // Chat Interface
 export interface IChatLlmThread extends Document {
     // fields
-    threadTitle: string,
+    threadTitle: string;
 
     // auto context
-    isPersonalContextEnabled: boolean,
-    isAutoAiContextSelectEnabled: boolean,
-    systemPrompt: string,
+    isPersonalContextEnabled: boolean;
+    isAutoAiContextSelectEnabled: boolean;
+    systemPrompt: string;
 
-    chatLlmTemperature: number,
-    chatLlmMaxTokens: number,
+    chatLlmTemperature: number;
+    chatLlmMaxTokens: number
+
+    chatMemoryLimit: number;
 
     // classification
-    isFavourite: boolean,
+    isFavourite: boolean;
 
     // selected model
-    aiModelName: string,
-    aiModelProvider: string,
+    aiModelName: string;
+    aiModelProvider: string;
 
     // model info
     aiSummary: string;
