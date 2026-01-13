@@ -334,6 +334,8 @@ router.post(
                 chatLlmTemperature,
                 chatLlmMaxTokens,
 
+                chatMemoryLimit,
+
                 // classification
                 isFavourite,
             } = req.body;
@@ -365,11 +367,21 @@ router.post(
             };
 
             if (typeof chatLlmTemperature === 'number') {
-                updateData.chatLlmTemperature = chatLlmTemperature;
+                if (chatLlmTemperature >= 0 && chatLlmTemperature <= 2) {
+                    updateData.chatLlmTemperature = chatLlmTemperature;
+                }
             };
 
             if (typeof chatLlmMaxTokens === 'number') {
-                updateData.chatLlmMaxTokens = chatLlmMaxTokens;
+                if (chatLlmMaxTokens >= 1) {
+                    updateData.chatLlmMaxTokens = chatLlmMaxTokens;
+                }
+            };
+
+            if (typeof chatMemoryLimit === 'number') {
+                if (chatMemoryLimit >= 0) {
+                    updateData.chatMemoryLimit = chatMemoryLimit;
+                }
             };
 
             if (typeof isFavourite === 'boolean') {

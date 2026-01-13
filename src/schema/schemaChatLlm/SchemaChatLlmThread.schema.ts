@@ -28,6 +28,10 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Number,
         default: 8096,
     },
+    chatMemoryLimit: {
+        type: Number,
+        default: 31,
+    },
 
     // classification
     isFavourite: {
