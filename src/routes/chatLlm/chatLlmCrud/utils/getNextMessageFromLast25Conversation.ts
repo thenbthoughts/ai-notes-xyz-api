@@ -29,7 +29,7 @@ const funcDoesModalSupportImage = async ({
     modelName,
     username,
 }: {
-    modelProvider: 'groq' | 'openrouter';
+    modelProvider: 'groq' | 'openrouter' | 'ollama';
     modelName: string;
     username: string;
 }) => {
@@ -107,7 +107,7 @@ const getConversationList = async ({
 }: {
     username: string,
     threadId: mongoose.Types.ObjectId,
-    modelProvider: 'groq' | 'openrouter',
+    modelProvider: 'groq' | 'openrouter' | 'ollama',
     modelName: string,
     threadInfo: IChatLlmThread,
 }) => {
@@ -702,7 +702,7 @@ const getNextMessageFromLast30Conversation = async ({
     userApiKey: tsUserApiKey;
 
     // model name
-    aiModelProvider: 'groq' | 'openrouter';
+    aiModelProvider: 'groq' | 'openrouter' | 'ollama';
     aiModelName: string;
 
     // messageId
@@ -800,13 +800,18 @@ const getNextMessageFromLast30Conversation = async ({
         } else if (aiModelProvider === 'groq' && userApiKey.apiKeyGroqValid) {
             llmAuthToken = userApiKey.apiKeyGroq;
             llmEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        } else if (aiModelProvider === 'ollama' && userApiKey.apiKeyOllamaValid) {
+            llmAuthToken = '';
+            llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
         }
     }
 
     console.log('messages', messages);
+    console.log('llmAuthToken: ', llmAuthToken);
+    console.log('llmEndpoint: ', llmEndpoint);
 
     // fetch llm using unified approach
-    if (llmAuthToken.length >= 1) {
+    if (llmAuthToken.length >= 1 || aiModelProvider === 'ollama') {
         console.log('llmAuthToken: ', llmAuthToken);
         // If messageId provided, use streaming and update DB every second
         console.log('messageId: ', messageId);

@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import openrouterMarketing from '../../../config/openrouterMarketing';
+import { ollamaDownloadModel } from '../../../config/ollamaConfig';
 
 export type LlmProvider = 'openrouter' | 'groq' | 'openai' | 'ollama';
 
@@ -340,6 +341,12 @@ export async function fetchLlmUnifiedStream(
   totalTokens: number;
   costInUsd: number;
 }> {
+  console.log('fetchLlmUnifiedStream old', JSON.stringify(params, null, 2));
+  if (params.provider === 'ollama') {
+    console.log('fetchLlmUnifiedStream ollama', JSON.stringify(params, null, 2));
+    return fetchLlmUnifiedStreamOllama(params, onToken);
+  }
+
   let returnStatsObj = {
     promptTokens: 0,
     completionTokens: 0,
@@ -556,6 +563,221 @@ export async function fetchLlmUnifiedStream(
     };
   }
 }
+
+/**
+ * Streaming LLM chat completion for Ollama provider
+ */
+export async function fetchLlmUnifiedStreamOllama(
+  params: FetchLlmStreamParams,
+  onToken: ({
+    token,
+    reasoningContent,
+  }: {
+    token: string;
+    reasoningContent: string;
+  }) => Promise<void>
+): Promise<{
+  success: boolean;
+  error?: string;
+  fullContent: string;
+  reasoningContent: string;
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  costInUsd: number;
+}> {
+  let returnStatsObj = {
+    promptTokens: 0,
+    completionTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    costInUsd: 0,
+  };
+
+  try {
+    // Fix double slashes in the endpoint URL
+    let finalApiEndpoint = params.apiEndpoint;
+    if (finalApiEndpoint.includes('//') && !finalApiEndpoint.startsWith('http://') && !finalApiEndpoint.startsWith('https://')) {
+      finalApiEndpoint = finalApiEndpoint.replace('//', '/');
+    }
+    // Ensure proper URL construction
+    if (!finalApiEndpoint.endsWith('/')) {
+      finalApiEndpoint += '/';
+    }
+    finalApiEndpoint += 'api/chat';
+
+    const resultOllamaDownloadModel = await ollamaDownloadModel({
+      apiKeyOllamaEndpoint: params.apiEndpoint,
+      modelName: params.model,
+    });
+    console.log('resultOllamaDownloadModel: ', resultOllamaDownloadModel);
+    if (resultOllamaDownloadModel.error !== '') {
+      return {
+        success: false,
+        error: resultOllamaDownloadModel.error,
+        fullContent: '',
+        reasoningContent: '',
+        ...returnStatsObj,
+      };
+    }
+    
+    console.log('finalApiEndpoint: ', finalApiEndpoint);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (params.headersExtra) {
+      Object.assign(headers, params.headersExtra);
+    }
+
+    const data: Record<string, unknown> = {
+      model: params.model,
+      messages: params.messages,
+      stream: true,
+      options: {
+        temperature: params.temperature ?? 1,
+        num_predict: params.maxTokens ?? 2048,
+        top_p: params.topP ?? 1,
+      },
+    };
+
+    const config: AxiosRequestConfig = {
+      method: 'post',
+      url: finalApiEndpoint,
+      headers,
+      data: JSON.stringify(data),
+      responseType: 'stream',
+    };
+
+    let fullContent = '';
+    let reasoningContent = '';
+    const response = await axios.request(config);
+
+    // Check for HTTP errors
+    if (response.status !== 200) {
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${response.statusText}`,
+        fullContent: '',
+        reasoningContent: '',
+        ...returnStatsObj,
+      };
+    }
+
+    return new Promise((resolve) => {
+      const stream = response.data;
+      let buffer = '';
+
+      stream.on('data', async (chunk: Buffer) => {
+        buffer += chunk.toString();
+        console.log('buffer: ', buffer);
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+
+          try {
+            const parsed = JSON.parse(trimmedLine);
+
+            // thinking
+            if (parsed.message?.thinking?.length >= 1) {
+              reasoningContent += parsed.message?.thinking;
+              console.log('reasoningContent: ', reasoningContent);
+              await onToken({ token: '', reasoningContent });
+            }
+
+            // Ollama streaming format
+            if (parsed.message?.content) {
+              const token = parsed.message.content;
+              fullContent += token;
+              console.log('token: ', token);
+              await onToken({ token, reasoningContent });
+            }
+
+            // Check if done
+            if (parsed.done) {
+              // Extract usage stats if available
+              if (parsed.prompt_eval_count) {
+                returnStatsObj.promptTokens = parsed.prompt_eval_count;
+              }
+              if (parsed.eval_count) {
+                returnStatsObj.completionTokens = parsed.eval_count;
+              }
+              returnStatsObj.totalTokens = returnStatsObj.promptTokens + returnStatsObj.completionTokens;
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse Ollama stream line:', trimmedLine);
+          }
+        }
+      });
+
+      stream.on('end', () => {
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          try {
+            const parsed = JSON.parse(buffer.trim());
+            if (parsed.message?.content) {
+              const token = parsed.message.content;
+              fullContent += token;
+            }
+            if (parsed.done) {
+              console.log('parsed.done: ', JSON.stringify(parsed, null, 2));
+              if (parsed.prompt_eval_count) {
+                returnStatsObj.promptTokens = parsed.prompt_eval_count;
+              }
+              if (parsed.eval_count) {
+                returnStatsObj.completionTokens = parsed.eval_count;
+              }
+              returnStatsObj.totalTokens = returnStatsObj.promptTokens + returnStatsObj.completionTokens;
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse remaining Ollama buffer:', buffer);
+          }
+        }
+
+        resolve({
+          success: true,
+          fullContent,
+          reasoningContent,
+          ...returnStatsObj,
+        });
+      });
+
+      stream.on('error', (error: Error) => {
+        console.error('Ollama stream error:', error);
+        resolve({
+          success: false,
+          error: error.message,
+          fullContent,
+          reasoningContent,
+          ...returnStatsObj,
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Ollama stream failed error:', error);
+    if (isAxiosError(error)) {
+      return {
+        success: false,
+        error: error.message,
+        fullContent: '',
+        reasoningContent: '',
+        ...returnStatsObj,
+      };
+    }
+    return {
+      success: false,
+      error: (error as Error)?.message || 'Unknown error',
+      fullContent: '',
+      reasoningContent: '',
+      ...returnStatsObj,
+    };
+  }
+}
+
 
 export default fetchLlmUnified;
 
