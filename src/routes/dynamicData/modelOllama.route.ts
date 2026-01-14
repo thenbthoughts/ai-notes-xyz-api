@@ -8,6 +8,75 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 // Router
 const router = Router();
 
+const ollamaPullAllModelsFunc = async ({
+    username,
+}: {
+    username: string;
+}): Promise<{
+    success: boolean;
+    message: string;
+}> => {
+    try {
+        const userApiKey = await ModelUserApiKey.findOne({
+            username: username
+        });
+
+        if (!userApiKey || !userApiKey.apiKeyOllamaEndpoint) {
+            return {
+                success: false,
+                message: 'Ollama endpoint not configured',
+            }
+        }
+
+        const ollama = new Ollama({
+            host: userApiKey.apiKeyOllamaEndpoint,
+        });
+
+        // Get all models from /api/tags
+        console.log('Getting all models from /api/tags');
+        const modelsList = await ollama.list();
+
+        // Insert all models into database
+        const modelsToInsert = [];
+        for (const model of modelsList.models) {
+            // Construct model name with parameters and quantization
+            let modelLabel = `${model.name}`.trim();
+            if (model.details?.parameter_size?.length > 0) {
+                modelLabel += ` (${model.details?.parameter_size})`;
+            }
+            if (model.details?.quantization_level?.length > 0) {
+                modelLabel += ` (${model.details?.quantization_level})`;
+            }
+            modelLabel = modelLabel.trim();
+
+            modelsToInsert.push({
+                username: username,
+                modelLabel: modelLabel,
+                modelName: model.name,
+                raw: model,
+            });
+        }
+
+        // Clear existing models for this user and insert new ones
+        await ModelAiListOllama.deleteMany({
+            username: username
+        });
+
+        await ModelAiListOllama.insertMany(modelsToInsert);
+
+        return {
+            success: true,
+            message: 'Ollama models fetched successfully',
+        }
+    } catch (error) {
+        console.error(error);
+        return {
+            success: false,
+            message: 'Error fetching all models',
+        }
+    }
+}
+
 // Get Ollama Models
 router.get('/modelOllamaGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
@@ -52,34 +121,16 @@ router.post('/modelOllamaAdd', middlewareUserAuth, async (req: Request, res: Res
         console.log(`Pulling model: ${modelName}`);
         await ollama.pull({ model: modelName });
 
-        // Get all models from /api/tags
-        console.log('Getting all models from /api/tags');
-        const modelsList = await ollama.list();
-
-        // Insert all models into database
-        const modelsToInsert = [];
-        for (const model of modelsList.models) {
-            // Construct model name with parameters and quantization
-            const modelLabel = `${model.name} ${model.details?.parameter_size || ''} ${model.details?.quantization_level || ''}`.trim();
-
-            modelsToInsert.push({
-                username: res.locals.auth_username,
-                modelLabel: modelLabel,
-                modelName: model.name,
-                raw: model,
-            });
-        }
-
-        // Clear existing models for this user and insert new ones
-        await ModelAiListOllama.deleteMany({
-            username: res.locals.auth_username
+        const resultOllamaPullAllModels = await ollamaPullAllModelsFunc({
+            username: res.locals.auth_username,
         });
 
-        await ModelAiListOllama.insertMany(modelsToInsert);
+        if (!resultOllamaPullAllModels.success) {
+            return res.status(400).json({ message: resultOllamaPullAllModels.message });
+        }
 
         return res.json({
-            message: 'Ollama models added successfully',
-            count: modelsToInsert.length,
+            message: resultOllamaPullAllModels.message,
         });
     } catch (error) {
         console.error(error);
@@ -119,8 +170,32 @@ router.delete('/modelOllamaDelete', middlewareUserAuth, async (req: Request, res
             modelName: modelName,
         });
 
+        await ollamaPullAllModelsFunc({
+            username: res.locals.auth_username,
+        });
+
         return res.json({
             message: 'Ollama model deleted successfully',
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Pull All Ollama Models
+router.post('/modelOllamaPullAll', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const resultOllamaPullAllModels = await ollamaPullAllModelsFunc({
+            username: res.locals.auth_username,
+        });
+
+        if (!resultOllamaPullAllModels.success) {
+            return res.status(400).json({ message: resultOllamaPullAllModels.message });
+        }
+
+        return res.json({
+            message: resultOllamaPullAllModels.message,
         });
     } catch (error) {
         console.error(error);
