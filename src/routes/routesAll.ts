@@ -24,6 +24,7 @@ import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAut
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
 import routesDynamicDataModelGroq from './dynamicData/modelGroq.route';
+import routesDynamicDataModelOllama from './dynamicData/modelOllama.route';
 
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
@@ -141,6 +142,7 @@ router.use('/llm/crud', routesLlmCrud);
 // dynamic data
 router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
 router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
+router.use('/dynamic-data/model-ollama', routesDynamicDataModelOllama);
 
 
 // dashboard
