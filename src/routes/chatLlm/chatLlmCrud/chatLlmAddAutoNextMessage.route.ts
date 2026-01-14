@@ -97,7 +97,7 @@ router.post(
 
             const messageId = resultFromLastConversation._id as ObjectId;
 
-            if (aiModelProvider === 'groq' || aiModelProvider === 'openrouter') {
+            if (aiModelProvider === 'groq' || aiModelProvider === 'openrouter' || aiModelProvider === 'ollama') {
                 await getNextMessageFromLast30Conversation({
                     threadId,
                     threadInfo,
