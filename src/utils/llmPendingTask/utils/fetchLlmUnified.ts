@@ -185,7 +185,9 @@ function convertMessagesForOllama(messages: Message[]): Array<any> {
       if (part.type === 'text') {
         textParts.push(part.text);
       } else if (part.type === 'image_url' && part.image_url?.url) {
-        images.push(part.image_url.url);
+        const imageUrl = part.image_url.url;
+        const strippedUrl = imageUrl.replace(/^data:[^,]+,/, '');
+        images.push(strippedUrl);
       }
     }
     const content = textParts.join('\n');
@@ -631,9 +633,10 @@ export async function fetchLlmUnifiedStreamOllama(
       Object.assign(headers, params.headersExtra);
     }
 
+    const ollamaMessages = convertMessagesForOllama(params.messages);
     const data: Record<string, unknown> = {
       model: params.model,
-      messages: params.messages,
+      messages: ollamaMessages,
       stream: true,
       options: {
         temperature: params.temperature ?? 1,
@@ -656,6 +659,9 @@ export async function fetchLlmUnifiedStreamOllama(
 
     // Check for HTTP errors
     if (response.status !== 200) {
+      console.error('Ollama stream failed error 1: ', response.data?.data);
+      console.error('Ollama stream failed error 2: ', response.data?.error);
+      console.error('Ollama stream failed error 3: ', response.data?.data?.error);
       return {
         success: false,
         error: `HTTP ${response.status}: ${response.statusText}`,
@@ -757,8 +763,12 @@ export async function fetchLlmUnifiedStreamOllama(
         });
       });
     });
-  } catch (error) {
-    console.error('Ollama stream failed error:', error);
+  } catch (error: any) {
+    console.error('Ollama stream failed error 1:', error);
+    console.error('Ollama stream failed error 2:', error?.response?.data);
+    console.error('Ollama stream failed error 3:', error?.response?.error);
+    console.error('Ollama stream failed error 4:', error?.response?.data?.data);
+    console.error('Ollama stream failed error 5:', error?.response?.data?.data?.error);
     if (isAxiosError(error)) {
       return {
         success: false,
