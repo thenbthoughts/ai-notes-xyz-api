@@ -1,14 +1,10 @@
 import mongoose, { Schema } from 'mongoose';
 
-import type { tsSchemaAiModelListOllama } from '../../types/typesSchema/typesDynamicData/SchemaOllamaModel.types';
+import type { tsSchemaOllamaModelStoreModality } from '../../types/typesSchema/typesDynamicData/SchemaOllamaModelStoreModality.types';
 
 // AI Model Schema
-const aiModelListOllamaSchema = new Schema<tsSchemaAiModelListOllama>({
+const aiModelStoreModalityOllamaSchema = new Schema<tsSchemaOllamaModelStoreModality>({
     username: {
-        type: String,
-        default: '',
-    },
-    modelLabel: {
         type: String,
         default: '',
     },
@@ -38,20 +34,15 @@ const aiModelListOllamaSchema = new Schema<tsSchemaAiModelListOllama>({
         default: 'false',
         enum: ['true', 'false', 'pending'],
     },
-
-    raw: {
-        type: Object,
-        default: {},
-    },
 });
 
 // AI Model
-const ModelAiListOllama = mongoose.model<tsSchemaAiModelListOllama>(
-    'aiModelListOllama',
-    aiModelListOllamaSchema,
-    'aiModelListOllama'
+const ModelAiModelStoreModalityOllama = mongoose.model<tsSchemaOllamaModelStoreModality>(
+    'aiModelStoreModalityOllama',
+    aiModelStoreModalityOllamaSchema,
+    'aiModelStoreModalityOllama'
 );
 
 export {
-    ModelAiListOllama
+    ModelAiModelStoreModalityOllama
 };

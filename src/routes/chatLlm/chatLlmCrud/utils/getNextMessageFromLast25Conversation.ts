@@ -23,6 +23,7 @@ import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/Schem
 import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModalityById";
 import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import { ModelAiListOllama } from "../../../../schema/schemaDynamicData/SchemaOllamaModel.schema";
 
 const funcDoesModalSupportImage = async ({
     modelProvider,
@@ -33,6 +34,17 @@ const funcDoesModalSupportImage = async ({
     modelName: string;
     username: string;
 }) => {
+    if(modelProvider === 'ollama') {
+        const resultOllamModel = await ModelAiListOllama.findOne({
+            username: username,
+            modelName: modelName,
+        });
+        if(resultOllamModel) {
+            return resultOllamModel.isInputModalityImage === 'true';
+        }
+        return false;
+    }
+
     let resultModelModality = await ModelAiModelModality.findOne({
         provider: modelProvider,
         modalIdString: modelName,

@@ -1,10 +1,9 @@
 import { Document } from 'mongoose';
 
 // Chat Interface
-export interface tsSchemaAiModelListOllama extends Document {
+export interface tsSchemaOllamaModelStoreModality extends Document {
     // ai
     username: string;
-    modelLabel: string;
     modelName: string;
 
     // input modalities
@@ -12,7 +11,4 @@ export interface tsSchemaAiModelListOllama extends Document {
     isInputModalityImage: string;
     isInputModalityAudio: string;
     isInputModalityVideo: string;
-
-    // raw
-    raw: object;
 };
