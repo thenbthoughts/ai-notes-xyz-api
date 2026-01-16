@@ -77,10 +77,10 @@ const fetchLlm = async ({
         };
 
         const response: AxiosResponse = await axios.request(config);
-        const resultText = response.data.choices[0].message.content;
-        console.log(resultText);
+        const resultTextReasoning = response.data?.choices?.[0]?.message?.reasoning;
+        const resultText = response.data?.choices?.[0]?.message?.content;
 
-        if (resultText.length >= 1) {
+        if (resultTextReasoning?.length >= 1 || resultText?.length >= 1) {
             return true;
         }
 
@@ -108,6 +108,10 @@ router.post(
             apiKeyGroqValid = await fetchLlm({
                 apiKey: apiKeyGroq,
                 argMessages: [
+                    {
+                        role: "system",
+                        content: "You are a helpful assistant. Write a short answer to the user's question."
+                    },
                     {
                         role: "user",
                         content: 'About artificial intelligence.'
@@ -162,6 +166,10 @@ router.post(
                 apiKey: apiKeyOpenrouter,
                 argMessages: [
                     {
+                        role: "system",
+                        content: "You are a helpful assistant. Write a short answer to the user's question."
+                    },
+                    {
                         role: "user",
                         content: 'About artificial intelligence.'
                     }
@@ -169,6 +177,8 @@ router.post(
                 modelName: 'openai/gpt-oss-20b',
                 provider: 'openrouter',
             });
+
+            console.log(apiKeyOpenrouterValid);
 
             if (!apiKeyOpenrouterValid) {
                 return res.status(400).json({ message: 'Invalid API Key' });
