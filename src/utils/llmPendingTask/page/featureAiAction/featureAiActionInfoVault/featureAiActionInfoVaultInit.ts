@@ -56,7 +56,6 @@ const featureAiActionInfoVaultInit = async ({
                     collectionName: 'infoVault',
                     documentId: targetRecordId,
                 }],
-                username: infoVaultRecord.username,
             });
         }
 

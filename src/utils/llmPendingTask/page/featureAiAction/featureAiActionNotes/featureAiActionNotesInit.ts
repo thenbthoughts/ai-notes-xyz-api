@@ -56,7 +56,6 @@ const featureAiActionNotesInit = async ({
                     collectionName: 'notes',
                     documentId: targetRecordId,
                 }],
-                username: notesRecord.username,
             });
         }
 

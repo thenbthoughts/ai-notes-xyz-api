@@ -63,7 +63,6 @@ const featureAiActionLifeEventsInit = async ({
                     collectionName: 'lifeEvents',
                     documentId: targetRecordId,
                 }],
-                username: lifeEventRecord.username,
             });
         }
 

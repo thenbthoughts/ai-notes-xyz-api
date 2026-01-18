@@ -5,7 +5,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
 import middlewareActionDatetime from '../../middleware/middlewareActionDatetime';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
-import { reindexComments } from '../../utils/search/reindexGlobalSearch';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 import { deleteFileByPath } from '../upload/uploadFileS3ForFeatures';
 
 // Router
@@ -70,9 +70,12 @@ router.post(
             });
 
             // reindex parent entity when comment is added
-            await reindexComments({
-                entities: [{ entityId: entityId, collectionName: commentType }],
-                username: username,
+            const collectionName = newComment.commentType as 'notes' | 'tasks' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm';
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: collectionName,
+                    documentId: newComment.entityId.toString(),
+                }],
             });
 
             return res.status(201).json(newComment);
@@ -136,9 +139,12 @@ router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res
         }
 
         // reindex parent entity when comment is deleted
-        await reindexComments({
-            entities: [{ entityId: deletedComment.entityId.toString(), collectionName: deletedComment.commentType }],
-            username,
+        const collectionName = deletedComment.commentType as 'notes' | 'tasks' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm';
+        await reindexDocument({
+            reindexDocumentArr: [{
+                collectionName: collectionName,
+                documentId: deletedComment.entityId.toString(),
+            }],
         });
 
         return res.json({ message: 'Comment Common deleted successfully' });

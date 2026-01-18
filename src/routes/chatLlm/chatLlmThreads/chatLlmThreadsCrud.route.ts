@@ -289,7 +289,6 @@ router.post(
                     collectionName: 'chatLlmThread',
                     documentId: (newThread._id as mongoose.Types.ObjectId).toString(),
                 }],
-                username: res.locals.auth_username,
             });
 
             return res.status(201).json({ message: 'Thread created successfully', thread: newThread });
@@ -420,7 +419,6 @@ router.post(
                     collectionName: 'chatLlmThread',
                     documentId: (updatedThread._id as mongoose.Types.ObjectId).toString(),
                 }],
-                username: res.locals.auth_username,
             });
 
             return res.json({ message: 'Thread updated successfully', thread: updatedThread });

@@ -127,7 +127,6 @@ const assignTaskWorkspaceByTaskId = async ({
                 collectionName: 'tasks',
                 documentId: _id.toString(),
             }],
-            username: auth_username,
         });
 
         return unassignedTaskWorkspace._id as mongoose.Types.ObjectId;
@@ -183,7 +182,6 @@ const assignTaskStatusByTaskId = async ({
                 collectionName: 'tasks',
                 documentId: _id.toString(),
             }],
-            username: auth_username,
         });
 
     } catch (error) {
@@ -328,7 +326,6 @@ router.post(
                     collectionName: 'tasks',
                     documentId: (newTask._id as mongoose.Types.ObjectId).toString(),
                 }],
-                username: res.locals.auth_username,
             });
 
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
@@ -944,7 +941,6 @@ router.post(
                     collectionName: 'tasks',
                     documentId: (updatedTask._id as mongoose.Types.ObjectId).toString(),
                 }],
-                username: res.locals.auth_username,
             });
 
             return res.json(updatedTask);

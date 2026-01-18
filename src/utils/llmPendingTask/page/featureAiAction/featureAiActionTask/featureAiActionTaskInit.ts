@@ -57,7 +57,6 @@ const featureAiActionTaskInit = async ({
                     collectionName: 'tasks',
                     documentId: targetRecordId,
                 }],
-                username: taskRecord.username,
             });
         }
 

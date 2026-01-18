@@ -340,7 +340,6 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
                 collectionName: 'notes',
                 documentId: (newNote._id as mongoose.Types.ObjectId).toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({
@@ -426,7 +425,6 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
                 collectionName: 'notes',
                 documentId: _id.toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({
