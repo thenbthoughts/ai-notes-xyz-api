@@ -11,6 +11,7 @@ import { ModelTask } from '../../schema/schemaTask/SchemaTask.schema';
 import { tsTaskList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types';
 import { ITaskWorkspace } from '../../types/typesSchema/typesSchemaTask/SchemaTaskWorkspace.types';
 import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
+import { tsTaskSubList } from '../../types/typesSchema/typesSchemaTask/schemaTaskSubList.types';
 import { ISchemaCommentCommon } from '../../types/typesSchema/typesSchemaCommentCommon/schemaCommentCommonList.types';
 import { IFaq } from '../../types/typesSchema/typesFaq/SchemaFaq.types';
 import { ILlmContextKeyword } from '../../types/typesSchema/typesLlmContext/SchemaLlmContextKeyword.types';
@@ -38,6 +39,7 @@ export const funcSearchReindexTasksById = async ({
         updatedAtUtc: Date | null;
         taskWorkspace: ITaskWorkspace[];
         taskStatus: tsTaskStatusList[];
+        subtasks: tsTaskSubList[];
         comments: ISchemaCommentCommon[];
         aiContextFaq: IFaq[];
         aiContextKeywords: ILlmContextKeyword[];
@@ -60,6 +62,14 @@ export const funcSearchReindexTasksById = async ({
                     localField: 'taskStatusId',
                     foreignField: '_id',
                     as: 'taskStatus',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'tasksSub',
+                    localField: '_id',
+                    foreignField: 'parentTaskId',
+                    as: 'subtasks',
                 }
             },
             {
@@ -141,6 +151,21 @@ export const funcSearchReindexTasksById = async ({
             if (taskStatusObj) {
                 if (typeof taskStatusObj?.statusTitle === 'string') {
                     textParts.push(taskStatusObj?.statusTitle?.toLowerCase());
+                }
+            }
+        }
+
+        // subtasks
+        if (Array.isArray(task.subtasks) && task.subtasks.length > 0) {
+            for (const subtask of task.subtasks) {
+                if (subtask.title) textParts.push(subtask.title.toLowerCase());
+                if (subtask.taskCompletedStatus === false) {
+                    textParts.push('pending');
+                    textParts.push('incomplete');
+                }
+                if (subtask.taskCompletedStatus === true) {
+                    textParts.push('completed');
+                    textParts.push('done');
                 }
             }
         }
