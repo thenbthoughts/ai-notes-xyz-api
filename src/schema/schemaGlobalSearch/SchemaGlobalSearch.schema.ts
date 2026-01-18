@@ -31,6 +31,7 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
             'lifeEvents',
             'infoVault',
             'chatLlmThread',
+            'chatLlm',
         ],
     },
 
@@ -61,6 +62,12 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
         type: Date,
         default: new Date(),
         index: true,
+    },
+
+    // raw
+    rawData: {
+        type: Object,
+        default: {},
     },
 });
 

@@ -5,7 +5,7 @@ export interface IGlobalSearch extends Document {
     text: string; // lowercase concatenated searchable text
 
     // Reference fields
-    entityId: mongoose.Schema.Types.ObjectId;
+    entityId: mongoose.Types.ObjectId;
     username: string;
     collectionName: '' | 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
 
@@ -18,5 +18,8 @@ export interface IGlobalSearch extends Document {
 
     // Sorting
     updatedAtUtc: Date;
+
+    // raw
+    rawData: object;
 }
 

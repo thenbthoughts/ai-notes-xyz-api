@@ -227,7 +227,6 @@ router.post('/infoVaultSignificantDateAdd', middlewareUserAuth, async (req: Requ
                 collectionName: 'infoVault',
                 documentId: (newInfoVaultSignificantDate._id as mongoose.Types.ObjectId).toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({
@@ -283,7 +282,6 @@ router.post('/infoVaultSignificantDateEdit', middlewareUserAuth, async (req: Req
                 collectionName: 'infoVault',
                 documentId: _id.toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({

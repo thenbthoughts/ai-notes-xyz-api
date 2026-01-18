@@ -323,7 +323,6 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
                     collectionName: 'infoVault',
                     documentId: (sd._id as mongoose.Types.ObjectId).toString(),
                 })),
-                username: res.locals.auth_username,
             });
         }
 
@@ -444,7 +443,6 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
                     collectionName: 'infoVault',
                     documentId: (sd._id as mongoose.Types.ObjectId).toString(),
                 })),
-                username: res.locals.auth_username,
             });
         }
 

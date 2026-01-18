@@ -414,7 +414,6 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
                 collectionName: 'lifeEvents',
                 documentId: (newLifeEvent._id as mongoose.Types.ObjectId).toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({
@@ -521,7 +520,6 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
                 collectionName: 'lifeEvents',
                 documentId: _id.toString(),
             }],
-            username: res.locals.auth_username,
         });
 
         return res.json({

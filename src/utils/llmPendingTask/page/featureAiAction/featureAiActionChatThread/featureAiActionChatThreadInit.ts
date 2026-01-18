@@ -63,7 +63,6 @@ const featureAiActionChatThreadInit = async ({
                     collectionName: 'chatLlmThread',
                     documentId: targetRecordId,
                 }],
-                username: chatThreadRecord.username,
             });
         }
 
