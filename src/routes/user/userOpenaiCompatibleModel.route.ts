@@ -62,7 +62,8 @@ router.post('/openaiCompatibleModelGet', middlewareUserAuth, async (req: Request
         // stage -> sort -> createdAtUtc (newest first)
         tempStage = {
             $sort: {
-                createdAtUtc: -1,
+                providerName: 1,
+                modelName: 1,
             },
         };
         pipelineDocument.push(tempStage);
@@ -270,6 +271,65 @@ router.post('/openaiCompatibleModelEdit', middlewareUserAuth, async (req: Reques
 
         return res.json({
             message: 'OpenAI Compatible Model configuration edited successfully',
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error', error: String(error) });
+    }
+});
+
+// Copy/Clone OpenAI Compatible Model Configuration API
+router.post('/openaiCompatibleModelCopy', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        let _id = null as mongoose.Types.ObjectId | null;
+        const arg_id = req.body._id;
+        if (typeof arg_id === 'string') {
+            _id = arg_id ? mongoose.Types.ObjectId.createFromHexString(arg_id) : null;
+        }
+        if (_id === null) {
+            return res.status(400).json({ message: 'Configuration ID cannot be null', error: 'Invalid ID' });
+        }
+
+        // Find the original configuration
+        const originalConfig = await ModelOpenaiCompatibleModel.findOne({
+            _id: _id,
+            username: res.locals.auth_username,
+        });
+
+        if (!originalConfig) {
+            return res.status(404).json({ message: 'Configuration not found or unauthorized', error: 'Not found' });
+        }
+
+        const now = new Date();
+        // Generate copy name: providerName + " copy" + datetime
+        const dateTimeStr = now.toISOString().replace(/[:.]/g, '-').slice(0, -5); // Format: YYYY-MM-DDTHH-MM-SS
+        const copyProviderName = originalConfig.providerName 
+            ? `${originalConfig.providerName} copy ${dateTimeStr}`
+            : `copy ${dateTimeStr}`;
+
+        // Create new configuration with copied data
+        const newConfig = await ModelOpenaiCompatibleModel.create({
+            username: res.locals.auth_username,
+            providerName: copyProviderName,
+            baseUrl: originalConfig.baseUrl,
+            apiKey: originalConfig.apiKey, // Copy the API key
+            modelName: originalConfig.modelName || '',
+            customHeaders: originalConfig.customHeaders || '',
+            isInputModalityText: originalConfig.isInputModalityText || 'true',
+            isInputModalityImage: originalConfig.isInputModalityImage || 'false',
+            isInputModalityAudio: originalConfig.isInputModalityAudio || 'false',
+            isInputModalityVideo: originalConfig.isInputModalityVideo || 'false',
+            isOutputModalityText: originalConfig.isOutputModalityText || 'true',
+            isOutputModalityImage: originalConfig.isOutputModalityImage || 'false',
+            isOutputModalityAudio: originalConfig.isOutputModalityAudio || 'false',
+            isOutputModalityVideo: originalConfig.isOutputModalityVideo || 'false',
+            createdAtUtc: now,
+            updatedAtUtc: now,
+        });
+
+        return res.json({
+            message: 'OpenAI Compatible Model configuration copied successfully',
+            config: newConfig,
         });
     } catch (error) {
         console.error(error);
