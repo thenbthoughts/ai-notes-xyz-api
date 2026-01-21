@@ -11,6 +11,7 @@ import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLl
 import { systemPromptForChatLlmThread } from './constantsChatLlmThread/constantsChatLlmThread';
 import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
 import { deleteFilesByParentEntityId } from '../../upload/uploadFileS3ForFeatures';
+import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
 // Router
 const router = Router();
@@ -229,6 +230,7 @@ router.post(
                 // model settings
                 aiModelName,
                 aiModelProvider,
+                aiModelOpenAiCompatibleConfigId,
 
                 // classification
                 isFavourite,
@@ -242,6 +244,7 @@ router.post(
                 // model settings
                 aiModelName: '',
                 aiModelProvider: '',
+                aiModelOpenAiCompatibleConfigId: null as mongoose.Types.ObjectId | null,
 
                 // classification
                 isFavourite: false,
@@ -261,6 +264,10 @@ router.post(
 
             if (typeof aiModelProvider === 'string') {
                 addData.aiModelProvider = aiModelProvider;
+            };
+
+            if (typeof aiModelOpenAiCompatibleConfigId === 'string' && aiModelOpenAiCompatibleConfigId.length === 24) {
+                addData.aiModelOpenAiCompatibleConfigId = getMongodbObjectOrNull(aiModelOpenAiCompatibleConfigId);
             };
 
             if (typeof isFavourite === 'boolean') {
@@ -327,6 +334,7 @@ router.post(
                 // model settings
                 aiModelName,
                 aiModelProvider,
+                aiModelOpenAiCompatibleConfigId,
 
                 systemPrompt,
 
@@ -359,6 +367,10 @@ router.post(
 
             if (typeof aiModelProvider === 'string') {
                 updateData.aiModelProvider = aiModelProvider;
+            };
+
+            if (typeof aiModelOpenAiCompatibleConfigId === 'string' && aiModelOpenAiCompatibleConfigId.length === 24) {
+                updateData.aiModelOpenAiCompatibleConfigId = getMongodbObjectOrNull(aiModelOpenAiCompatibleConfigId);
             };
 
             if (typeof systemPrompt === 'string') {

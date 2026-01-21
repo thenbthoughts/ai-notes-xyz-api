@@ -24,13 +24,14 @@ import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModa
 import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
 import { ModelAiListOllama } from "../../../../schema/schemaDynamicData/SchemaOllamaModel.schema";
+import { ModelOpenaiCompatibleModel } from "../../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema";
 
 const funcDoesModalSupportImage = async ({
     modelProvider,
     modelName,
     username,
 }: {
-    modelProvider: 'groq' | 'openrouter' | 'ollama';
+    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
     modelName: string;
     username: string;
 }) => {
@@ -41,6 +42,19 @@ const funcDoesModalSupportImage = async ({
         });
         if(resultOllamModel) {
             return resultOllamModel.isInputModalityImage === 'true';
+        }
+        return false;
+    }
+
+    if (modelProvider === 'openai-compatible') {
+        const resultOpenaiCompatibleModel = await ModelOpenaiCompatibleModel.findOne({
+            username: username,
+            modelName: modelName,
+        });
+        if(resultOpenaiCompatibleModel) {
+            if (resultOpenaiCompatibleModel.isInputModalityImage === 'true') {
+                return true;
+            }
         }
         return false;
     }
@@ -119,7 +133,7 @@ const getConversationList = async ({
 }: {
     username: string,
     threadId: mongoose.Types.ObjectId,
-    modelProvider: 'groq' | 'openrouter' | 'ollama',
+    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible',
     modelName: string,
     threadInfo: IChatLlmThread,
 }) => {
@@ -714,7 +728,7 @@ const getNextMessageFromLast30Conversation = async ({
     userApiKey: tsUserApiKey;
 
     // model name
-    aiModelProvider: 'groq' | 'openrouter' | 'ollama';
+    aiModelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
     aiModelName: string;
 
     // messageId
@@ -803,6 +817,8 @@ const getNextMessageFromLast30Conversation = async ({
     // llm auth token and endpoint
     let llmAuthToken = '';
     let llmEndpoint = '';
+    let customHeaders: Record<string, string> | undefined = undefined;
+    let finalModelName = aiModelName;
 
     // select preference model and get API key
     if (userInfo) {
@@ -815,6 +831,52 @@ const getNextMessageFromLast30Conversation = async ({
         } else if (aiModelProvider === 'ollama' && userApiKey.apiKeyOllamaValid) {
             llmAuthToken = '';
             llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
+        } else if (aiModelProvider === 'openai-compatible') {
+            // Use aiModelOpenAiCompatibleConfigId from thread
+            if (threadInfo.aiModelOpenAiCompatibleConfigId) {
+                // Convert Schema.Types.ObjectId to Types.ObjectId
+                const configIdValue = threadInfo.aiModelOpenAiCompatibleConfigId;
+                const configId = configIdValue instanceof mongoose.Types.ObjectId 
+                    ? configIdValue 
+                    : new mongoose.Types.ObjectId(configIdValue.toString());
+                
+                const config = await ModelOpenaiCompatibleModel.findOne({
+                    username: username,
+                    _id: configId,
+                });
+                
+                if(config) {
+                    llmAuthToken = config.apiKey;
+
+                    // Ensure baseUrl ends with /chat/completions if it doesn't already
+                    let baseUrl = config.baseUrl.trim();
+                    if (!baseUrl.endsWith('/chat/completions')) {
+                        // Remove trailing slash if present, then append /chat/completions
+                        baseUrl = baseUrl.replace(/\/$/, '') + '/chat/completions';
+                    }
+                    llmEndpoint = baseUrl;
+
+                    // Parse custom headers if provided
+                    if (config.customHeaders && config.customHeaders.trim()) {
+                        try {
+                            customHeaders = JSON.parse(config.customHeaders);
+                        } catch (e) {
+                            console.error('Error parsing custom headers:', e);
+                        }
+                    }
+                    
+                    // Use model name from config if available, otherwise use aiModelName from thread
+                    if (config.modelName && config.modelName.trim()) {
+                        finalModelName = config.modelName;
+                    } else if (aiModelName && aiModelName.trim()) {
+                        finalModelName = aiModelName;
+                    }
+                } else {
+                    console.error(`OpenAI Compatible Model config not found for configId: ${configId}`);
+                }
+            } else {
+                console.error('aiModelOpenAiCompatibleConfigId is required for OpenAI Compatible Model provider');
+            }
         }
     }
 
@@ -837,10 +899,11 @@ const getNextMessageFromLast30Conversation = async ({
                     provider: aiModelProvider,
                     apiKey: llmAuthToken,
                     apiEndpoint: llmEndpoint,
-                    model: aiModelName,
+                    model: finalModelName,
                     messages: messages,
                     temperature: chatLlmTemperature,
                     maxTokens: chatLlmMaxTokens,
+                    headersExtra: customHeaders,
                 },
                 async ({
                     token,

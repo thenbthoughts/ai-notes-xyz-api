@@ -130,7 +130,7 @@ const generateMonthlySummaryByUserId = async ({
             return true;
         }
 
-        let modelProvider = '' as "groq" | "openrouter" | "openai" | "ollama";
+        let modelProvider = '' as "groq" | "openrouter" | "openai-compatible" | "ollama";
         let apiEndpoint = '' as string;
         let llmAuthToken = '' as string;
         let modelName = '';
