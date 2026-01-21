@@ -79,6 +79,14 @@ router.post('/openaiCompatibleModelGet', middlewareUserAuth, async (req: Request
         };
         pipelineDocument.push(tempStage);
 
+        // stage -> project -> exclude apiKey
+        tempStage = {
+            $project: {
+                apiKey: 0, // Exclude apiKey from response
+            }
+        };
+        pipelineDocument.push(tempStage);
+
         // stageCount -> count
         pipelineCount.push({
             $count: 'count'
@@ -196,10 +204,8 @@ router.post('/openaiCompatibleModelEdit', middlewareUserAuth, async (req: Reques
             updateObj.baseUrl = req.body.baseUrl.trim();
         }
 
-        if (typeof req.body.apiKey === 'string') {
-            if (!req.body.apiKey.trim()) {
-                return res.status(400).json({ message: 'API Key cannot be empty', error: 'API Key is required' });
-            }
+        // Only update apiKey if it's provided (for edit, apiKey is optional - only update if user wants to change it)
+        if (typeof req.body.apiKey === 'string' && req.body.apiKey.trim()) {
             updateObj.apiKey = req.body.apiKey.trim();
         }
 
