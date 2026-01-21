@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import openrouterMarketing from '../../../config/openrouterMarketing';
 import { ollamaDownloadModel } from '../../../config/ollamaConfig';
 
-export type LlmProvider = 'openrouter' | 'groq' | 'openai' | 'ollama';
+export type LlmProvider = 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
 
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool' | 'function';
 
@@ -149,7 +149,7 @@ function buildOpenAiPayload(params: FetchLlmParams) {
   }
 
   // OpenAI extras pass-through (only when provider is 'openai')
-  if (params.provider === 'openai' && params.openaiExtras) {
+  if (params.provider === 'openai-compatible' && params.openaiExtras) {
     const { reasoning, seed, logprobs } = params.openaiExtras;
     if (reasoning) (data as any).reasoning = reasoning;
     if (typeof seed === 'number') (data as any).seed = seed;
@@ -280,7 +280,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
-    } else if (params.provider === 'openai') {
+    } else if (params.provider === 'openai-compatible') {
       finalApiEndpoint = params.apiEndpoint || params.baseUrlOpenAiCompatible || 'https://api.openai.com/v1/chat/completions';
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
@@ -377,10 +377,16 @@ export async function fetchLlmUnifiedStream(
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
+    } else if (params.provider === 'openai-compatible') {
+      // For OpenAI-compatible providers, use apiEndpoint as base URL
+      finalApiEndpoint = params.apiEndpoint;
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
     } else {
       return {
         success: false,
-        error: 'Streaming only supported for groq and openrouter providers',
+        error: 'Streaming only supported for groq, openrouter, and openai providers',
         fullContent: '',
         reasoningContent: '',
         promptTokens: 0,
@@ -623,7 +629,7 @@ export async function fetchLlmUnifiedStreamOllama(
         ...returnStatsObj,
       };
     }
-    
+
     console.log('finalApiEndpoint: ', finalApiEndpoint);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

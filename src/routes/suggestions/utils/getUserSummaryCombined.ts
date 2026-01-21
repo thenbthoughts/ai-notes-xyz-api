@@ -450,7 +450,7 @@ Make it practical and easy to understand.`;
         }
 
         // Determine provider and API key
-        let modelProvider = '' as "groq" | "openrouter" | "openai" | "ollama";
+        let modelProvider = '' as "groq" | "openrouter" | "openai-compatible" | "ollama";
         let apiEndpoint = '' as string;
         let llmAuthToken = '' as string;
         let modelName = '';

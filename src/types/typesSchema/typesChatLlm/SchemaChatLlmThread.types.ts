@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 
 // Chat Interface
 export interface IChatLlmThread extends Document {
@@ -21,6 +21,7 @@ export interface IChatLlmThread extends Document {
     // selected model
     aiModelName: string;
     aiModelProvider: string;
+    aiModelOpenAiCompatibleConfigId: mongoose.Schema.Types.ObjectId | null;
 
     // model info
     aiSummary: string;

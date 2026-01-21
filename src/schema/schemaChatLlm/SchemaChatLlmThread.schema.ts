@@ -48,7 +48,11 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     aiModelProvider: {
         type: String,
         default: '',
-        // model provider like openrouter, groq, ollama, jan etc
+        // model provider like openrouter, groq, ollama, openai-compatible etc
+    },
+    aiModelOpenAiCompatibleConfigId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
     },
 
     // ai
