@@ -281,7 +281,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
     } else if (params.provider === 'openai-compatible') {
-      finalApiEndpoint = params.apiEndpoint || params.baseUrlOpenAiCompatible || 'https://api.openai.com/v1/chat/completions';
+      finalApiEndpoint = params.apiEndpoint || params.baseUrlOpenAiCompatible || '';
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
@@ -383,6 +383,8 @@ export async function fetchLlmUnifiedStream(
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
+      console.log('111 finalApiEndpoint: ', finalApiEndpoint);
+      console.log('111 headers: ', JSON.stringify(headers, null, 2));
     } else {
       return {
         success: false,
