@@ -304,8 +304,9 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
     const content: string = choice?.message?.content ?? '';
     const toolCalls: ToolCall[] | undefined = choice?.message?.tool_calls;
     return { success: content.length > 0 || !!toolCalls?.length, content, raw: response.data, error: '', toolCalls };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Llm failed error: ', error);
+    console.error('Llm failed error data: ', error?.response?.data);
     if (isAxiosError(error)) {
       return { success: false, content: '', raw: error.response?.data, error: error.message };
     }
