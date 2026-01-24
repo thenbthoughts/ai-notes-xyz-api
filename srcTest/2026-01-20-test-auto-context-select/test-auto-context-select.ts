@@ -8,7 +8,7 @@ const init = async () => {
         console.time('total-time');
         await mongoose.connect(envKeys.MONGODB_URI);
 
-        const threadId = new mongoose.Types.ObjectId('6974c77ac44b7e45a4c8693e');
+        const threadId = new mongoose.Types.ObjectId('6974f5da780b269313f74b46');
 
         console.log('Testing autoContextSelectByThreadId with threadId:', threadId.toString());
 

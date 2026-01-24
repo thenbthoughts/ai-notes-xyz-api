@@ -47,8 +47,6 @@ const selectAutoContextByThreadId = async ({
             threadId,
         });
 
-        console.log('result', result);
-
         // TODO: by method vector db
 
         return {
