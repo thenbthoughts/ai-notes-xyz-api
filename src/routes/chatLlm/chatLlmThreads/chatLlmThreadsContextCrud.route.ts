@@ -7,8 +7,6 @@ import { ModelChatLlmThreadContextReference } from '../../../schema/schemaChatLl
 import middlewareActionDatetime from '../../../middleware/middlewareActionDatetime';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
-import selectAutoContextNotesByThreadId from './utils/selectAutoContextNotesByThreadId';
-import selectAutoContextTaskByThreadId from './utils/selectAutoContextTaskByThreadId';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import selectAutoContextByThreadId from './utils/selectAutoContextByThreadId';
 import searchContext from './utils/searchContext';
@@ -392,63 +390,11 @@ router.post(
             const auth_username = res.locals.auth_username;
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
-            let aiModelProvider = '' as "groq" | "openrouter";
-            let llmAuthToken = '';
-            if (apiKeys.apiKeyOpenrouterValid) {
-                aiModelProvider = 'openrouter';
-                llmAuthToken = apiKeys.apiKeyOpenrouter;
-            } else if (apiKeys.apiKeyGroqValid) {
-                aiModelProvider = 'groq';
-                llmAuthToken = apiKeys.apiKeyGroq;
-            } else {
-                return res.status(400).json({
-                    message: 'No API key found',
-                });
-            }
-
-            const threadIdObj = getMongodbObjectOrNull(threadId);
-            if (threadIdObj === null) {
-                return res.status(400).json({
-                    message: 'Thread ID is invalid',
-                });
-            }
-
-            let resultVectorDbPromise;
-            if (apiKeys.apiKeyOllamaValid && apiKeys.apiKeyQdrantValid) {
-                // valid
-                resultVectorDbPromise = selectAutoContextByThreadId({
-                    threadId: threadIdObj,
-                    username: auth_username,
-                });
-            }
-
-            const resultNotePromise = selectAutoContextNotesByThreadId({
-                threadId: threadIdObj,
+            const result = await selectAutoContextByThreadId({
+                threadId,
                 username: auth_username,
-                llmAuthToken,
-                provider: aiModelProvider,
             });
-
-            const resultTaskPromise = selectAutoContextTaskByThreadId({
-                threadId: threadIdObj,
-                username: auth_username,
-                llmAuthToken,
-                provider: aiModelProvider,
-            });
-
-            if (resultVectorDbPromise) {
-                console.time(`selectAutoContextByThreadId-${threadId}`);
-                await resultVectorDbPromise;
-                console.timeEnd(`selectAutoContextByThreadId-${threadId}`);
-            }
-
-            console.time(`selectAutoContextNotesByThreadId-${threadId}`);
-            await resultNotePromise;
-            console.timeEnd(`selectAutoContextNotesByThreadId-${threadId}`);
-
-            console.time(`selectAutoTaskNotesByThreadId-${threadId}`);
-            await resultTaskPromise;
-            console.timeEnd(`selectAutoTaskNotesByThreadId-${threadId}`);
+            console.log('result selectAutoContextByThreadId', result);
 
             return res.json({
                 message: 'Contexts selected successfully',
