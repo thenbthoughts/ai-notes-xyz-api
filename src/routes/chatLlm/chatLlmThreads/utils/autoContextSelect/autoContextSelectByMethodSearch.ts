@@ -19,6 +19,14 @@ interface LlmConfig {
     customHeaders?: Record<string, string>;
 }
 
+interface RelevantContextResponse {
+    relevantItems: {
+        entityId: string;
+        relevanceScore: number;
+        relevanceReason: string;
+    }[];
+}
+
 const getLlmConfigForThread = async ({
     username,
 }: {
@@ -110,6 +118,50 @@ const getLlmConfigForThread = async ({
     }
 };
 
+const getConversationContextByThreadId = async ({
+    threadId,
+    username,
+}: {
+    threadId: mongoose.Types.ObjectId;
+    username: string;
+}): Promise<string> => {
+    try {
+        const lastMessages = await ModelChatLlm.aggregate([
+            {
+                $match: {
+                    threadId,
+                    username,
+                    type: 'text',
+                }
+            },
+            {
+                $sort: {
+                    createdAtUtc: -1,
+                }
+            },
+            {
+                $limit: 10,
+            },
+            {
+                $sort: {
+                    createdAtUtc: 1,
+                }
+            }
+        ]) as IChatLlm[];
+
+        const conversationContext = lastMessages
+            .map(msg => msg.content)
+            .filter(content => typeof content === 'string' && content.trim().length > 0)
+            .join('\n')
+            .trim();
+
+        return conversationContext;
+    } catch (error) {
+        console.error('Error in getConversationContextByThreadId:', error);
+        return '';
+    }
+};
+
 const createKeywordsFromThread = async ({
     threadId,
 }: {
@@ -196,45 +248,28 @@ const createKeywordsFromThread = async ({
             return [];
         }
 
-        // Parse keywords from response
         try {
             const parsed = JSON.parse(llmResult.content);
-            // Handle different response formats
             let keywords: string[] = [];
 
             if (Array.isArray(parsed)) {
                 keywords = parsed;
-            } else if (parsed.keywords && Array.isArray(parsed.keywords)) {
+            } else if (parsed?.keywords && Array.isArray(parsed.keywords)) {
                 keywords = parsed.keywords;
-            } else if (typeof parsed === 'object') {
-                // Try to find any array in the response
+            } else if (parsed && typeof parsed === 'object') {
                 const values = Object.values(parsed);
-                const arrayValue = values.find(v => Array.isArray(v)) as string[] | undefined;
+                const arrayValue = values.find(value => Array.isArray(value)) as string[] | undefined;
                 if (arrayValue) {
                     keywords = arrayValue;
                 }
             }
 
-            // Clean and validate keywords
-            keywords = keywords
-                .filter(k => typeof k === 'string' && k.trim().length > 0)
-                .map(k => k.trim())
-                .slice(0, 10); // Limit to 10 keywords
-
-            return keywords;
+            return keywords
+                .filter(item => typeof item === 'string' && item.trim().length > 0)
+                .map(item => item.trim())
+                .slice(0, 10);
         } catch (parseError) {
             console.error('Failed to parse keywords JSON:', parseError);
-            // Fallback: try to extract keywords from plain text
-            const content = llmResult.content.trim();
-            if (content.startsWith('[') && content.endsWith(']')) {
-                try {
-                    const keywords = JSON.parse(content);
-                    return Array.isArray(keywords) ? keywords.slice(0, 10) : [];
-                } catch (e) {
-                    // If parsing fails, return empty array
-                    return [];
-                }
-            }
             return [];
         }
 
@@ -243,6 +278,113 @@ const createKeywordsFromThread = async ({
         return [];
     }
 }
+
+const scoreContextReferencesWithLlm = async ({
+    threadId,
+    username,
+    searchResults,
+}: {
+    threadId: mongoose.Types.ObjectId;
+    username: string;
+    searchResults: Array<{
+        entityId: mongoose.Types.ObjectId;
+        collectionName: string;
+        text?: string;
+    }>;
+}): Promise<RelevantContextResponse['relevantItems']> => {
+    try {
+        const conversationContext = await getConversationContextByThreadId({
+            threadId,
+            username,
+        });
+
+        if (!conversationContext) {
+            return [];
+        }
+
+        const llmConfig = await getLlmConfigForThread({ username });
+        if (!llmConfig) {
+            return [];
+        }
+
+        const candidatesStr = searchResults
+            .map(result => {
+                const rawText = typeof result.text === 'string' ? result.text : '';
+                const compactText = rawText.replace(/\s+/g, ' ').trim().slice(0, 600);
+                return [
+                    `ID: ${result.entityId.toString()}`,
+                    `Collection: ${result.collectionName}`,
+                    `Text: ${compactText}`,
+                ].join('\n');
+            })
+            .join('\n\n');
+
+        const llmMessages: Message[] = [
+            {
+                role: 'system',
+                content: 'You are an AI assistant that evaluates relevance between a conversation and candidate context items. For each candidate, assign a relevanceScore (1-10) and a brief relevanceReason. Return ONLY items with relevanceScore >= 6. Respond in JSON format: {"relevantItems":[{"entityId":"...", "relevanceScore":7, "relevanceReason":"..."}]}',
+            },
+            {
+                role: 'user',
+                content: `CONVERSATION CONTEXT:\n${conversationContext}\n\nCANDIDATES:\n${candidatesStr}`,
+            },
+        ];
+
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider,
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.model,
+            messages: llmMessages,
+            temperature: 0.2,
+            maxTokens: 4096,
+            responseFormat: 'json_object',
+            headersExtra: llmConfig.customHeaders,
+        });
+
+        if (!llmResult.success || !llmResult.content) {
+            console.error('Failed to score context references:', llmResult.error);
+            return [];
+        }
+
+        try {
+            const parsed = JSON.parse(llmResult.content) as RelevantContextResponse;
+
+            if (!parsed || typeof parsed !== 'object') {
+                console.error('Invalid context response: not an object');
+                return [];
+            }
+
+            if (!parsed.relevantItems || !Array.isArray(parsed.relevantItems)) {
+                console.error('Invalid context response: relevantItems not found or not an array');
+                return [];
+            }
+
+
+            const validItems = parsed.relevantItems.filter(item => {
+                return typeof item === 'object'
+                    && item !== null
+                    && typeof item.entityId === 'string'
+                    && typeof item.relevanceScore === 'number'
+                    && item.relevanceScore >= 6
+                    && typeof item.relevanceReason === 'string';
+            });
+
+            if (validItems.length === 0) {
+                console.error('No valid context items found with relevanceScore >= 6');
+                return [];
+            }
+
+            return validItems;
+        } catch (parseError) {
+            console.error('Failed to parse context relevance JSON:', parseError);
+            return [];
+        }
+    } catch (error) {
+        console.error('Error in scoreContextReferencesWithLlm:', error);
+        return [];
+    }
+};
 
 const searchAndAddContextReferences = async ({
     keywords,
@@ -274,22 +416,42 @@ const searchAndAddContextReferences = async ({
         });
 
         const matchConditionsSearch = {
-            username: username,
             $or: searchQueryOrConditions,
         };
 
         // Search global search by keywords
         const searchResults = await ModelGlobalSearch.aggregate([
+            {
+                $match: {
+                    username: username,
+                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault'] }
+                }
+            },
             { $sort: { updatedAtUtc: -1 } },
             { $match: matchConditionsSearch },
             { $sort: { updatedAtUtc: -1 } },
             { $limit: limit },
-            { $project: { entityId: 1, collectionName: 1 } }
-        ]);
+        ]) as Array<{
+            entityId: mongoose.Types.ObjectId;
+            collectionName: string;
+            text?: string;
+        }>;
 
         if (searchResults.length === 0) {
             return 0;
         }
+
+        const scoredItems = await scoreContextReferencesWithLlm({
+            threadId,
+            username,
+            searchResults,
+        });
+
+        if (scoredItems.length === 0) {
+            return 0;
+        }
+
+        const allowedEntityIds = new Set(scoredItems.map(item => item.entityId));
 
         // Map collectionName to referenceFrom
         const collectionNameToReferenceFrom: Record<string, 'notes' | 'tasks' | 'chatLlm' | 'lifeEvents' | 'infoVault'> = {
@@ -306,9 +468,15 @@ const searchAndAddContextReferences = async ({
         // Insert context references
         for (const result of searchResults) {
             const referenceFrom = collectionNameToReferenceFrom[result.collectionName];
+            const entityIdString = result.entityId.toString();
 
             // Skip if collectionName is not supported
             if (!referenceFrom) {
+                continue;
+            }
+
+            // Skip if relevance score is not high enough
+            if (!allowedEntityIds.has(entityIdString)) {
                 continue;
             }
 
@@ -342,11 +510,11 @@ const searchAndAddContextReferences = async ({
     }
 };
 
-const autoContextSelectByThreadId = async ({
+const autoContextSelectByMethodSearch = async ({
     threadId,
 }: {
     threadId: mongoose.Types.ObjectId;
-}) : Promise<{
+}): Promise<{
     success: boolean;
     errorReason: string;
     data: {
@@ -370,15 +538,13 @@ const autoContextSelectByThreadId = async ({
         const keywords = await createKeywordsFromThread({
             threadId: thread._id as mongoose.Types.ObjectId,
         });
-        console.log('keywords', keywords);
 
         // Search global search using keywords and add to context references
         const insertedCount = await searchAndAddContextReferences({
             keywords,
-            threadId,
+            threadId: thread._id as mongoose.Types.ObjectId,
             username: thread.username,
         });
-        console.log('insertedContextReferences', insertedCount);
 
         return {
             success: true,
@@ -401,4 +567,4 @@ const autoContextSelectByThreadId = async ({
     }
 }
 
-export default autoContextSelectByThreadId;
+export default autoContextSelectByMethodSearch;
