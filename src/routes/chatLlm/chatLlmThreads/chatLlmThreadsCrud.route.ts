@@ -234,6 +234,12 @@ router.post(
 
                 // classification
                 isFavourite,
+
+                // answer type
+                answerEngine,
+                answerMachineErrorReason,
+                answerMachineUsedOpencode,
+                answerMachineUsedWebSearch,
             } = req.body;
 
             const addData = {
@@ -248,6 +254,12 @@ router.post(
 
                 // classification
                 isFavourite: false,
+
+                // answer type
+                answerEngine: 'conciseAnswer',
+                answerMachineErrorReason: '',
+                answerMachineUsedOpencode: false,
+                answerMachineUsedWebSearch: false,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -272,6 +284,21 @@ router.post(
 
             if (typeof isFavourite === 'boolean') {
                 addData.isFavourite = isFavourite;
+            };
+
+            if (typeof answerEngine === 'string') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
+                    addData.answerEngine = answerEngine;
+                }
+            };
+            if (typeof answerMachineErrorReason === 'string') {
+                addData.answerMachineErrorReason = answerMachineErrorReason;
+            };
+            if (typeof answerMachineUsedOpencode === 'boolean') {
+                addData.answerMachineUsedOpencode = answerMachineUsedOpencode;
+            };
+            if (typeof answerMachineUsedWebSearch === 'boolean') {
+                addData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
 
             let systemPrompt = systemPromptForChatLlmThread;
@@ -345,6 +372,14 @@ router.post(
 
                 // classification
                 isFavourite,
+
+                // answer type
+                answerEngine,
+
+                // answer engine -> answer machine
+                answerMachineErrorReason,
+                answerMachineUsedOpencode,
+                answerMachineUsedWebSearch,
             } = req.body;
 
             // Build update object
@@ -397,6 +432,21 @@ router.post(
 
             if (typeof isFavourite === 'boolean') {
                 updateData.isFavourite = isFavourite;
+            };
+
+            if (typeof answerEngine === 'string') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
+                    updateData.answerEngine = answerEngine;
+                }
+            };
+            if (typeof answerMachineErrorReason === 'string') {
+                updateData.answerMachineErrorReason = answerMachineErrorReason;
+            };
+            if (typeof answerMachineUsedOpencode === 'boolean') {
+                updateData.answerMachineUsedOpencode = answerMachineUsedOpencode;
+            };
+            if (typeof answerMachineUsedWebSearch === 'boolean') {
+                updateData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
 
             if (Object.keys(updateData).length === 0) {

@@ -68,6 +68,32 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         }
     ],
 
+    // answer engine
+    answerEngine: {
+        type: String,
+        enum: ['conciseAnswer', 'answerMachine'],
+        default: 'conciseAnswer',
+    },
+
+    // answerEngine -> answerMachine
+    answerMachineStatus: {
+        type: String,
+        enum: ['pending', 'answered', 'error'],
+        default: 'pending',
+    },
+    answerMachineErrorReason: {
+        type: String,
+        default: '',
+    },
+    answerMachineUsedOpencode: {
+        type: Boolean,
+        default: false,
+    },
+    answerMachineUsedWebSearch: {
+        type: Boolean,
+        default: false,
+    },
+
     // auth
     username: { type: String, required: true, default: '', index: true, },
 

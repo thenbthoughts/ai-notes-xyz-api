@@ -6,8 +6,6 @@ export interface IChatLlmThread extends Document {
     threadTitle: string;
 
     // auto context
-    isPersonalContextEnabled: boolean;
-    isAutoAiContextSelectEnabled: boolean;
     systemPrompt: string;
 
     chatLlmTemperature: number;
@@ -27,6 +25,19 @@ export interface IChatLlmThread extends Document {
     aiSummary: string;
     aiTasks: object[];
     tagsAi: string[];
+
+    // context
+    isPersonalContextEnabled: boolean;
+    isAutoAiContextSelectEnabled: boolean;
+
+    // answer type
+    answerEngine: 'conciseAnswer' | 'answerMachine';
+
+    // answerEngine -> answerMachine
+    answerMachineStatus: 'pending' | 'answered' | 'error';
+    answerMachineErrorReason: string;
+    answerMachineUsedOpencode: boolean;
+    answerMachineUsedWebSearch: boolean;
 
     // auth
     username: string;
