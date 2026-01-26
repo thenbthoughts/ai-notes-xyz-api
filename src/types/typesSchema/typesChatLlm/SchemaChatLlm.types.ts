@@ -3,6 +3,7 @@ import mongoose, { Document } from 'mongoose';
 // Chat Interface
 export interface IChatLlm extends Document {
     // identification
+    _id: mongoose.Types.ObjectId;
     threadId: mongoose.Schema.Types.ObjectId | null;
 
     // ai

@@ -180,7 +180,7 @@ const handleUploadTypeDocument = async ({
         });
 
         await generateTags({
-            mongodbRecordId: (result._id as ObjectId).toString(),
+            mongodbRecordId: result._id.toString(),
             auth_username,
         });
 
@@ -299,7 +299,7 @@ router.post(
 
                         // add tags
                         await generateTags({
-                            mongodbRecordId: (result._id as ObjectId).toString(),
+                            mongodbRecordId: result._id.toString(),
                             auth_username,
                         });
                     }
@@ -374,7 +374,7 @@ router.post(
 
                         // add tags
                         await generateTags({
-                            mongodbRecordId: (newNoteAudio._id as ObjectId).toString(),
+                            mongodbRecordId: newNoteAudio._id.toString(),
                             auth_username,
                         });
                     }
@@ -397,7 +397,7 @@ router.post(
                 });
                 // add tags
                 await generateTags({
-                    mongodbRecordId: (newNote._id as ObjectId).toString(),
+                    mongodbRecordId: newNote._id.toString(),
                     auth_username,
                 });
 

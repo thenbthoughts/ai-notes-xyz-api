@@ -65,7 +65,7 @@ const init = async () => {
             throw new Error('ChatLlm not found');
         }
 
-        const chatLlmSourceId = chatLlm._id as string;
+        const chatLlmSourceId = chatLlm._id.toString();
 
         // Test with a lifeEvents source
         const lifeEvents = await ModelLifeEvents.findOne({

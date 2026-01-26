@@ -12,6 +12,8 @@ import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTas
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
+import answerMachineFunc from './answerMachine/answerMachineFunc';
+
 // Router
 const router = Router();
 
@@ -95,7 +97,7 @@ router.post(
                 ...actionDatetimeObj,
             });
 
-            const messageId = resultFromLastConversation._id as ObjectId;
+            const messageId = resultFromLastConversation._id;
 
             if (
                 aiModelProvider === 'groq' ||
@@ -110,12 +112,12 @@ router.post(
                     aiModelProvider: aiModelProvider,
                     aiModelName: aiModelName,
                     userApiKey: apiKeys,
-                    messageId: messageId as unknown as mongoose.Types.ObjectId,
+                    messageId: messageId,
                 });
 
                 // Generate tags
                 await generateTags({
-                    mongodbRecordId: (messageId as ObjectId).toString(),
+                    mongodbRecordId: messageId.toString(),
                     auth_username,
                 });
             }
@@ -128,4 +130,36 @@ router.post(
     }
 );
 
+// Answer Machine API
+router.post(
+    '/answerMachine',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_username = res.locals.auth_username;
+
+            // variable -> threadId
+            let threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            // answer machine
+            const result = await answerMachineFunc({
+                threadId,
+                username: auth_username,
+            });
+
+            if (result.success === false) {
+                return res.status(500).json({ message: 'Server error', error: result.errorReason });
+            }
+
+            return res.status(200).json({ message: 'Success' });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error', error: error });
+        }
+    }
+);
 export default router;
