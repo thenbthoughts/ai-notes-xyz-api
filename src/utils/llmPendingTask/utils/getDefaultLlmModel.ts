@@ -5,7 +5,9 @@ import { ModelOpenaiCompatibleModel } from '../../../schema/schemaUser/SchemaOpe
 interface DefaultModelResult {
     featureAiActionsEnabled: boolean;
     provider: '' | 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+    apiEndpoint: string;
     modelName: string;
+    apiKey: string;
 }
 
 const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult> => {
@@ -21,8 +23,14 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                 featureAiActionsEnabled: false,
                 provider: '',
                 modelName: '',
+                apiKey: '',
+                apiEndpoint: '',
             };
         }
+
+        const userApiKeys = await ModelUserApiKey.findOne({
+            username,
+        });
 
         // If user has AI features enabled and has set a preferred model
         if (
@@ -36,31 +44,45 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                 user.featureAiActionsModelProvider === 'ollama' ||
                 user.featureAiActionsModelProvider === 'openai-compatible'
             ) {
+                let apiKey = '';
+                let apiEndpoint = '';
+
+                // Get API key and endpoint for the preferred provider
+                if (userApiKeys) {
+                    if (user.featureAiActionsModelProvider === 'groq' && userApiKeys.apiKeyGroqValid && userApiKeys.apiKeyGroq) {
+                        apiKey = userApiKeys.apiKeyGroq;
+                    } else if (user.featureAiActionsModelProvider === 'openrouter' && userApiKeys.apiKeyOpenrouterValid && userApiKeys.apiKeyOpenrouter) {
+                        apiKey = userApiKeys.apiKeyOpenrouter;
+                    } else if (user.featureAiActionsModelProvider === 'ollama' && userApiKeys.apiKeyOllamaValid && userApiKeys.apiKeyOllamaEndpoint) {
+                        apiEndpoint = userApiKeys.apiKeyOllamaEndpoint;
+                    } else if (user.featureAiActionsModelProvider === 'openai-compatible') {
+                        // For openai-compatible, we need to get the model configuration
+                        const openaiModel = await ModelOpenaiCompatibleModel.findById(user.featureAiActionsModelName);
+                        if (openaiModel) {
+                            apiKey = openaiModel.apiKey || '';
+                            // Construct the API endpoint like the calling code does
+                            apiEndpoint = openaiModel.baseUrl || '';
+                        }
+                    }
+                }
+
                 return {
                     featureAiActionsEnabled: true,
                     provider: user.featureAiActionsModelProvider,
                     modelName: user.featureAiActionsModelName,
+                    apiKey,
+                    apiEndpoint,
                 };
             }
         }
-
-        const userApiKeys = await ModelUserApiKey.findOne({
-            username,
-        });
 
         if (!userApiKeys) {
             return {
                 featureAiActionsEnabled: true,
                 provider: '',
                 modelName: '',
-            };
-        }
-
-        if (userApiKeys.apiKeyGroqValid && userApiKeys.apiKeyGroq) {
-            return {
-                featureAiActionsEnabled: true,
-                provider: 'groq',
-                modelName: 'openai/gpt-oss-20b',
+                apiKey: '',
+                apiEndpoint: '',
             };
         }
 
@@ -69,29 +91,48 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                 featureAiActionsEnabled: true,
                 provider: 'openrouter',
                 modelName: 'openrouter/auto',
+                apiKey: userApiKeys.apiKeyOpenrouter,
+                apiEndpoint: '',
             };
         }
+
+        if (userApiKeys.apiKeyGroqValid && userApiKeys.apiKeyGroq) {
+            return {
+                featureAiActionsEnabled: true,
+                provider: 'groq',
+                modelName: 'openai/gpt-oss-20b',
+                apiKey: userApiKeys.apiKeyGroq,
+                apiEndpoint: '',
+            };
+        }
+
 
         if (userApiKeys.apiKeyOllamaValid && userApiKeys.apiKeyOllamaEndpoint) {
             return {
                 featureAiActionsEnabled: true,
                 provider: 'ollama',
                 modelName: 'openai/gpt-oss-20b',
+                apiKey: '',
+                apiEndpoint: userApiKeys.apiKeyOllamaEndpoint,
             };
         }
 
         // if there exists a model for openai-compatible, return it
         const modelOpenaiCompatible = await ModelOpenaiCompatibleModel.findOne({
             username,
-
             isInputModalityText: 'true',
             isOutputModalityText: 'true',
-        });
+        }).sort({ createdAtUtc: -1 }); // Get the most recent one
         if (modelOpenaiCompatible) {
+            // Construct the API endpoint like the calling code does
+            let apiEndpoint = modelOpenaiCompatible.baseUrl || '';
+
             return {
                 featureAiActionsEnabled: true,
                 provider: 'openai-compatible',
                 modelName: modelOpenaiCompatible._id.toString(),
+                apiKey: modelOpenaiCompatible.apiKey || '',
+                apiEndpoint,
             };
         }
 
@@ -100,6 +141,8 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             featureAiActionsEnabled: false,
             provider: '',
             modelName: '',
+            apiKey: '',
+            apiEndpoint: '',
         };
     } catch (error) {
         console.error('Error getting default LLM model:', error);
@@ -107,6 +150,8 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             featureAiActionsEnabled: false,
             provider: '',
             modelName: '',
+            apiKey: '',
+            apiEndpoint: '',
         };
     }
 };
