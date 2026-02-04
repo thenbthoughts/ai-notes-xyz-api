@@ -57,18 +57,6 @@ const userSchema = new Schema<IUser>({
         default: ''
     },
 
-    // preferredModel
-    preferredModelProvider: {
-        type: String,
-        default: ''
-
-        // groq, openrouter, custom
-    },
-    preferredModelName: {
-        type: String,
-        default: ''
-    },
-
     // Time Zone
     timeZoneRegion: {
         type: String,
@@ -78,6 +66,46 @@ const userSchema = new Schema<IUser>({
         type: Number,
         default: 330,
         // in minutes
+    },
+
+    // enabled ai features
+    featureAiActionsEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsModelProvider: {
+        type: String,
+        enum: ['', 'groq', 'openrouter', 'ollama', 'openai-compatible'],
+        default: '',
+    },
+    featureAiActionsModelName: {
+        type: String,
+        default: '',
+    },
+
+    featureAiActionsChatThread: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsChatMessage: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsNotes: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsTask: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsLifeEvents: {
+        type: Boolean,
+        default: false,
+    },
+    featureAiActionsInfoVault: {
+        type: Boolean,
+        default: false,
     },
 });
 
