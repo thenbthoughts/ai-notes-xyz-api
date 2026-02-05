@@ -29,16 +29,18 @@ router.post('/login', middlewareActionDatetime, async (req: Request, res: Respon
         console.log(actionDatetimeObj);
 
         // Find user by username
-        const user = await ModelUser.findOne({ username });
+        const user = await ModelUser.findOne({ username }).select('+password');
         if (!user) {
             return res.status(400).json({ message: 'Invalid username or password' });
         }
 
         // Check password
+        console.log('password: ', password);
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid username or password' });
         }
+        console.log('isMatch: ', isMatch);
 
         // Generate random device id
         const randomDeviceId = crypto.randomBytes(64).toString('hex');
@@ -209,7 +211,7 @@ router.post(
             const { oldPassword, newPassword } = req.body;
 
             // Find user by username
-            const user = await ModelUser.findOne({ username: auth_username });
+            const user = await ModelUser.findOne({ username: auth_username }).select('+password');
             if (!user) {
                 return res.status(400).json({ message: 'Invalid username or password' });
             }
