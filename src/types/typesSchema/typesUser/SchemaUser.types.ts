@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 
 // User Interface
 interface IUser extends Document {
@@ -27,12 +27,21 @@ interface IUser extends Document {
     address: string;
     website: string;
 
-    preferredModelProvider: string;
-    preferredModelName: string;
-
     // timezone
     timeZoneRegion: string;
     timeZoneUtcOffset: number;
+
+    // enabled ai features
+    featureAiActionsEnabled: boolean;
+    featureAiActionsModelProvider: '' | 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    featureAiActionsModelName: string;
+
+    featureAiActionsChatThread: boolean;
+    featureAiActionsChatMessage: boolean;
+    featureAiActionsNotes: boolean;
+    featureAiActionsTask: boolean;
+    featureAiActionsLifeEvents: boolean;
+    featureAiActionsInfoVault: boolean;
 }
 
 export default IUser;

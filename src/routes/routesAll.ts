@@ -51,8 +51,6 @@ import routesLifeEventsAiCategoryCrud from './lifeEvents/lifeEventsCrud/lifeEven
 
 import uploadFileS3ForFeatures from './upload/uploadFileS3ForFeatures';
 
-import apiKeyDefault from './apiKeyDefault/apiKeyDefault.route';
-
 import llmTaskBackgroundProcessCrudRouter from './llmTaskBackgroundProcess/llmTaskBackgroundProcessCrud.route';
 
 // llm crud
@@ -131,9 +129,6 @@ router.use('/life-events/ai-category-crud', routesLifeEventsAiCategoryCrud);
 
 // uploads
 router.use('/uploads/crud', uploadFileS3ForFeatures);
-
-// other
-router.use('/apiKeyDefault/crud', apiKeyDefault);
 
 // llm task background process
 router.use('/llm-task-background-process/crud', llmTaskBackgroundProcessCrudRouter);

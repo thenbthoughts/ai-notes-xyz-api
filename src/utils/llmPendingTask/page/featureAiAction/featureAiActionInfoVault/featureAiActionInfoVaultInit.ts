@@ -4,6 +4,7 @@ import generateInfoVaultAiSummaryById from "./generateInfoVaultAiSummaryById";
 import generateInfoVaultAiTagsById from "./generateInfoVaultAiTagsById";
 import generateEmbeddingByInfoVaultId from "./generateEmbeddingByInfoVaultId";
 import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionInfoVaultInit = async ({
@@ -17,6 +18,23 @@ const featureAiActionInfoVaultInit = async ({
         }
 
         console.log('targetRecordId', targetRecordId);
+
+        // Check if Info Vault AI is enabled for this user
+        const infoVaultForUserCheck = await ModelInfoVault.findById(targetRecordId).select('username').lean();
+        if (!infoVaultForUserCheck) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            username: infoVaultForUserCheck.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsInfoVault: true
+        });
+
+        if (!user) {
+            console.log('Info Vault AI not enabled for user:', infoVaultForUserCheck.username);
+            return true; // Skip AI processing if Info Vault AI is not enabled
+        }
 
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({

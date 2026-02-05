@@ -13,36 +13,20 @@ const init = async () => {
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
         "taskType": llmPendingTaskTypes.page.featureAiActions.notes,
-        "targetRecordId": "6860cef19714a47f91f932b3",
-        "aiModelName": "openai/gpt-oss-20b",
-        "aiModelProvider": "groq",
-    });
-
-    const resultInsert2 = await ModelLlmPendingTaskCron.create({
-        "username": "example",
-        "taskType": llmPendingTaskTypes.page.featureAiActions.notes,
-        "targetRecordId": "6860cef19714a47f91f932b3",
-        "aiModelName": "openai/gpt-oss-20b",
-        "aiModelProvider": "groq",
+        "targetRecordId": "6984b3c9e07fc0eea29049b8",
     });
 
     console.time('total-time');
     const resultInsert_id = resultInsert._id as string;
-    const resultInsert_id2 = resultInsert2._id as string;
     const result = await llmPendingTaskProcessFunc({
         _id: mongoose.Types.ObjectId.createFromHexString(
             resultInsert_id.toString()
         ),
     })
-    const result2 = await llmPendingTaskProcessFunc({
-        _id: mongoose.Types.ObjectId.createFromHexString(
-            resultInsert_id2.toString()
-        ),
-    })
-    console.log('result: ', result);
-    console.log('result2: ', result2);
-    console.timeEnd('total-time');
 
+    console.log('result: ', result);
+
+    console.timeEnd('total-time');
     mongoose.disconnect();
 }
 

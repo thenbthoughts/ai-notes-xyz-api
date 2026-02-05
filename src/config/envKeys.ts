@@ -8,20 +8,6 @@ const envKeys = {
 
     // mongodb url
     MONGODB_URI: process.env.MONGODB_URI || '',
-
-    // 
-    DEFAULT_ENV_ENABLED: (process.env?.DEFAULT_ENV_ENABLED === "yes") ? 'yes' : 'no' as "yes" | "no",
-
-    // llm
-    DEFAULT_ENV_GROQ_API_KEY: process.env.DEFAULT_ENV_GROQ_API_KEY || '',
-    DEFAULT_ENV_OPEN_ROUTER_KEY: process.env.DEFAULT_ENV_OPEN_ROUTER_KEY || '',
-
-    // S3
-    DEFAULT_ENV_S3_ENDPOINT: process.env.DEFAULT_ENV_S3_ENDPOINT || '',
-    DEFAULT_ENV_S3_REGION: process.env.DEFAULT_ENV_S3_REGION || '',
-    DEFAULT_ENV_S3_ACCESS_KEY_ID: process.env.DEFAULT_ENV_S3_ACCESS_KEY_ID || '',
-    DEFAULT_ENV_S3_SECRET_ACCESS_KEY: process.env.DEFAULT_ENV_S3_SECRET_ACCESS_KEY || '',
-    DEFAULT_ENV_S3_BUCKET_NAME: process.env.DEFAULT_ENV_S3_BUCKET_NAME || '',
 };
 
 if(process.env.EXPRESS_PORT) {

@@ -3,6 +3,7 @@ import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
 import { INotes } from "../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types";
 
@@ -149,22 +150,33 @@ const generateEmbeddingByNotesId = async ({
 
         const notesId = notesRecord._id as ObjectId;
 
-        // Step 2: Validate API keys
+        // Step 2: Check if AI features are enabled for this user
+        const user = await ModelUser.findOne({
+            username: notesRecord.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsNotes: true
+        });
+        if (!user) {
+            console.log('Notes AI or AI features not enabled for user:', notesRecord.username);
+            return true; // Skip embedding generation if AI features or Notes AI is not enabled
+        }
+
+        // Step 4: Validate API keys
         const apiKeys = await validateApiKeys(notesRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        // Step 3: Build content from notes
+        // Step 6: Build content from notes
         const content = buildContentFromNotes(notesRecord);
 
-        // Step 4: Generate embedding vector
+        // Step 7: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
-        // Step 5: Create vector point
+        // Step 8: Create vector point
         const point = createVectorPoint(notesId, embedding, content);
 
-        // Step 6: Setup Qdrant client
+        // Step 9: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
             apiKeyQdrantEndpoint: apiKeys.apiKeyQdrantEndpoint,
             apiKeyQdrantPassword: apiKeys.apiKeyQdrantPassword,
@@ -177,10 +189,10 @@ const generateEmbeddingByNotesId = async ({
         // collection name
         const collectionName = `index-user-${notesRecord.username}`;
 
-        // Step 7: Ensure collection exists
+        // Step 10: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
 
-        // Step 8: Upsert to vector database
+        // Step 11: Upsert to vector database
         await upsertToVectorDb(qdrantClient, collectionName, [point]);
 
         return true;

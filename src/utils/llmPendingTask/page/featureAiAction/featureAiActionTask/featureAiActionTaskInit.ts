@@ -4,6 +4,7 @@ import generateTaskAiSummaryById from "./generateTaskAiSummaryById";
 import generateTaskAiTagsById from "./generateTaskAiTagsById";
 import generateEmbeddingByTaskId from "./generateEmbeddingByTaskId";
 import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionTaskInit = async ({
@@ -17,6 +18,23 @@ const featureAiActionTaskInit = async ({
         }
 
         console.log('targetRecordId', targetRecordId);
+
+        // Check if Task AI is enabled for this user
+        const taskForUserCheck = await ModelTask.findById(targetRecordId).select('username').lean();
+        if (!taskForUserCheck) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            username: taskForUserCheck.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsTask: true
+        });
+
+        if (!user) {
+            console.log('Task AI not enabled for user:', taskForUserCheck.username);
+            return true; // Skip AI processing if Task AI is not enabled
+        }
 
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({

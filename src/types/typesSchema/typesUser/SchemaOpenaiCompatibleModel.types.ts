@@ -1,11 +1,13 @@
-import { Document } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 
 interface IOpenaiCompatibleModel extends Document {
+    _id: mongoose.Types.ObjectId;
+
     username: string;
     providerName?: string;
     baseUrl: string;
     apiKey: string;
-    modelName?: string;
+    modelName: string;
     customHeaders?: string;
     createdAtUtc?: Date;
     updatedAtUtc?: Date;

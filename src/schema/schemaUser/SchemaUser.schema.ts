@@ -4,7 +4,11 @@ import IUser from '../../types/typesSchema/typesUser/SchemaUser.types';
 // User Schema
 const userSchema = new Schema<IUser>({
     username: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
+    password: {
+        type: String,
+        required: true,
+        select: false,
+    },
 
     // personal info
     name: {
@@ -57,18 +61,6 @@ const userSchema = new Schema<IUser>({
         default: ''
     },
 
-    // preferredModel
-    preferredModelProvider: {
-        type: String,
-        default: ''
-
-        // groq, openrouter, custom
-    },
-    preferredModelName: {
-        type: String,
-        default: ''
-    },
-
     // Time Zone
     timeZoneRegion: {
         type: String,
@@ -78,6 +70,46 @@ const userSchema = new Schema<IUser>({
         type: Number,
         default: 330,
         // in minutes
+    },
+
+    // enabled ai features
+    featureAiActionsEnabled: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsModelProvider: {
+        type: String,
+        enum: ['', 'groq', 'openrouter', 'ollama', 'openai-compatible'],
+        default: '',
+    },
+    featureAiActionsModelName: {
+        type: String,
+        default: '',
+    },
+
+    featureAiActionsChatThread: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsChatMessage: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsNotes: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsTask: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsLifeEvents: {
+        type: Boolean,
+        default: true,
+    },
+    featureAiActionsInfoVault: {
+        type: Boolean,
+        default: true,
     },
 });
 

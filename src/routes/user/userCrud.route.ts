@@ -226,11 +226,37 @@ router.post(
             if (typeof updateData.zipCode === 'string') {
                 updateObj.zipCode = updateData.zipCode;
             }
-            if (typeof updateData.preferredModelProvider === 'string') {
-                updateObj.preferredModelProvider = updateData.preferredModelProvider;
+
+            // AI Features Settings
+            if (typeof updateData.featureAiActionsEnabled === 'boolean') {
+                updateObj.featureAiActionsEnabled = updateData.featureAiActionsEnabled;
             }
-            if (typeof updateData.preferredModelName === 'string') {
-                updateObj.preferredModelName = updateData.preferredModelName;
+            if (typeof updateData.featureAiActionsModelProvider === 'string') {
+                const validProviders = ['groq', 'openrouter', 'ollama', 'openai-compatible'];
+                if (validProviders.includes(updateData.featureAiActionsModelProvider)) {
+                    updateObj.featureAiActionsModelProvider = updateData.featureAiActionsModelProvider;
+                }
+            }
+            if (typeof updateData.featureAiActionsModelName === 'string') {
+                updateObj.featureAiActionsModelName = updateData.featureAiActionsModelName;
+            }
+            if (typeof updateData.featureAiActionsChatThread === 'boolean') {
+                updateObj.featureAiActionsChatThread = updateData.featureAiActionsChatThread;
+            }
+            if (typeof updateData.featureAiActionsChatMessage === 'boolean') {
+                updateObj.featureAiActionsChatMessage = updateData.featureAiActionsChatMessage;
+            }
+            if (typeof updateData.featureAiActionsNotes === 'boolean') {
+                updateObj.featureAiActionsNotes = updateData.featureAiActionsNotes;
+            }
+            if (typeof updateData.featureAiActionsTask === 'boolean') {
+                updateObj.featureAiActionsTask = updateData.featureAiActionsTask;
+            }
+            if (typeof updateData.featureAiActionsLifeEvents === 'boolean') {
+                updateObj.featureAiActionsLifeEvents = updateData.featureAiActionsLifeEvents;
+            }
+            if (typeof updateData.featureAiActionsInfoVault === 'boolean') {
+                updateObj.featureAiActionsInfoVault = updateData.featureAiActionsInfoVault;
             }
 
             if (Object.keys(updateObj).length === 0) {

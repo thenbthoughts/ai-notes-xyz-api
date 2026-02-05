@@ -1,12 +1,14 @@
 import { ObjectId } from 'mongodb';
 import { v5 as uuidv5 } from 'uuid';
 
-import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../../schema/schemaUser/SchemaUser.schema";
 import { ModelFaq } from "../../../../../../schema/schemaFaq/SchemaFaq.schema";
 import { IFaq } from "../../../../../../types/typesSchema/typesFaq/SchemaFaq.types";
 
 import { getQdrantClient } from "../../../../../../config/qdrantConfig";
 import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../../../llm/ollamaCommonFunc';
+import { getDefaultLlmModel } from '../../../../utils/getDefaultLlmModel';
+import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
 /**
  * Find and validate FAQ record by ID
@@ -30,16 +32,23 @@ const findFaqRecord = async (targetRecordId: string | null): Promise<IFaq | null
 };
 
 /**
- * Validate user API keys for Ollama and Qdrant
+ * Validate user has valid Ollama and Qdrant configuration
  */
 const validateApiKeys = async (username: string) => {
+    // Get LLM config to check for Ollama configuration
+    const llmConfig = await getDefaultLlmModel(username);
+
+    // Check if user has Ollama configured (for embeddings)
+    const hasOllama = llmConfig.provider === 'ollama' && llmConfig.apiEndpoint;
+
+    // For Qdrant, we still need to check the old way since getDefaultLlmModel doesn't handle Qdrant
+    // TODO: This could be updated when Qdrant configuration is moved to the user schema
     const apiKeys = await ModelUserApiKey.findOne({
         username: username,
-        apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
 
-    return apiKeys;
+    return hasOllama && apiKeys ? { ...apiKeys.toObject(), apiKeyOllamaEndpoint: llmConfig.apiEndpoint } : null;
 };
 
 /**
@@ -152,22 +161,61 @@ const generateEmbeddingByFaqId = async ({
 
         const faqId = faqRecord._id as ObjectId;
 
-        // Step 2: Validate API keys
+        // Step 2: Check if AI features are enabled for this user based on source type
+        const user = await ModelUser.findOne({
+            username: faqRecord.username,
+            featureAiActionsEnabled: true
+        });
+        if (!user) {
+            console.log('AI features not enabled for user:', faqRecord.username);
+            return true; // Skip embedding generation if AI features are not enabled
+        }
+
+        // Check specific feature toggle based on FAQ's source type
+        let featureEnabled = false;
+        const sourceType = faqRecord.metadataSourceType;
+        switch (sourceType) {
+            case 'notes':
+                featureEnabled = !!user.featureAiActionsNotes;
+                break;
+            case 'tasks':
+                featureEnabled = !!user.featureAiActionsTask;
+                break;
+            case 'chatLlm':
+            case 'chatThread':
+                featureEnabled = !!user.featureAiActionsChatMessage;
+                break;
+            case 'lifeEvents':
+                featureEnabled = !!user.featureAiActionsLifeEvents;
+                break;
+            case 'infoVault':
+                featureEnabled = !!user.featureAiActionsInfoVault;
+                break;
+            default:
+                featureEnabled = false;
+        }
+
+        if (!featureEnabled) {
+            console.log(`${sourceType} AI not enabled for user: ${faqRecord.username}`);
+            return true; // Skip embedding generation if specific feature AI is not enabled
+        }
+
+        // Step 4: Validate API keys
         const apiKeys = await validateApiKeys(faqRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        // Step 3: Build content from FAQ
+        // Step 5: Build content from FAQ
         const content = buildContentFromFaq(faqRecord);
 
-        // Step 4: Generate embedding vector
+        // Step 6: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
-        // Step 5: Create vector point
+        // Step 7: Create vector point
         const point = createVectorPoint(faqId, embedding, content);
 
-        // Step 6: Setup Qdrant client
+        // Step 8: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
             apiKeyQdrantEndpoint: apiKeys.apiKeyQdrantEndpoint,
             apiKeyQdrantPassword: apiKeys.apiKeyQdrantPassword,
@@ -180,10 +228,10 @@ const generateEmbeddingByFaqId = async ({
         // collection name
         const collectionName = `index-user-${faqRecord.username}`;
 
-        // Step 7: Ensure collection exists
+        // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
 
-        // Step 8: Upsert to vector database
+        // Step 10: Upsert to vector database
         await upsertToVectorDb(qdrantClient, collectionName, [point]);
 
         // Step 9: Update FAQ record with embedding info

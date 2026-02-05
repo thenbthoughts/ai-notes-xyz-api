@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
@@ -145,22 +146,33 @@ const generateEmbeddingByChatMessageId = async ({
 
         const chatMessageId = chatMessageRecord._id as ObjectId;
 
-        // Step 2: Validate API keys
+        // Step 2: Check if AI features are enabled for this user
+        const user = await ModelUser.findOne({
+            username: chatMessageRecord.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsChatMessage: true
+        });
+        if (!user) {
+            console.log('Chat Message AI or AI features not enabled for user:', chatMessageRecord.username);
+            return true; // Skip embedding generation if AI features or Chat Message AI is not enabled
+        }
+
+        // Step 4: Validate API keys
         const apiKeys = await validateApiKeys(chatMessageRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        // Step 3: Build content from chat message
+        // Step 5: Build content from chat message
         const content = buildContentFromChatMessage(chatMessageRecord);
 
-        // Step 4: Generate embedding vector
+        // Step 6: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
-        // Step 5: Create vector point
+        // Step 7: Create vector point
         const point = createVectorPoint(chatMessageId, embedding, content);
 
-        // Step 6: Setup Qdrant client
+        // Step 8: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
             apiKeyQdrantEndpoint: apiKeys.apiKeyQdrantEndpoint,
             apiKeyQdrantPassword: apiKeys.apiKeyQdrantPassword,
@@ -173,10 +185,10 @@ const generateEmbeddingByChatMessageId = async ({
         // collection name
         const collectionName = `index-user-${chatMessageRecord.username}`;
 
-        // Step 7: Ensure collection exists
+        // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
 
-        // Step 8: Upsert to vector database
+        // Step 10: Upsert to vector database
         await upsertToVectorDb(qdrantClient, collectionName, [point]);
 
         return true;

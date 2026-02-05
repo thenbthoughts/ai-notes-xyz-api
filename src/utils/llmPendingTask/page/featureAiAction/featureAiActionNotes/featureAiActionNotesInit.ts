@@ -4,6 +4,7 @@ import generateNotesAiSummaryById from "./generateNotesAiSummaryById";
 import generateNotesAiTagsById from "./generateNotesAiTagsById";
 import generateEmbeddingByNotesId from "./generateEmbeddingByNotesId";
 import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionNotesInit = async ({
@@ -17,6 +18,23 @@ const featureAiActionNotesInit = async ({
         }
 
         console.log('targetRecordId', targetRecordId);
+
+        // Check if Notes AI is enabled for this user
+        const notesForUserCheck = await ModelNotes.findById(targetRecordId).select('username').lean();
+        if (!notesForUserCheck) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            username: notesForUserCheck.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsNotes: true
+        });
+
+        if (!user) {
+            console.log('Notes AI not enabled for user:', notesForUserCheck.username);
+            return true; // Skip AI processing if Notes AI is not enabled
+        }
 
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({
