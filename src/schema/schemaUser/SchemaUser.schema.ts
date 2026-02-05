@@ -75,7 +75,7 @@ const userSchema = new Schema<IUser>({
     // enabled ai features
     featureAiActionsEnabled: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsModelProvider: {
         type: String,
@@ -89,27 +89,27 @@ const userSchema = new Schema<IUser>({
 
     featureAiActionsChatThread: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsChatMessage: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsNotes: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsTask: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsLifeEvents: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     featureAiActionsInfoVault: {
         type: Boolean,
-        default: false,
+        default: true,
     },
 });
 

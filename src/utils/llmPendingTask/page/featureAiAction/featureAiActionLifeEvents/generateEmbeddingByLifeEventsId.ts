@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ILifeEvents } from "../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
 
@@ -156,22 +157,33 @@ const generateEmbeddingByLifeEventsId = async ({
 
         const lifeEventsId = lifeEventsRecord._id as ObjectId;
 
-        // Step 2: Validate API keys
+        // Step 2: Check if AI features are enabled for this user
+        const user = await ModelUser.findOne({
+            username: lifeEventsRecord.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsLifeEvents: true
+        });
+        if (!user) {
+            console.log('Life Events AI or AI features not enabled for user:', lifeEventsRecord.username);
+            return true; // Skip embedding generation if AI features or Life Events AI is not enabled
+        }
+
+        // Step 4: Validate API keys
         const apiKeys = await validateApiKeys(lifeEventsRecord.username);
         if (!apiKeys) {
             return true;
         }
 
-        // Step 3: Build content from life events
+        // Step 5: Build content from life events
         const content = buildContentFromLifeEvents(lifeEventsRecord);
 
-        // Step 4: Generate embedding vector
+        // Step 6: Generate embedding vector
         const embedding = await generateEmbeddingVector(content, apiKeys.apiKeyOllamaEndpoint);
 
-        // Step 5: Create vector point
+        // Step 7: Create vector point
         const point = createVectorPoint(lifeEventsId, embedding, content);
 
-        // Step 6: Setup Qdrant client
+        // Step 8: Setup Qdrant client
         const qdrantClient = await getQdrantClient({
             apiKeyQdrantEndpoint: apiKeys.apiKeyQdrantEndpoint,
             apiKeyQdrantPassword: apiKeys.apiKeyQdrantPassword,
@@ -184,10 +196,10 @@ const generateEmbeddingByLifeEventsId = async ({
         // collection name
         const collectionName = `index-user-${lifeEventsRecord.username}`;
 
-        // Step 7: Ensure collection exists
+        // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);
 
-        // Step 8: Upsert to vector database
+        // Step 10: Upsert to vector database
         await upsertToVectorDb(qdrantClient, collectionName, [point]);
 
         return true;

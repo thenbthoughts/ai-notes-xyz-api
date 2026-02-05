@@ -5,6 +5,7 @@ import generateLifeEventAiTagsById from "./generateLifeEventAiTagsById";
 import generateLifeEventAiCategoryById from "./generateLifeEventAiCategoryById";
 import generateEmbeddingByLifeEventsId from "./generateEmbeddingByLifeEventsId";
 import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { reindexDocument } from "../../../../search/reindexGlobalSearch";
 
 const featureAiActionLifeEventsInit = async ({
@@ -18,6 +19,23 @@ const featureAiActionLifeEventsInit = async ({
         }
 
         console.log('targetRecordId', targetRecordId);
+
+        // Check if Life Events AI is enabled for this user
+        const lifeEventForUserCheck = await ModelLifeEvents.findById(targetRecordId).select('username').lean();
+        if (!lifeEventForUserCheck) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            username: lifeEventForUserCheck.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsLifeEvents: true
+        });
+
+        if (!user) {
+            console.log('Life Events AI not enabled for user:', lifeEventForUserCheck.username);
+            return true; // Skip AI processing if Life Events AI is not enabled
+        }
 
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({

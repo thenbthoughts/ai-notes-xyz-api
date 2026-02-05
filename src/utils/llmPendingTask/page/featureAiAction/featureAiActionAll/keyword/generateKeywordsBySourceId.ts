@@ -1,12 +1,5 @@
-import axios, {
-    AxiosRequestConfig,
-    AxiosResponse,
-    isAxiosError,
-} from "axios";
 import mongoose from "mongoose";
-import openrouterMarketing from "../../../../../../config/openrouterMarketing";
-
-import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { fetchLlmUnified, Message } from "../../../../utils/fetchLlmUnified";
 
 import { ModelLlmContextKeyword } from "../../../../../../schema/schemaLlmContext/SchemaLlmContextKeyword.schema";
 
@@ -17,6 +10,7 @@ import { ModelLifeEvents } from "../../../../../../schema/schemaLifeEvents/Schem
 import { ModelInfoVault } from "../../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
 import { ModelUser } from "../../../../../../schema/schemaUser/SchemaUser.schema";
 import { jsonObjRepairCustom } from "../../../../../common/jsonObjRepairCustom";
+import { getDefaultLlmModel } from '../../../../utils/getDefaultLlmModel';
 
 interface tsMessage {
     role: string;
@@ -55,13 +49,16 @@ interface tsKeywordsResponse {
 
 const fetchLlmKeywords = async ({
     argContent,
-    llmAuthToken,
-    modelProvider,
+    llmConfig,
     languagesStr,
 }: {
     argContent: string,
-    llmAuthToken: string;
-    modelProvider: 'groq' | 'openrouter';
+    llmConfig: {
+        provider: 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+        apiKey: string;
+        apiEndpoint?: string;
+        modelName: string;
+    };
     languagesStr: string;
 }) => {
     let returnObj = {
@@ -84,15 +81,7 @@ const fetchLlmKeywords = async ({
             throw new Error('Invalid input: argContent must be a non-empty string.');
         }
 
-        let apiEndpoint = '';
-        let modelName = '';
-        if (modelProvider === 'openrouter') {
-            apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        } else if (modelProvider === 'groq') {
-            apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        }
+        // Use the provided LLM config
 
         let systemPromptLanguages = '';
         if (languagesStr && languagesStr.length > 0) {
@@ -141,44 +130,30 @@ ${systemPromptLanguages}
 
 Respond only with the JSON structure.`;
 
-        const data: tsRequestData = {
-            messages: [
-                {
-                    role: "system",
-                    content: systemPrompt,
-                },
-                {
-                    role: "user",
-                    content: argContent,
-                }
-            ],
-            model: modelName,
-            temperature: 0.7,
-            max_tokens: 8096,
-            top_p: 1,
-            stream: false,
-            response_format: {
-                type: "json_object"
+        const messages: Message[] = [
+            {
+                role: "system",
+                content: systemPrompt,
             },
-            stop: null,
-            provider: {
-                sort: 'price'
+            {
+                role: "user",
+                content: argContent,
             }
-        };
+        ];
 
-        const config: AxiosRequestConfig = {
-            method: 'post',
-            url: apiEndpoint,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${llmAuthToken}`,
-                ...openrouterMarketing,
-            },
-            data: JSON.stringify(data)
-        };
+        const result = await fetchLlmUnified({
+            provider: llmConfig.provider,
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint || '',
+            model: llmConfig.modelName,
+            messages: messages,
+            temperature: 0.7,
+            maxTokens: 8096,
+            topP: 1,
+            responseFormat: 'json_object',
+        });
 
-        const response: AxiosResponse = await axios.request(config);
-        let keywordsResponseJson = jsonObjRepairCustom(response.data.choices[0].message.content);
+        let keywordsResponseJson = jsonObjRepairCustom(result.content || '{}');
 
         const allKeywords: string[] = [];
 
@@ -233,10 +208,7 @@ Respond only with the JSON structure.`;
         return returnObj;
     } catch (error: any) {
         console.error(error);
-        if (isAxiosError(error)) {
-            console.error(error.message);
-        }
-        console.error(error.response);
+        console.error(error.message);
         return {
             keywords: [],
             aiCategory: '',
@@ -536,32 +508,44 @@ const generateKeywordsBySourceId = async ({
             return true; // Record not found or no content
         }
 
-        // Get user API keys
-        const apiKeys = await ModelUserApiKey.findOne({
-            username,
-            $or: [
-                {
-                    apiKeyGroqValid: true,
-                },
-                {
-                    apiKeyOpenrouterValid: true,
-                },
-            ]
-        });
-        if (!apiKeys) {
-            return true; // No API keys available
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available or AI features disabled
         }
 
-        let modelProvider = '' as "groq" | "openrouter";
-        let llmAuthToken = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
-        } else {
-            return true; // No valid API key
+        // Check AI feature toggle based on source type
+        const user = await ModelUser.findOne({ username });
+        if (!user) {
+            return true;
+        }
+
+        // Determine which feature toggle to check based on source type
+        let featureEnabled = false;
+        switch (sourceType) {
+            case 'notes':
+                featureEnabled = !!user.featureAiActionsNotes;
+                break;
+            case 'tasks':
+                featureEnabled = !!user.featureAiActionsTask;
+                break;
+            case 'chatLlm':
+            case 'chatThread':
+                featureEnabled = !!user.featureAiActionsChatMessage;
+                break;
+            case 'lifeEvents':
+                featureEnabled = !!user.featureAiActionsLifeEvents;
+                break;
+            case 'infoVault':
+                featureEnabled = !!user.featureAiActionsInfoVault;
+                break;
+            default:
+                featureEnabled = false;
+        }
+
+        if (!featureEnabled) {
+            console.log(`${sourceType} AI not enabled for user: ${username}`);
+            return true; // Skip keyword generation if specific feature AI is not enabled
         }
 
         // Get user languages
@@ -577,8 +561,12 @@ const generateKeywordsBySourceId = async ({
         // Generate keywords using LLM
         const keywordsResponse = await fetchLlmKeywords({
             argContent: content,
-            llmAuthToken,
-            modelProvider: modelProvider as 'groq' | 'openrouter',
+            llmConfig: {
+                provider: llmConfig.provider,
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                modelName: llmConfig.modelName,
+            },
             languagesStr,
         });
 

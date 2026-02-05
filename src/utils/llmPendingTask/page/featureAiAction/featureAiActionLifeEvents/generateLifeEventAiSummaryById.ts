@@ -1,106 +1,9 @@
-import axios, {
-    AxiosRequestConfig,
-    AxiosResponse,
-    isAxiosError,
-} from "axios";
-import openrouterMarketing from "../../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { ILifeEvents } from "../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
+import fetchLlmUnified from '../../../utils/fetchLlmUnified';
 
-interface tsMessage {
-    role: string;
-    content: string;
-}
-
-interface tsRequestData {
-    messages: tsMessage[];
-    model: string;
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-    stream: boolean;
-    stop: null | string;
-    response_format?: {
-        type: "json_object"
-    }
-}
-
-const fetchLlmTags = async ({
-    argContent,
-
-    llmAuthToken,
-    modelProvider,
-}: {
-    argContent: string,
-
-    llmAuthToken: string;
-    modelProvider: 'groq' | 'openrouter';
-}) => {
-    try {
-        // Validate input
-        if (typeof argContent !== 'string' || argContent.trim() === '') {
-            throw new Error('Invalid input: argContent must be a non-empty string.');
-        }
-
-        let apiEndpoint = '';
-        let modelName = '';
-        if (modelProvider === 'openrouter') {
-            apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        } else if (modelProvider === 'groq') {
-            apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        }
-
-        let systemPrompt = `From the below content, generate a detailed summary in simple language.
-        Only output the summary, no other text. No markdown.
-        Also give few suggestions for the life event.
-        Also suggest out of the box ideas.`;
-
-        const data: tsRequestData = {
-            messages: [
-                {
-                    role: "system",
-                    content: systemPrompt,
-                },
-                {
-                    role: "user",
-                    content: argContent,
-                }
-            ],
-            model: modelName,
-            temperature: 0,
-            max_tokens: 1024,
-            top_p: 1,
-            stream: false,
-            stop: null
-        };
-
-        const config: AxiosRequestConfig = {
-            method: 'post',
-            url: apiEndpoint,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${llmAuthToken}`,
-                ...openrouterMarketing,
-            },
-            data: JSON.stringify(data)
-        };
-
-        const response: AxiosResponse = await axios.request(config);
-        const summaryResponse = response.data.choices[0].message.content;
-
-        return summaryResponse; // Return only the array of strings
-    } catch (error: any) {
-        console.error(error);
-        if (isAxiosError(error)) {
-            console.error(error.message);
-        }
-        console.error(error.response)
-        return '';
-    }
-}
 
 const  generateLifeEventAiSummaryById = async ({
     targetRecordId,
@@ -118,29 +21,16 @@ const  generateLifeEventAiSummaryById = async ({
 
         const lifeEventFirst = lifeEventRecords[0];
 
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: lifeEventFirst.username,
-            $or: [
-                {
-                    apiKeyGroqValid: true,
-                },
-                {
-                    apiKeyOpenrouterValid: true,
-                },
-            ]
-        });
-        if (!apiKeys) {
-            return true;
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(lifeEventFirst.username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
         }
 
-        let modelProvider = '' as "groq" | "openrouter";
-        let llmAuthToken = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
+        // Check if Life Events AI feature is enabled for this user
+        const user = await ModelUser.findOne({ username: lifeEventFirst.username });
+        if (!user || !user.featureAiActionsLifeEvents) {
+            return true; // Skip if Life Events AI is not enabled for this user
         }
 
         const updateObj = {
@@ -161,14 +51,31 @@ const  generateLifeEventAiSummaryById = async ({
         argContent += `Event Date Year: ${lifeEventFirst.eventDateYearStr}\n`;
         argContent += `Event Date Year Month: ${lifeEventFirst.eventDateYearMonthStr}\n`;
 
-        // Use fetchLlmTags to generate summary from the content
-        const generatedSummary = await fetchLlmTags({
-            argContent: argContent,
-            llmAuthToken,
-            modelProvider: modelProvider as 'groq' | 'openrouter',
+        let systemPrompt = `From the below content, generate a very detailed summary in simple language.
+        Only output the summary, no other text. No markdown.
+        Suggest out of the box ideas.
+        Suggest few actions that can be taken.
+        Suggestions for life events and personal growth.
+        Suggest few thoughtful questions that can be asked to the user to gather more information, uncover hidden needs, or improve the contents relevance and impact.`;
+
+        // Use fetchLlmUnified with the config
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: argContent },
+            ],
+            temperature: 0,
+            maxTokens: 1024,
+            topP: 1,
+            responseFormat: 'text',
         });
-        if (generatedSummary.length >= 1) {
-            updateObj.aiSummary = generatedSummary;
+
+        if (llmResult.success && llmResult.content && llmResult.content.length >= 1) {
+            updateObj.aiSummary = llmResult.content;
         }
 
         if (Object.keys(updateObj).length >= 1) {

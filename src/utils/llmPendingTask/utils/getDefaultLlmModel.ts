@@ -32,11 +32,13 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             username,
         });
 
+        let featureAiActionsModelName = user.featureAiActionsModelName || '';
+
         // If user has AI features enabled and has set a preferred model
         if (
             user.featureAiActionsEnabled &&
             user.featureAiActionsModelProvider.length > 0 &&
-            user.featureAiActionsModelName.length > 0
+            featureAiActionsModelName.length > 0
         ) {
             if (
                 user.featureAiActionsModelProvider === 'openrouter' ||
@@ -57,11 +59,13 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                         apiEndpoint = userApiKeys.apiKeyOllamaEndpoint;
                     } else if (user.featureAiActionsModelProvider === 'openai-compatible') {
                         // For openai-compatible, we need to get the model configuration
-                        const openaiModel = await ModelOpenaiCompatibleModel.findById(user.featureAiActionsModelName);
+                        const openaiModel = await ModelOpenaiCompatibleModel.findById(featureAiActionsModelName);
+                        console.log('openaimodel: ', openaiModel);
                         if (openaiModel) {
                             apiKey = openaiModel.apiKey || '';
                             // Construct the API endpoint like the calling code does
                             apiEndpoint = openaiModel.baseUrl || '';
+                            featureAiActionsModelName = openaiModel.modelName;
                         }
                     }
                 }
@@ -69,7 +73,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                 return {
                     featureAiActionsEnabled: true,
                     provider: user.featureAiActionsModelProvider,
-                    modelName: user.featureAiActionsModelName,
+                    modelName: featureAiActionsModelName,
                     apiKey,
                     apiEndpoint,
                 };
@@ -111,7 +115,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             return {
                 featureAiActionsEnabled: true,
                 provider: 'ollama',
-                modelName: 'openai/gpt-oss-20b',
+                modelName: 'gemma3:1b',
                 apiKey: '',
                 apiEndpoint: userApiKeys.apiKeyOllamaEndpoint,
             };
@@ -122,6 +126,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             username,
             isInputModalityText: 'true',
             isOutputModalityText: 'true',
+            modelName: { $not: /ocr/i },
         }).sort({ createdAtUtc: -1 }); // Get the most recent one
         if (modelOpenaiCompatible) {
             // Construct the API endpoint like the calling code does
@@ -130,7 +135,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
             return {
                 featureAiActionsEnabled: true,
                 provider: 'openai-compatible',
-                modelName: modelOpenaiCompatible._id.toString(),
+                modelName: modelOpenaiCompatible.modelName,
                 apiKey: modelOpenaiCompatible.apiKey || '',
                 apiEndpoint,
             };

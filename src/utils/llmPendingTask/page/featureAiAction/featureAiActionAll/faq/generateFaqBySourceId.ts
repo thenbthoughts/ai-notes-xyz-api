@@ -3,14 +3,15 @@ import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { fetchLlmUnified, Message } from "../../../../utils/fetchLlmUnified";
 import { jsonObjRepairCustom } from "../../../../../common/jsonObjRepairCustom";
 
-import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelFaq } from "../../../../../../schema/schemaFaq/SchemaFaq.schema";
+import { ModelUser } from "../../../../../../schema/schemaUser/SchemaUser.schema";
 
 import { ModelNotes } from "../../../../../../schema/schemaNotes/SchemaNotes.schema";
 import { ModelTask } from "../../../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelChatLlm } from "../../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { ModelLifeEvents } from "../../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ModelInfoVault } from "../../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { getDefaultLlmModel } from '../../../../utils/getDefaultLlmModel';
 
 interface tsFaqResponse {
     faqs?: Array<{
@@ -209,23 +210,18 @@ const extractContentFromSource = async (
 const generateFaqsWithLlm = async ({
     content,
     sourceType,
-    llmAuthToken,
-    modelProvider,
+    llmConfig,
 }: {
     content: string;
     sourceType: string;
-    llmAuthToken: string;
-    modelProvider: 'groq' | 'openrouter';
+    llmConfig: {
+        provider: 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+        apiKey: string;
+        apiEndpoint?: string;
+        modelName: string;
+    };
 }): Promise<tsFaqResponse> => {
-    let apiEndpoint = '';
-    let modelName = '';
-    if (modelProvider === 'openrouter') {
-        apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-        modelName = 'openai/gpt-oss-20b';
-    } else if (modelProvider === 'groq') {
-        apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-        modelName = 'openai/gpt-oss-20b';
-    }
+    // Use the provided LLM config
 
     const systemPrompt = `You are an AI assistant specialized in generating Frequently Asked Questions (FAQs) from content.
 
@@ -262,10 +258,10 @@ Output the result in JSON format:
 
     try {
         const result = await fetchLlmUnified({
-            provider: modelProvider,
-            apiKey: llmAuthToken,
-            apiEndpoint: apiEndpoint,
-            model: modelName,
+            provider: llmConfig.provider,
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint || '',
+            model: llmConfig.modelName,
             messages: messages,
             temperature: 0.7,
             maxTokens: 2048,
@@ -274,7 +270,7 @@ Output the result in JSON format:
             toolChoice: 'none',
         });
 
-        let jsonStr = result.content.trim();
+        let jsonStr = (result.content || '').trim();
         jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '');
         jsonStr = jsonStr.trim();
 
@@ -321,35 +317,55 @@ const generateFaqBySourceId = async ({
 
         const { username, content } = sourceData;
 
-        // Get user API keys
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: username,
-            $or: [
-                { apiKeyGroqValid: true },
-                { apiKeyOpenrouterValid: true },
-            ]
-        });
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available or AI features disabled
+        }
 
-        if (!apiKeys) {
+        // Check AI feature toggle based on source type
+        const user = await ModelUser.findOne({ username });
+        if (!user) {
             return true;
         }
 
-        let modelProvider: 'groq' | 'openrouter' = 'groq';
-        let llmAuthToken = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
+        // Determine which feature toggle to check based on source type
+        let featureEnabled = false;
+        switch (sourceType) {
+            case 'notes':
+                featureEnabled = !!user.featureAiActionsNotes;
+                break;
+            case 'tasks':
+                featureEnabled = !!user.featureAiActionsTask;
+                break;
+            case 'chatLlm':
+            case 'chatThread':
+                featureEnabled = !!user.featureAiActionsChatMessage;
+                break;
+            case 'lifeEvents':
+                featureEnabled = !!user.featureAiActionsLifeEvents;
+                break;
+            case 'infoVault':
+                featureEnabled = !!user.featureAiActionsInfoVault;
+                break;
+            default:
+                featureEnabled = false;
+        }
+
+        if (!featureEnabled) {
+            return true; // Skip FAQ generation if specific feature AI is not enabled
         }
 
         // Generate FAQs using LLM
         const faqResponse = await generateFaqsWithLlm({
             content,
             sourceType,
-            llmAuthToken,
-            modelProvider,
+            llmConfig: {
+                provider: llmConfig.provider,
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                modelName: llmConfig.modelName,
+            },
         });
 
         if (!faqResponse.faqs || faqResponse.faqs.length === 0) {

@@ -12,6 +12,7 @@ import { ModelLifeEvents } from '../../../../../schema/schemaLifeEvents/SchemaLi
 import { ILifeEvents } from '../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
 
 import fetchLlmUnified from "../../../utils/fetchLlmUnified";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
 
 const getLifeEventsStr = async ({
     username,
@@ -114,39 +115,10 @@ const generateMonthlySummaryByUserId = async ({
         const summaryDateOnly = startOfMonth.toISODate();
         const summaryDateUtc = startOfMonth.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
 
-        // get api keys
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: userFirst.username,
-            $or: [
-                {
-                    apiKeyGroqValid: true,
-                },
-                {
-                    apiKeyOpenrouterValid: true,
-                },
-            ]
-        });
-        if (!apiKeys) {
-            return true;
-        }
-
-        let modelProvider = '' as "groq" | "openrouter" | "openai-compatible" | "ollama";
-        let apiEndpoint = '' as string;
-        let llmAuthToken = '' as string;
-        let modelName = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-            modelName = 'openai/gpt-oss-20b';
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
-            modelName = 'openai/gpt-oss-20b';
-        } else if (apiKeys.apiKeyOllamaValid) {
-            modelProvider = 'ollama';
-            llmAuthToken = apiKeys.apiKeyOllamaEndpoint;
-            modelName = 'gemma3:1b-it-q8_0';
-            apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(userFirst.username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
         }
 
         const lifeEventsStr = await getLifeEventsStr({
@@ -190,13 +162,10 @@ Structure:
 Be selective. Only include what matters for future reference.`;
 
         const llmResult = await fetchLlmUnified({
-            // provider
-            provider: modelProvider,
-            apiKey: llmAuthToken,
-            apiEndpoint: apiEndpoint,
-            model: modelName,
-
-            // messages
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: argContent },

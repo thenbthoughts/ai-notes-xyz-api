@@ -3,6 +3,8 @@ import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKe
 import generateChatMessageAiSummaryById from "./generateChatMessageAiSummaryById";
 import generateChatMessageAiTagsById from "./generateChatMessageAiTagsById";
 import generateEmbeddingByChatMessageId from "./generateEmbeddingByChatMessageId";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 
 const featureAiActionChatMessageInit = async ({
     targetRecordId,
@@ -15,6 +17,23 @@ const featureAiActionChatMessageInit = async ({
         }
 
         console.log('targetRecordId', targetRecordId);
+
+        // Check if Chat Message AI is enabled for this user
+        const chatMessageRecord = await ModelChatLlm.findById(targetRecordId).select('username').lean();
+        if (!chatMessageRecord) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            username: chatMessageRecord.username,
+            featureAiActionsEnabled: true,
+            featureAiActionsChatMessage: true
+        });
+
+        if (!user) {
+            console.log('Chat Message AI not enabled for user:', chatMessageRecord.username);
+            return true; // Skip AI processing if Chat Message AI is not enabled
+        }
 
         // 1. common - generate faq by source id
         const resultFaq = await generateFaqBySourceId({

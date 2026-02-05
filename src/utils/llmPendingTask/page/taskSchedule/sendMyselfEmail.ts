@@ -11,34 +11,32 @@ import { tsTaskListScheduleSendMyselfEmail } from '../../../../types/typesSchema
 import { funcSendMail } from '../../../files/funcSendMail';
 import { ModelTaskScheduleSendMyselfEmail } from '../../../../schema/schemaTaskSchedule/SchemaTaskScheduleSendMyselfEmail.schema';
 import fetchLlmUnified from '../../utils/fetchLlmUnified';
+import { getDefaultLlmModel } from '../../utils/getDefaultLlmModel';
 
 const generateAiGeneratedEmailContent = async ({
     sendMyselfEmailInfo,
-    apiKeys,
+    username,
 }: {
     sendMyselfEmailInfo: tsTaskListScheduleSendMyselfEmail;
-    apiKeys: IUserApiKey;
+    username: string;
 }) => {
     try {
-        let aiModelProvider = sendMyselfEmailInfo.aiModelProvider as 'openrouter' | 'groq';
-        let apiKey = '' as string;
-        if (aiModelProvider === 'openrouter') {
-            apiKey = apiKeys.apiKeyOpenrouter;
-        } else if (aiModelProvider === 'groq') {
-            apiKey = apiKeys.apiKeyGroq;
-        } else {
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return '';
         }
 
-        if (apiKey.length === 0) {
-            return '';
-        }
+        // Use configured model name if provided, otherwise use default
+        const modelName = sendMyselfEmailInfo.aiModelName.length > 0 
+            ? sendMyselfEmailInfo.aiModelName 
+            : llmConfig.modelName;
 
         const emailSubject = await fetchLlmUnified({
-            provider: aiModelProvider,
-            apiKey: apiKey,
-            apiEndpoint: '',
-            model: sendMyselfEmailInfo.aiModelName,
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: modelName,
             messages: [
                 { role: 'system', content: sendMyselfEmailInfo.systemPrompt },
                 { role: 'user', content: `Email Subject: ${sendMyselfEmailInfo.emailSubject}` },
@@ -47,9 +45,7 @@ const generateAiGeneratedEmailContent = async ({
             ],
         });
 
-        if (emailSubject.success) {
-            // valid
-        } else {
+        if (!emailSubject.success || !emailSubject.content) {
             return '';
         }
 
@@ -84,7 +80,7 @@ const sendMyselfEmail = async ({
             return true;
         }
 
-        // Step 3: validate api keys
+        // Step 3: validate api keys (for SMTP)
         const apiKeys = await ModelUserApiKey.findOne({
             username: taskInfo.username,
             smtpValid: true,
@@ -106,14 +102,12 @@ const sendMyselfEmail = async ({
         if (
             sendMyselfEmailInfo.aiEnabled &&
             sendMyselfEmailInfo.systemPrompt.length > 0 &&
-            sendMyselfEmailInfo.userPrompt.length > 0 &&
-            sendMyselfEmailInfo.aiModelName.length > 0 &&
-            sendMyselfEmailInfo.aiModelProvider.length > 0
+            sendMyselfEmailInfo.userPrompt.length > 0
         ) {
             console.time('generateAiGeneratedEmailContent');
             const emailSubjectAiResponse = await generateAiGeneratedEmailContent({
                 sendMyselfEmailInfo,
-                apiKeys,
+                username: taskInfo.username,
             });
             console.timeEnd('generateAiGeneratedEmailContent');
             if (emailSubjectAiResponse.length > 0) {

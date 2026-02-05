@@ -7,7 +7,7 @@ interface IOpenaiCompatibleModel extends Document {
     providerName?: string;
     baseUrl: string;
     apiKey: string;
-    modelName?: string;
+    modelName: string;
     customHeaders?: string;
     createdAtUtc?: Date;
     updatedAtUtc?: Date;

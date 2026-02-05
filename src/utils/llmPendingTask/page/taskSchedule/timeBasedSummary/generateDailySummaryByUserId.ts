@@ -27,6 +27,7 @@ import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaCh
 import { IChatLlmThread } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types';
 
 import fetchLlmUnified from "../../../utils/fetchLlmUnified";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
 
 const getDataNotesStr = async ({
     username,
@@ -387,39 +388,10 @@ const generateDailySummaryByUserId = async ({
         let dateUtcStart = new Date(summaryDateUtc.setHours(0, 0, 0, 0));
         let dateUtcEnd = new Date(summaryDateUtc.setHours(23, 59, 59, 999));
 
-        // get api keys
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: userFirst.username,
-            $or: [
-                {
-                    apiKeyGroqValid: true,
-                },
-                {
-                    apiKeyOpenrouterValid: true,
-                },
-            ]
-        });
-        if (!apiKeys) {
-            return true;
-        }
-
-        let modelProvider = '' as "groq" | "openrouter" | "openai-compatible" | "ollama";
-        let apiEndpoint = '' as string;
-        let llmAuthToken = '' as string;
-        let modelName = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-            modelName = 'openai/gpt-oss-20b';
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
-            modelName = 'openai/gpt-oss-20b';
-        } else if (apiKeys.apiKeyOllamaValid) {
-            modelProvider = 'ollama';
-            llmAuthToken = apiKeys.apiKeyOllamaEndpoint;
-            modelName = 'gemma3:1b-it-q8_0';
-            apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(userFirst.username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
         }
 
         const notesStr = await getDataNotesStr({
@@ -481,13 +453,10 @@ Structure:
 Be selective. Only include what matters for future reference.`;
 
         const llmResult = await fetchLlmUnified({
-            // provider
-            provider: modelProvider,
-            apiKey: llmAuthToken,
-            apiEndpoint: apiEndpoint,
-            model: modelName,
-
-            // messages
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: argContent },

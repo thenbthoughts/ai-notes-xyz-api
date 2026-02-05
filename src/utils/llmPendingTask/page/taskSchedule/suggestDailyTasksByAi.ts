@@ -1,6 +1,5 @@
 import { DateTime } from 'luxon';
 import { PipelineStage } from 'mongoose';
-import axios from "axios";
 
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
@@ -10,6 +9,8 @@ import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.
 import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 
 import { funcSendMail } from '../../../files/funcSendMail';
+import { getDefaultLlmModel } from '../../utils/getDefaultLlmModel';
+import fetchLlmUnified from '../../utils/fetchLlmUnified';
 
 
 const getTaskList = async ({
@@ -227,28 +228,11 @@ const sendAiGeneratedMail = async ({
     dateStr: string;
 }) => {
     try {
-        // Get user's API keys for LLM
-        const apiKeys = await ModelUserApiKey.findOne({
-            username,
-            $or: [
-                { apiKeyGroqValid: true },
-                { apiKeyOpenrouterValid: true }
-            ]
-        });
-        if (!apiKeys) {
-            throw new Error("No valid LLM API key found for user.");
-        }
-
-        let modelProvider: "groq" | "openrouter";
-        let llmAuthToken: string;
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = "openrouter";
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = "groq";
-            llmAuthToken = apiKeys.apiKeyGroq;
-        } else {
-            throw new Error("No valid LLM API key found for user.");
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            console.log('No LLM available for user, skipping AI-generated email');
+            return false;
         }
 
         // Compose system prompt
@@ -291,55 +275,27 @@ Here is the raw task list for today (${dateStr}):
 ${taskStr}
 `;
 
-        // Prepare LLM API call
-        let apiEndpoint = "";
-        let modelName = "";
-        let headers: any = {};
-        if (modelProvider === "openrouter") {
-            apiEndpoint = "https://openrouter.ai/api/v1/chat/completions";
-            modelName = "openai/gpt-oss-20b";
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${llmAuthToken}`,
-            };
-        } else if (modelProvider === "groq") {
-            apiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
-            modelName = "openai/gpt-oss-20b";
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${llmAuthToken}`,
-            };
-        }
-
-        const data = {
+        // Use fetchLlmUnified with the config
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
             ],
-            model: modelName,
             temperature: 0.3,
-            max_tokens: 8192,
-            top_p: 1,
-            stream: false,
-            response_format: { type: "text" },
-            stop: null
-        };
+            maxTokens: 8192,
+            topP: 1,
+            responseFormat: 'text',
+        });
 
-        // Call LLM
-        const response = await axios.post(apiEndpoint, data, { headers });
-        let html = "";
-        if (
-            response.data &&
-            response.data.choices &&
-            response.data.choices[0] &&
-            response.data.choices[0].message &&
-            typeof response.data.choices[0].message.content === "string"
-        ) {
-            html = response.data.choices[0].message.content.trim();
-        } else {
+        if (!llmResult.success || !llmResult.content) {
             throw new Error("No valid HTML content returned from LLM.");
         }
 
+        let html = llmResult.content.trim();
         console.log('html: ', html);
 
         // Fallback: If the LLM did not return a full HTML document, wrap it

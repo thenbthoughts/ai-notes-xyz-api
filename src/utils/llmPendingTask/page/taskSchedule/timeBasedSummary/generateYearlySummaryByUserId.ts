@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { DateTime } from 'luxon';
 
@@ -79,7 +78,7 @@ const getLifeEventsStr = async ({
     }
 };
 
-const generateWeeklySummaryByUserId = async ({
+const generateYearlySummaryByUserId = async ({
     username,
     summaryDate,
 }: {
@@ -87,7 +86,7 @@ const generateWeeklySummaryByUserId = async ({
     summaryDate: Date;
 }) => {
     try {
-        console.log('generateWeeklySummaryByUserId: ', username, summaryDate);
+        console.log('generateYearlySummaryByUserId: ', username, summaryDate);
         const userRecords = await ModelUser.find({
             username,
         }) as IUser[];
@@ -104,17 +103,16 @@ const generateWeeklySummaryByUserId = async ({
         const userDateTime = DateTime.fromJSDate(summaryDate, { zone: 'utc' })
             .plus({ minutes: userTimezoneOffsetMinutes });
 
-        // Get start of week (Monday) and end of week (Sunday) in user's timezone
-        const startOfWeek = userDateTime.startOf('week'); // Monday
-        const endOfWeek = userDateTime.endOf('week'); // Sunday
+        // Get start of year and end of year in user's timezone
+        const startOfYear = userDateTime.startOf('year');
+        const endOfYear = userDateTime.endOf('year');
 
         // Convert back to UTC for database queries
-        const dateUtcStart = startOfWeek.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
-        const dateUtcEnd = endOfWeek.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
+        const dateUtcStart = startOfYear.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
+        const dateUtcEnd = endOfYear.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
 
         // Format for display
-        const summaryDateOnly = startOfWeek.toISODate();
-        const summaryDateUtc = startOfWeek.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
+        const summaryDateUtc = startOfYear.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
 
         // Get LLM config using centralized function
         const llmConfig = await getDefaultLlmModel(userFirst.username);
@@ -131,7 +129,7 @@ const generateWeeklySummaryByUserId = async ({
         let argContent = `Below are the life events added by the user:\n\n`;
         argContent += `Life Events:\n${lifeEventsStr}\n`;
 
-        let systemPrompt = `You create compact weekly summaries from user data.
+        let systemPrompt = `You create compact yearly summaries from user data.
 
 Analyze life events. Write a concise summary focusing only on important information.
 
@@ -141,6 +139,7 @@ What to include:
 - Significant problems and solutions
 - Notable learnings or insights
 - Meaningful patterns
+- Major milestones
 
 What to exclude:
 - Simple greetings (hello, hi, good morning, etc.)
@@ -155,7 +154,7 @@ Format rules:
 - Keep it brief and professional
 
 Structure:
-- One sentence overview of the week
+- One sentence overview of the year
 - Group by topic (Work, Personal, etc.) or chronologically
 - Only include significant items
 - End with key takeaways or next steps if important
@@ -172,16 +171,16 @@ Be selective. Only include what matters for future reference.`;
                 { role: 'user', content: argContent },
             ],
         });
+        console.log('llmResult: ', llmResult);
+        console.log('llmResult.error: ', llmResult.error);
 
-        // delete notes with title 'Weekly Summary - currentDateOnly'
-        let weekNumber = DateTime.fromJSDate(summaryDate).plus({ minutes: userFirst.timeZoneUtcOffset }).weekNumber;
-        let weekStartDate = DateTime.fromJSDate(summaryDate).minus({ minutes: userFirst.timeZoneUtcOffset }).startOf('week').toISODate() || '';
-        let weekEndDate = DateTime.fromJSDate(summaryDate).minus({ minutes: userFirst.timeZoneUtcOffset }).endOf('week').toISODate() || '';
-        let weeklyNotesTitle = `Weekly Summary by AI - ${weekNumber} - From ${weekStartDate} to ${weekEndDate}`;
-        console.log('weeklyNotesTitle: create weekly summary: ', weeklyNotesTitle);
+        // delete notes with title 'Yearly Summary - yearStr'
+        let yearStr = startOfYear.toJSDate().getFullYear().toString();
+        let yearlyNotesTitle = `Yearly Summary by AI - ${yearStr}`;
+        console.log('yearlyNotesTitle: ', yearlyNotesTitle);
         await ModelLifeEvents.deleteMany({
             username: userFirst.username,
-            title: weeklyNotesTitle,
+            title: yearlyNotesTitle,
         });
 
         const now = new Date();
@@ -190,12 +189,12 @@ Be selective. Only include what matters for future reference.`;
             username: userFirst.username,
 
             // identification - pagination
-            eventDateUtc: weekStartDate,
-            eventDateYearStr: new Date(weekStartDate).getFullYear().toString(),
-            eventDateYearMonthStr: new Date(weekStartDate).getFullYear().toString() + '-' + (new Date(weekStartDate).getMonth() + 1).toString().padStart(2, '0'),
+            eventDateUtc: startOfYear.toJSDate(),
+            eventDateYearStr: yearStr,
+            eventDateYearMonthStr: yearStr + '-01',
 
             // fields
-            title: weeklyNotesTitle,
+            title: yearlyNotesTitle,
             description: llmResult.content,
             isStar: false,
             eventImpact: 'very-low',
@@ -222,7 +221,7 @@ Be selective. Only include what matters for future reference.`;
     }
 };
 
-const executeWeeklySummaryByUserId = async ({
+const executeYearlySummaryByUserId = async ({
     targetRecordId,
 }: {
     targetRecordId: string | null;
@@ -253,8 +252,8 @@ const executeWeeklySummaryByUserId = async ({
         );
         const currentDateOnly = currentDate.toISOString().split('T')[0];
 
-        // generate weekly summary by user id
-        await generateWeeklySummaryByUserId({
+        // generate yearly summary by user id
+        await generateYearlySummaryByUserId({
             username: taskScheduleRecord.username,
             summaryDate: new Date(currentDateOnly + 'T00:00:00.000Z'),
         });
@@ -267,6 +266,6 @@ const executeWeeklySummaryByUserId = async ({
 }
 
 export {
-    generateWeeklySummaryByUserId,
+    generateYearlySummaryByUserId,
 };
-export default executeWeeklySummaryByUserId;
+export default executeYearlySummaryByUserId;

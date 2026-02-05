@@ -1,132 +1,10 @@
-import axios, {
-    AxiosRequestConfig,
-    AxiosResponse,
-    isAxiosError,
-} from "axios";
 import { NodeHtmlMarkdown } from 'node-html-markdown';
-
-import openrouterMarketing from "../../../../../config/openrouterMarketing";
-import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
 import { IInfoVaultContact } from "../../../../../types/typesSchema/typesSchemaInfoVault/SchemaInfoVault.types";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
+import fetchLlmUnified from '../../../utils/fetchLlmUnified';
 
-interface tsMessage {
-    role: string;
-    content: string;
-}
-
-interface tsRequestData {
-    messages: tsMessage[];
-    model: string;
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-    stream: boolean;
-    stop: null | string;
-    response_format?: {
-        type: "json_object"
-    }
-}
-
-const fetchLlmTags = async ({
-    argContent,
-
-    llmAuthToken,
-    modelProvider,
-}: {
-    argContent: string,
-
-    llmAuthToken: string;
-    modelProvider: 'groq' | 'openrouter';
-}) => {
-    try {
-        // Validate input
-        if (typeof argContent !== 'string' || argContent.trim() === '') {
-            throw new Error('Invalid input: argContent must be a non-empty string.');
-        }
-
-        let apiEndpoint = '';
-        let modelName = '';
-        if (modelProvider === 'openrouter') {
-            apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        } else if (modelProvider === 'groq') {
-            apiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-            modelName = 'openai/gpt-oss-20b';
-        }
-
-        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes.
-        Your task is to identify and generate a list of significant keywords based on the content provided by the user.
-        These keywords should represent the main ideas, themes, or topics covered in the user's input.
-
-        Output the result in JSON format as follows:
-        {
-            "keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]
-        }
-        
-        Avoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.
-        Ensure that the keywords are concise and meaningful for quick reference.
-
-        Respond only with the JSON structure.`;
-
-        const data: tsRequestData = {
-            messages: [
-                {
-                    role: "system",
-                    content: systemPrompt,
-                },
-                {
-                    role: "user",
-                    content: argContent,
-                }
-            ],
-            model: modelName,
-            temperature: 0,
-            max_tokens: 1024,
-            top_p: 1,
-            stream: false,
-            response_format: {
-                type: "json_object"
-            },
-            stop: null
-        };
-
-        const config: AxiosRequestConfig = {
-            method: 'post',
-            url: apiEndpoint,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${llmAuthToken}`,
-                ...openrouterMarketing,
-            },
-            data: JSON.stringify(data)
-        };
-
-        const response: AxiosResponse = await axios.request(config);
-        const keywordsResponse = JSON.parse(response.data.choices[0].message.content);
-
-        const finalTagsOutput = [] as string[];
-
-        if (Array.isArray(keywordsResponse?.keywords)) {
-            const keywords = keywordsResponse?.keywords;
-            for (let index = 0; index < keywords.length; index++) {
-                const element = keywords[index];
-                if (typeof element === 'string') {
-                    finalTagsOutput.push(element.trim());
-                }
-            }
-        }
-
-        return finalTagsOutput; // Return only the array of strings
-    } catch (error: any) {
-        console.error(error);
-        if (isAxiosError(error)) {
-            console.error(error.message);
-        }
-        console.error(error.response)
-        return [];
-    }
-}
 
 const  generateInfoVaultAiTagsById = async ({
     targetRecordId,
@@ -144,29 +22,16 @@ const  generateInfoVaultAiTagsById = async ({
 
         const infoVaultFirst = infoVaultRecords[0];
 
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: infoVaultFirst.username,
-            $or: [
-                {
-                    apiKeyGroqValid: true,
-                },
-                {
-                    apiKeyOpenrouterValid: true,
-                },
-            ]
-        });
-        if (!apiKeys) {
-            return true;
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(infoVaultFirst.username);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
         }
 
-        let modelProvider = '' as "groq" | "openrouter";
-        let llmAuthToken = '';
-        if (apiKeys.apiKeyOpenrouterValid) {
-            modelProvider = 'openrouter';
-            llmAuthToken = apiKeys.apiKeyOpenrouter;
-        } else if (apiKeys.apiKeyGroqValid) {
-            modelProvider = 'groq';
-            llmAuthToken = apiKeys.apiKeyGroq;
+        // Check if Info Vault AI feature is enabled for this user
+        const user = await ModelUser.findOne({ username: infoVaultFirst.username });
+        if (!user || !user.featureAiActionsInfoVault) {
+            return true; // Skip if Info Vault AI is not enabled for this user
         }
 
         const updateObj = {
@@ -175,7 +40,7 @@ const  generateInfoVaultAiTagsById = async ({
         };
 
         let argContent = `Name: ${infoVaultFirst.name}`;
-        
+
         if(infoVaultFirst.nickname) {
             argContent += `Nickname: ${infoVaultFirst.nickname}\n`;
         }
@@ -199,15 +64,48 @@ const  generateInfoVaultAiTagsById = async ({
             argContent += `Relationship Type: ${infoVaultFirst.relationshipType}\n`;
         }
 
-        // Use fetchLlmTags to generate tags from the content
-        const generatedTags = await fetchLlmTags({
-            argContent: argContent,
-            llmAuthToken,
-            modelProvider: modelProvider as 'groq' | 'openrouter',
+        let systemPrompt = `You are a JSON-based AI assistant specialized in extracting key topics and terms from contact information.
+        Your task is to identify and generate a list of significant keywords based on the contact information provided by the user.
+        These keywords should represent the main ideas, themes, or topics covered in the contact information.
+
+        Output the result in JSON format as follows:
+        {
+            "keywords": ["keyword 1", "keyword 2", "keyword 3", ...]
+        }
+
+        Avoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.
+        Ensure that the keywords are concise and meaningful for quick reference.
+
+        Respond only with the JSON structure.`;
+
+        // Use fetchLlmUnified with the config
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: argContent },
+            ],
+            temperature: 0,
+            maxTokens: 512,
+            topP: 1,
+            responseFormat: "json_object",
         });
-        if (generatedTags.length >= 1) {
-            updateObj.aiTags = generatedTags;
-            updateObj.aiTags = updateObj.aiTags.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+        if (llmResult.success && llmResult.content) {
+            try {
+                const parsed = JSON.parse(llmResult.content);
+                if (parsed.keywords && Array.isArray(parsed.keywords)) {
+                    updateObj.aiTags = parsed.keywords
+                        .filter((tag: any) => typeof tag === 'string' && tag.trim().length > 0)
+                        .map((tag: string) => tag.trim())
+                        .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase()));
+                }
+            } catch (parseError) {
+                console.error('Failed to parse AI tags response:', parseError);
+            }
         }
 
         if (Object.keys(updateObj).length >= 1) {
