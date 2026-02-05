@@ -8,6 +8,7 @@ import { IFaq } from "../../../../../../types/typesSchema/typesFaq/SchemaFaq.typ
 import { getQdrantClient } from "../../../../../../config/qdrantConfig";
 import { generateEmbedding, generateUuidNamespaceDefaultDomain } from '../../../../../llm/ollamaCommonFunc';
 import { getDefaultLlmModel } from '../../../../utils/getDefaultLlmModel';
+import { ModelUserApiKey } from "../../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 
 /**
  * Find and validate FAQ record by ID
@@ -42,7 +43,6 @@ const validateApiKeys = async (username: string) => {
 
     // For Qdrant, we still need to check the old way since getDefaultLlmModel doesn't handle Qdrant
     // TODO: This could be updated when Qdrant configuration is moved to the user schema
-    const { ModelUserApiKey } = await import("../../../../../../schema/schemaUser/SchemaUserApiKey.schema");
     const apiKeys = await ModelUserApiKey.findOne({
         username: username,
         apiKeyQdrantValid: true,
