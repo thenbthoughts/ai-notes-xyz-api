@@ -5,6 +5,7 @@ import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOr
 import { ModelAnswerMachineSubQuestion } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema';
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
+import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema';
 
 const router = Router();
 
@@ -77,6 +78,61 @@ router.post(
             const lastMessageIsAi = lastAiMessage && 
                 (!lastUserMessage || lastAiMessage.createdAtUtc > lastUserMessage.createdAtUtc);
 
+            // Calculate token totals and breakdown dynamically from individual records
+            const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId });
+            
+            // Calculate aggregated totals
+            let totalPromptTokens = 0;
+            let totalCompletionTokens = 0;
+            let totalReasoningTokens = 0;
+            let totalTokens = 0;
+            let totalCostInUsd = 0;
+            const queryTypesSet = new Set<string>();
+            const queryTypeTokens: any = {};
+            
+            tokenRecords.forEach((record) => {
+                const type = record.queryType;
+                
+                // Aggregate totals
+                totalPromptTokens += record.promptTokens || 0;
+                totalCompletionTokens += record.completionTokens || 0;
+                totalReasoningTokens += record.reasoningTokens || 0;
+                totalTokens += record.totalTokens || 0;
+                totalCostInUsd += record.costInUsd || 0;
+                
+                // Track query types
+                if (type) {
+                    queryTypesSet.add(type);
+                }
+                
+                // Calculate per-query-type breakdown
+                if (type) {
+                    if (!queryTypeTokens[type]) {
+                        queryTypeTokens[type] = {
+                            promptTokens: 0,
+                            completionTokens: 0,
+                            reasoningTokens: 0,
+                            totalTokens: 0,
+                            costInUsd: 0,
+                            count: 0,
+                            maxSingleQueryTokens: 0, // Maximum tokens from a single execution
+                        };
+                    }
+                    queryTypeTokens[type].promptTokens += record.promptTokens || 0;
+                    queryTypeTokens[type].completionTokens += record.completionTokens || 0;
+                    queryTypeTokens[type].reasoningTokens += record.reasoningTokens || 0;
+                    queryTypeTokens[type].totalTokens += record.totalTokens || 0;
+                    queryTypeTokens[type].costInUsd += record.costInUsd || 0;
+                    queryTypeTokens[type].count += 1;
+                    
+                    // Track maximum tokens from a single execution
+                    const recordTotalTokens = record.totalTokens || 0;
+                    if (recordTotalTokens > queryTypeTokens[type].maxSingleQueryTokens) {
+                        queryTypeTokens[type].maxSingleQueryTokens = recordTotalTokens;
+                    }
+                }
+            });
+
             // Determine overall status
             let status: 'pending' | 'answered' | 'error' | 'not_started' = 'not_started';
             let isProcessing = false;
@@ -128,6 +184,16 @@ router.post(
                 answerMachineCurrentIteration: thread.answerMachineCurrentIteration || 0,
                 answerMachineStatus: thread.answerMachineStatus || 'not_started',
                 answerMachineErrorReason: thread.answerMachineErrorReason || '',
+                // Answer Machine token tracking (calculated dynamically from individual records)
+                answerMachinePromptTokens: totalPromptTokens,
+                answerMachineCompletionTokens: totalCompletionTokens,
+                answerMachineReasoningTokens: totalReasoningTokens,
+                answerMachineTotalTokens: totalTokens,
+                answerMachineCostInUsd: totalCostInUsd,
+                // Query types used (calculated dynamically)
+                answerMachineQueryTypes: Array.from(queryTypesSet),
+                // Per-query-type token breakdown (calculated dynamically)
+                answerMachineQueryTypeTokens: queryTypeTokens,
             });
         } catch (error) {
             console.error('Error in answerMachineStatus polling:', error);

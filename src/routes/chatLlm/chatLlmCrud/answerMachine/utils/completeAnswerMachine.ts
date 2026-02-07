@@ -35,14 +35,17 @@ const completeAnswerMachine = async ({
         }
 
         // Generate final answer and create message
-        const generateFinalAnswer = new GenerateFinalAnswer(threadId, username);
-        const result = await generateFinalAnswer.execute();
+                const generateFinalAnswer = new GenerateFinalAnswer(threadId, username);
+                const result = await generateFinalAnswer.execute();
 
-        if (result.success) {
-            console.log(`[Complete] Final answer generated successfully, messageId: ${result.messageId}`);
-        } else {
-            console.error(`[Complete] Failed to generate final answer: ${result.errorReason}`);
-        }
+                if (result.success) {
+                    console.log(`[Complete] Final answer generated successfully, messageId: ${result.messageId}`);
+                    
+                    // Final answer message already has aggregated tokens from GenerateFinalAnswer.createFinalAnswerMessage
+                    // which reads from thread.answerMachine*Tokens fields
+                } else {
+                    console.error(`[Complete] Failed to generate final answer: ${result.errorReason}`);
+                }
 
         // Mark thread as answered
         await ModelChatLlmThread.findByIdAndUpdate(threadId, {
