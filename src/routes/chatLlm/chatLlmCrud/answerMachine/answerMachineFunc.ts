@@ -7,6 +7,7 @@ import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
 import fetchLlmUnified, { Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { ModelAnswerMachineSubQuestion } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 import { IAnswerMachineSubQuestion } from "../../../../types/typesSchema/typesChatLlm/typesAnswerMachine/SchemaAnswerMachineSubQuestions.types";
@@ -22,6 +23,7 @@ import {
     handleNoQuestionsGenerated,
     getPreviousGaps
 } from "./utils/answerMachineHelpers";
+import { extractTokensFromRawResponse, calculateCostInUsd, aggregateTokens } from "./utils/tokenTracking";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -148,7 +150,7 @@ const filterUnnecessaryQuestions = (
 ): string[] => {
     try {
         if (questions.length === 0) {
-            return [];
+        return [];
         }
 
         // Filter out generic/non-actionable questions
@@ -247,6 +249,41 @@ const filterUnnecessaryQuestions = (
     }
 }
 
+/**
+ * Track tokens for answer machine - stores individual token records
+ * Aggregated totals are calculated dynamically when needed
+ */
+export const trackAnswerMachineTokens = async (
+    threadId: mongoose.Types.ObjectId,
+    tokens: {
+        promptTokens: number;
+        completionTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+        costInUsd: number;
+    },
+    username: string,
+    queryType?: 'question_generation' | 'sub_question_answer' | 'intermediate_answer' | 'evaluation' | 'final_answer'
+): Promise<void> => {
+    try {
+        // Create individual token record for this execution
+        if (queryType) {
+            await ModelChatLlmAnswerMachineTokenRecord.create({
+                threadId,
+                username,
+                queryType,
+                promptTokens: tokens.promptTokens,
+                completionTokens: tokens.completionTokens,
+                reasoningTokens: tokens.reasoningTokens,
+                totalTokens: tokens.totalTokens,
+                costInUsd: tokens.costInUsd,
+            });
+        }
+    } catch (error) {
+        console.error(`[Token Tracking] Error tracking tokens for thread ${threadId}:`, error);
+    }
+};
+
 const step2CreateQuestionDecompositionAndInsert = async ({
     threadId,
     currentIteration = 1,
@@ -257,11 +294,20 @@ const step2CreateQuestionDecompositionAndInsert = async ({
     currentIteration?: number;
     previousGaps?: string[];
     isContinuingForMinIterations?: boolean;
-}): Promise<string[]> => {
+}): Promise<{
+    questions: string[];
+    tokens?: {
+        promptTokens: number;
+        completionTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+        costInUsd: number;
+    };
+}> => {
     try {
         const thread = await ModelChatLlmThread.findById(threadId);
         if (!thread) {
-            return [];
+            return { questions: [] };
         }
 
         // Get last 10 messages
@@ -287,13 +333,13 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         ]) as IChatLlm[];
 
         if (last10Messages.length === 0) {
-            return [];
+            return { questions: [] };
         }
 
         const lastMessage = last10Messages[last10Messages.length - 1];
         if (!lastMessage) {
             console.log('No last message found');
-            return [];
+            return { questions: [] };
         }
         const lastMessageId = lastMessage._id;
 
@@ -304,7 +350,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
             .join('\n\n');
 
         if (!messagesContent || messagesContent.trim().length === 0) {
-            return [];
+            return { questions: [] };
         }
 
         let systemPrompt = '';
@@ -348,8 +394,8 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         } else if (currentIteration > 1 && previousGaps.length > 0) {
             userPrompt += `Analyze the conversation and the identified gaps above. Generate questions that will help gather information to address these specific gaps:\n\n${messagesContent}`;
         } else {
-            userPrompt += `Analyze the following conversation and identify any missing requirements needed to solve the user's question.`;
-            userPrompt += `Focus on information that is actually required but not provided:\n\n${messagesContent}`;
+        userPrompt += `Analyze the following conversation and identify any missing requirements needed to solve the user's question.`;
+        userPrompt += `Focus on information that is actually required but not provided:\n\n${messagesContent}`;
         }
 
         // Prepare LLM messages
@@ -371,7 +417,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
 
         if (!llmConfig) {
             console.error(`[Question Generation] No LLM config found for user ${thread.username}`);
-            return [];
+            return { questions: [] };
         }
 
         // Call fetchLlmUnified
@@ -387,13 +433,23 @@ const step2CreateQuestionDecompositionAndInsert = async ({
             headersExtra: llmConfig.customHeaders,
         });
 
+        // Extract token information
+        const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
+        const costInUsd = calculateCostInUsd(
+            tokenInfo.promptTokens,
+            tokenInfo.completionTokens,
+            tokenInfo.reasoningTokens,
+            llmConfig.model,
+            llmConfig.provider
+        );
+
         if (!llmResult.success || !llmResult.content) {
             const errorMsg = `Failed to generate question decomposition: ${llmResult.error || 'Unknown error'}`;
             console.error(`[Question Generation] ${errorMsg}`);
-            return [];
+            return { questions: [] };
         }
 
-        console.log(`[Question Generation] LLM response received (length: ${llmResult.content.length})`);
+        console.log(`[Question Generation] LLM response received (length: ${llmResult.content.length}, tokens: ${tokenInfo.totalTokens})`);
 
         let parsed: any;
         try {
@@ -401,7 +457,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         } catch (err) {
             const errorMsg = `Failed to parse LLM result: ${err instanceof Error ? err.message : 'Unknown error'}`;
             console.error(`[Question Generation] ${errorMsg}. Content: ${llmResult.content.substring(0, 200)}...`);
-            return [];
+            return { questions: [] };
         }
 
         // Updated keys according to current prompt and format
@@ -427,7 +483,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
 
         // Fallback: nothing found, return empty
         if (allQuestions.length === 0) {
-            return [];
+            return { questions: [] };
         }
 
         let insertManyArr = [] as Partial<IAnswerMachineSubQuestion>[];
@@ -448,17 +504,27 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         // Insert sub-questions into database
         const subQuestions = await ModelAnswerMachineSubQuestion.insertMany(insertManyArr);
 
-        return subQuestions.map(subQuestion => subQuestion.question || '');
+        const questions = subQuestions.map(subQuestion => subQuestion.question || '');
+        
+        return {
+            questions,
+            tokens: {
+                ...tokenInfo,
+                costInUsd,
+            },
+        };
     } catch (error) {
         console.error('❌ Error in step2CreateQuestionDecompositionAndInsert:', error);
-        return [];
+        return { questions: [] };
     }
 }
 
 const step3AnswerSubQuestions = async ({
     threadId,
+    username,
 }: {
     threadId: mongoose.Types.ObjectId;
+    username: string;
 }): Promise<void> => {
     try {
         // Get all pending sub-questions for this thread
@@ -488,6 +554,11 @@ const step3AnswerSubQuestions = async ({
                             updatedAtUtc: new Date(),
                         }
                     });
+                    
+                    // Track tokens from sub-question answering
+                    if (result.tokens) {
+                        await trackAnswerMachineTokens(threadId, result.tokens, username, 'sub_question_answer');
+                    }
                 } else {
                     // Update with error status
                     await ModelAnswerMachineSubQuestion.findByIdAndUpdate(subQuestion._id, {
@@ -503,13 +574,13 @@ const step3AnswerSubQuestions = async ({
                 console.error(`[Answer Sub-Questions] ${errorMsg}`);
                 // Update with error status
                 try {
-                    await ModelAnswerMachineSubQuestion.findByIdAndUpdate(subQuestion._id, {
-                        $set: {
-                            status: 'error',
-                            errorReason: error instanceof Error ? error.message : 'Unknown error',
-                            updatedAtUtc: new Date(),
-                        }
-                    });
+                await ModelAnswerMachineSubQuestion.findByIdAndUpdate(subQuestion._id, {
+                    $set: {
+                        status: 'error',
+                        errorReason: error instanceof Error ? error.message : 'Unknown error',
+                        updatedAtUtc: new Date(),
+                    }
+                });
                 } catch (updateError) {
                     console.error(`[Answer Sub-Questions] Failed to update error status for ${subQuestion._id}:`, updateError);
                 }
@@ -557,22 +628,27 @@ const generateAndStoreIntermediateAnswer = async ({
             throw new Error(errorMsg);
         }
 
-        const intermediateAnswer = await generateFinalAnswer.generateFinalAnswer();
-        if (!intermediateAnswer) {
+        const intermediateAnswerResult = await generateFinalAnswer.generateFinalAnswer();
+        if (!intermediateAnswerResult.answer) {
             const errorMsg = `Iteration ${currentIteration}: Failed to generate intermediate answer`;
             console.error(`[Intermediate Answer] ${errorMsg}`);
             throw new Error(errorMsg);
         }
 
+        // Track tokens from intermediate answer generation
+        if (intermediateAnswerResult.tokens) {
+            await trackAnswerMachineTokens(threadId, intermediateAnswerResult.tokens, username, 'intermediate_answer');
+        }
+
         // Store intermediate answer in thread
         await ModelChatLlmThread.findByIdAndUpdate(threadId, {
             $push: {
-                answerMachineIntermediateAnswers: intermediateAnswer,
+                answerMachineIntermediateAnswers: intermediateAnswerResult.answer,
             }
         });
 
-        console.log(`[Intermediate Answer] Iteration ${currentIteration}: Generated and stored (length: ${intermediateAnswer.length})`);
-        return intermediateAnswer;
+        console.log(`[Intermediate Answer] Iteration ${currentIteration}: Generated and stored (length: ${intermediateAnswerResult.answer.length})`);
+        return intermediateAnswerResult.answer;
     } catch (error) {
         const errorMsg = `Failed to generate intermediate answer: ${error instanceof Error ? error.message : 'Unknown error'}`;
         console.error(`[Intermediate Answer] ❌ Error in iteration ${currentIteration}:`, errorMsg);
@@ -700,6 +776,22 @@ Be strict but fair. Only mark as unsatisfactory if there are clear gaps that pre
             headersExtra: llmConfig.customHeaders,
         });
 
+        // Extract and track token information
+        const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
+        const costInUsd = calculateCostInUsd(
+            tokenInfo.promptTokens,
+            tokenInfo.completionTokens,
+            tokenInfo.reasoningTokens,
+            llmConfig.model,
+            llmConfig.provider
+        );
+        
+        // Track tokens from evaluation
+        await trackAnswerMachineTokens(threadId, {
+            ...tokenInfo,
+            costInUsd,
+        }, username, 'evaluation');
+
         if (!llmResult.success || !llmResult.content) {
             const errorMsg = `Failed to evaluate answer satisfaction: ${llmResult.error || 'Unknown error'}`;
             console.error(`[Evaluation] ${errorMsg}`);
@@ -793,9 +885,9 @@ const answerMachineFunc = async ({
         let conversationList: IChatLlm[];
         try {
             conversationList = await step1GetConversation({
-                threadId,
-                username,
-            });
+            threadId,
+            username,
+        });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Failed to get conversation';
             await updateThreadStatus(threadId, 'error', {
@@ -830,11 +922,11 @@ const answerMachineFunc = async ({
         if (lastMessageCheck.shouldHandle) {
             if (lastMessageCheck.shouldComplete) {
                 await completeAnswerMachine({ threadId, username });
-                return {
-                    success: false,
-                    errorReason: 'Last conversation is ai',
-                    data: null,
-                };
+            return {
+                success: false,
+                errorReason: 'Last conversation is ai',
+                data: null,
+            };
             } else {
                 console.log(`Iteration ${currentIteration}: Last message is AI but minimum iterations (${minIterations}) not reached, continuing`);
                 const nextIterationResult = await answerMachineFunc({
@@ -873,12 +965,22 @@ const answerMachineFunc = async ({
         }
 
         // create question decomposition (with iteration and gaps info)
-        const questionDecomposition = await step2CreateQuestionDecompositionAndInsert({
+        const questionDecompositionResult = await step2CreateQuestionDecompositionAndInsert({
             threadId,
             currentIteration,
             previousGaps,
             isContinuingForMinIterations,
         });
+        const questionDecomposition = questionDecompositionResult.questions;
+        
+        // Track tokens from question generation
+        if (questionDecompositionResult.tokens) {
+            const thread = await ModelChatLlmThread.findById(threadId);
+            if (thread) {
+                await trackAnswerMachineTokens(threadId, questionDecompositionResult.tokens, thread.username, 'question_generation');
+            }
+        }
+        
         console.log(`Iteration ${currentIteration} - questionDecomposition:`, questionDecomposition);
 
         // Handle case where no questions are generated
@@ -914,6 +1016,7 @@ const answerMachineFunc = async ({
         // answer sub-questions (only if there are pending questions)
         await step3AnswerSubQuestions({
             threadId,
+            username,
         });
 
         // Generate intermediate answer and store it (don't create message yet)
@@ -966,11 +1069,11 @@ const answerMachineFunc = async ({
             // Max iterations reached, complete
             console.log(`Max iterations (${maxIterations}) reached, completing`);
             await completeAnswerMachine({ threadId, username });
-            return {
-                success: true,
-                errorReason: '',
-                data: null,
-            };
+        return {
+            success: true,
+            errorReason: '',
+            data: null,
+        };
         }
     } catch (error) {
         console.error(`❌ Error in answerMachineFunc (thread ${threadId}):`, error);

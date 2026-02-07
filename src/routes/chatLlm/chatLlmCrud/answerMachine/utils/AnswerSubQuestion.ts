@@ -12,6 +12,7 @@ import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaCh
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { NodeHtmlMarkdown } from "node-html-markdown";
+import { extractTokensFromRawResponse, calculateCostInUsd } from "./tokenTracking";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -691,10 +692,19 @@ class AnswerSubQuestion {
     /**
      * Step 4: Generate answer using context
      */
-    async generateAnswer(contextContent: string): Promise<string> {
+    async generateAnswer(contextContent: string): Promise<{
+        answer: string;
+        tokens?: {
+            promptTokens: number;
+            completionTokens: number;
+            reasoningTokens: number;
+            totalTokens: number;
+            costInUsd: number;
+        };
+    }> {
         try {
             if (!this.llmConfig || !this.question) {
-                return '';
+                return { answer: '' };
             }
 
             const conversationContext = await this.getConversationContext();
@@ -734,13 +744,29 @@ class AnswerSubQuestion {
 
             if (!llmResult.success || !llmResult.content) {
                 console.error('Failed to generate answer:', llmResult.error);
-                return '';
+                return { answer: '', tokens: undefined };
             }
 
-            return llmResult.content.trim();
+            // Extract token information
+            const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
+            const costInUsd = calculateCostInUsd(
+                tokenInfo.promptTokens,
+                tokenInfo.completionTokens,
+                tokenInfo.reasoningTokens,
+                this.llmConfig.model,
+                this.llmConfig.provider
+            );
+
+            return {
+                answer: llmResult.content.trim(),
+                tokens: {
+                    ...tokenInfo,
+                    costInUsd,
+                },
+            };
         } catch (error) {
             console.error('Error in generateAnswer:', error);
-            return '';
+            return { answer: '' };
         }
     }
 
@@ -753,6 +779,13 @@ class AnswerSubQuestion {
         contextIds: mongoose.Types.ObjectId[];
         answer: string;
         errorReason?: string;
+        tokens?: {
+            promptTokens: number;
+            completionTokens: number;
+            reasoningTokens: number;
+            totalTokens: number;
+            costInUsd: number;
+        };
     }> {
         try {
             // Initialize
@@ -786,14 +819,15 @@ class AnswerSubQuestion {
             const contextContent = await this.getContextContent(contextIds);
 
             // Step 4: Generate answer
-            const answer = await this.generateAnswer(contextContent);
-            if (!answer) {
+            const answerResult = await this.generateAnswer(contextContent);
+            if (!answerResult.answer) {
                 return {
                     success: false,
                     keywords,
                     contextIds,
                     answer: '',
                     errorReason: 'Failed to generate answer',
+                    tokens: answerResult.tokens,
                 };
             }
 
@@ -801,7 +835,8 @@ class AnswerSubQuestion {
                 success: true,
                 keywords,
                 contextIds,
-                answer,
+                answer: answerResult.answer,
+                tokens: answerResult.tokens,
             };
         } catch (error) {
             console.error('Error in AnswerSubQuestion.execute:', error);

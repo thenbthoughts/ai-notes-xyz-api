@@ -7,6 +7,9 @@ import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaCh
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
+import { extractTokensFromRawResponse, calculateCostInUsd } from "./tokenTracking";
+import { trackAnswerMachineTokens } from "../answerMachineFunc";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -263,10 +266,19 @@ class GenerateFinalAnswer {
     /**
      * Generate final comprehensive answer
      */
-    async generateFinalAnswer(): Promise<string> {
+    async generateFinalAnswer(): Promise<{
+        answer: string;
+        tokens?: {
+            promptTokens: number;
+            completionTokens: number;
+            reasoningTokens: number;
+            totalTokens: number;
+            costInUsd: number;
+        };
+    }> {
         try {
             if (!this.llmConfig) {
-                return '';
+                return { answer: '' };
             }
 
             // Get conversation messages
@@ -326,23 +338,70 @@ class GenerateFinalAnswer {
 
             if (!llmResult.success || !llmResult.content) {
                 console.error('Failed to generate final answer:', llmResult.error);
-                return '';
+                return { answer: '' };
             }
 
-            return llmResult.content.trim();
+            // Extract token information
+            const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
+            const costInUsd = calculateCostInUsd(
+                tokenInfo.promptTokens,
+                tokenInfo.completionTokens,
+                tokenInfo.reasoningTokens,
+                this.llmConfig.model,
+                this.llmConfig.provider
+            );
+
+            return {
+                answer: llmResult.content.trim(),
+                tokens: {
+                    ...tokenInfo,
+                    costInUsd,
+                },
+            };
         } catch (error) {
             console.error('Error in generateFinalAnswer:', error);
-            return '';
+            return { answer: '' };
         }
     }
 
     /**
      * Create final answer message in chat
      */
-    async createFinalAnswerMessage(finalAnswer: string): Promise<mongoose.Types.ObjectId | null> {
+    async createFinalAnswerMessage(
+        finalAnswer: string,
+        tokens?: {
+            promptTokens: number;
+            completionTokens: number;
+            reasoningTokens: number;
+            totalTokens: number;
+            costInUsd: number;
+        }
+    ): Promise<mongoose.Types.ObjectId | null> {
         try {
             if (!finalAnswer || finalAnswer.trim().length === 0) {
                 return null;
+            }
+
+            // Get aggregated tokens from individual records if not provided
+            let finalTokens = tokens;
+            if (!finalTokens) {
+                const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId: this.threadId });
+                
+                finalTokens = {
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    reasoningTokens: 0,
+                    totalTokens: 0,
+                    costInUsd: 0,
+                };
+                
+                tokenRecords.forEach((record) => {
+                    finalTokens!.promptTokens += record.promptTokens || 0;
+                    finalTokens!.completionTokens += record.completionTokens || 0;
+                    finalTokens!.reasoningTokens += record.reasoningTokens || 0;
+                    finalTokens!.totalTokens += record.totalTokens || 0;
+                    finalTokens!.costInUsd += record.costInUsd || 0;
+                });
             }
 
             const newMessage = await ModelChatLlm.create({
@@ -353,6 +412,12 @@ class GenerateFinalAnswer {
                 isAi: true,
                 aiModelProvider: this.llmConfig?.provider || '',
                 aiModelName: this.llmConfig?.model || '',
+                // Token stats - aggregated from all answer machine operations
+                promptTokens: finalTokens?.promptTokens || 0,
+                completionTokens: finalTokens?.completionTokens || 0,
+                reasoningTokens: finalTokens?.reasoningTokens || 0,
+                totalTokens: finalTokens?.totalTokens || 0,
+                costInUsd: finalTokens?.costInUsd || 0,
                 createdAtUtc: new Date(),
                 updatedAtUtc: new Date(),
             });
@@ -386,8 +451,8 @@ class GenerateFinalAnswer {
             }
 
             // Generate final answer
-            const finalAnswer = await this.generateFinalAnswer();
-            if (!finalAnswer) {
+            const finalAnswerResult = await this.generateFinalAnswer();
+            if (!finalAnswerResult.answer) {
                 return {
                     success: false,
                     finalAnswer: '',
@@ -396,12 +461,17 @@ class GenerateFinalAnswer {
                 };
             }
 
-            // Create message
-            const messageId = await this.createFinalAnswerMessage(finalAnswer);
+            // Track tokens from final answer generation
+            if (finalAnswerResult.tokens) {
+                await trackAnswerMachineTokens(this.threadId, finalAnswerResult.tokens, this.username, 'final_answer');
+            }
+
+            // Create message (will use aggregated tokens from thread)
+            const messageId = await this.createFinalAnswerMessage(finalAnswerResult.answer);
             if (!messageId) {
                 return {
                     success: false,
-                    finalAnswer,
+                    finalAnswer: finalAnswerResult.answer,
                     messageId: null,
                     errorReason: 'Failed to create final answer message',
                 };
@@ -409,7 +479,7 @@ class GenerateFinalAnswer {
 
             return {
                 success: true,
-                finalAnswer,
+                finalAnswer: finalAnswerResult.answer,
                 messageId,
             };
         } catch (error) {
