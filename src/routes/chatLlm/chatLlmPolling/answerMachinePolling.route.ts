@@ -122,6 +122,12 @@ router.post(
                 subQuestions: subQuestionsDetails,
                 hasFinalAnswer: hasFinalAnswer || false,
                 lastMessageIsAi: lastMessageIsAi || false,
+                // Answer Machine iteration info
+                answerMachineMinNumberOfIterations: thread.answerMachineMinNumberOfIterations || 1,
+                answerMachineMaxNumberOfIterations: thread.answerMachineMaxNumberOfIterations || 1,
+                answerMachineCurrentIteration: thread.answerMachineCurrentIteration || 0,
+                answerMachineStatus: thread.answerMachineStatus || 'not_started',
+                answerMachineErrorReason: thread.answerMachineErrorReason || '',
             });
         } catch (error) {
             console.error('Error in answerMachineStatus polling:', error);

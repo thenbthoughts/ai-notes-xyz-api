@@ -240,6 +240,10 @@ router.post(
                 answerMachineErrorReason,
                 answerMachineUsedOpencode,
                 answerMachineUsedWebSearch,
+                
+                // answer machine settings
+                answerMachineMinNumberOfIterations,
+                answerMachineMaxNumberOfIterations,
             } = req.body;
 
             const addData = {
@@ -260,6 +264,10 @@ router.post(
                 answerMachineErrorReason: '',
                 answerMachineUsedOpencode: false,
                 answerMachineUsedWebSearch: false,
+                
+                // answer machine settings
+                answerMachineMinNumberOfIterations: 1,
+                answerMachineMaxNumberOfIterations: 1,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -299,6 +307,54 @@ router.post(
             };
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 addData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
+            };
+            
+            // Handle min and max iterations together to ensure min <= max
+            let minIterations: number | undefined = undefined;
+            let maxIterations: number | undefined = undefined;
+            
+            if (typeof answerMachineMinNumberOfIterations === 'number') {
+                // Validate: must be between 1 and 100
+                if (answerMachineMinNumberOfIterations >= 1 && answerMachineMinNumberOfIterations <= 100) {
+                    minIterations = answerMachineMinNumberOfIterations;
+                }
+            };
+            
+            if (typeof answerMachineMaxNumberOfIterations === 'number') {
+                // Validate: must be between 1 and 100
+                if (answerMachineMaxNumberOfIterations >= 1 && answerMachineMaxNumberOfIterations <= 100) {
+                    maxIterations = answerMachineMaxNumberOfIterations;
+                }
+            };
+            
+            // If both are provided, ensure min <= max
+            if (minIterations !== undefined && maxIterations !== undefined) {
+                if (minIterations <= maxIterations) {
+                    addData.answerMachineMinNumberOfIterations = minIterations;
+                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                } else {
+                    // If min > max, set both to max
+                    addData.answerMachineMinNumberOfIterations = maxIterations;
+                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                }
+            } else if (minIterations !== undefined) {
+                // Only min provided - ensure it doesn't exceed default max
+                if (minIterations <= addData.answerMachineMaxNumberOfIterations) {
+                    addData.answerMachineMinNumberOfIterations = minIterations;
+                } else {
+                    // Set both to min if min > default max
+                    addData.answerMachineMinNumberOfIterations = minIterations;
+                    addData.answerMachineMaxNumberOfIterations = minIterations;
+                }
+            } else if (maxIterations !== undefined) {
+                // Only max provided - ensure it's >= default min
+                if (addData.answerMachineMinNumberOfIterations <= maxIterations) {
+                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                } else {
+                    // Set both to max if default min > max
+                    addData.answerMachineMinNumberOfIterations = maxIterations;
+                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                }
             };
 
             let systemPrompt = systemPromptForChatLlmThread;
@@ -380,6 +436,10 @@ router.post(
                 answerMachineErrorReason,
                 answerMachineUsedOpencode,
                 answerMachineUsedWebSearch,
+                
+                // answer machine settings
+                answerMachineMinNumberOfIterations,
+                answerMachineMaxNumberOfIterations,
             } = req.body;
 
             // Build update object
@@ -447,6 +507,64 @@ router.post(
             };
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 updateData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
+            };
+            
+            // Handle min and max iterations together to ensure min <= max
+            let minIterations: number | undefined = undefined;
+            let maxIterations: number | undefined = undefined;
+            
+            if (typeof answerMachineMinNumberOfIterations === 'number') {
+                // Validate: must be between 1 and 100
+                if (answerMachineMinNumberOfIterations >= 1 && answerMachineMinNumberOfIterations <= 100) {
+                    minIterations = answerMachineMinNumberOfIterations;
+                }
+            };
+            
+            if (typeof answerMachineMaxNumberOfIterations === 'number') {
+                // Validate: must be between 1 and 100
+                if (answerMachineMaxNumberOfIterations >= 1 && answerMachineMaxNumberOfIterations <= 100) {
+                    maxIterations = answerMachineMaxNumberOfIterations;
+                }
+            };
+            
+            // If both are provided, ensure min <= max
+            if (minIterations !== undefined && maxIterations !== undefined) {
+                if (minIterations <= maxIterations) {
+                    updateData.answerMachineMinNumberOfIterations = minIterations;
+                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                } else {
+                    // If min > max, swap them or set min to max
+                    updateData.answerMachineMinNumberOfIterations = maxIterations;
+                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                }
+            } else if (minIterations !== undefined) {
+                // Only min provided - check against existing max
+                const existingThread = await ModelChatLlmThread.findOne({
+                    _id: threadId,
+                    username: res.locals.auth_username,
+                });
+                const existingMax = existingThread?.answerMachineMaxNumberOfIterations || 1;
+                if (minIterations <= existingMax) {
+                    updateData.answerMachineMinNumberOfIterations = minIterations;
+                } else {
+                    // Set both to min if min > existing max
+                    updateData.answerMachineMinNumberOfIterations = minIterations;
+                    updateData.answerMachineMaxNumberOfIterations = minIterations;
+                }
+            } else if (maxIterations !== undefined) {
+                // Only max provided - check against existing min
+                const existingThread = await ModelChatLlmThread.findOne({
+                    _id: threadId,
+                    username: res.locals.auth_username,
+                });
+                const existingMin = existingThread?.answerMachineMinNumberOfIterations || 1;
+                if (existingMin <= maxIterations) {
+                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                } else {
+                    // Set both to max if existing min > max
+                    updateData.answerMachineMinNumberOfIterations = maxIterations;
+                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                }
             };
 
             if (Object.keys(updateData).length === 0) {
