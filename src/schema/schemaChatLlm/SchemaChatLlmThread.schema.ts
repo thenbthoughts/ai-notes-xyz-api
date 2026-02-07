@@ -76,10 +76,22 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     },
 
     // answerEngine -> answerMachine
+    answerMachineMinNumberOfIterations: {
+        type: Number,
+        default: 1,
+    },
+    answerMachineMaxNumberOfIterations: {
+        type: Number,
+        default: 1,
+    },
+    answerMachineCurrentIteration: {
+        type: Number,
+        default: 0,
+    },
     answerMachineStatus: {
         type: String,
-        enum: ['pending', 'answered', 'error'],
-        default: 'pending',
+        enum: ['not_started', 'pending', 'answered', 'error'],
+        default: 'not_started',
     },
     answerMachineErrorReason: {
         type: String,
@@ -93,6 +105,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Boolean,
         default: false,
     },
+    answerMachineIntermediateAnswers: [
+        {
+            type: String,
+            default: '',
+        }
+    ],
 
     // auth
     username: { type: String, required: true, default: '', index: true, },

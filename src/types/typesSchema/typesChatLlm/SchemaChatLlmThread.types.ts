@@ -2,6 +2,9 @@ import mongoose, { Document } from 'mongoose';
 
 // Chat Interface
 export interface IChatLlmThread extends Document {
+    // identification
+    _id: mongoose.Types.ObjectId;
+
     // fields
     threadTitle: string;
 
@@ -34,10 +37,14 @@ export interface IChatLlmThread extends Document {
     answerEngine: 'conciseAnswer' | 'answerMachine';
 
     // answerEngine -> answerMachine
-    answerMachineStatus: 'pending' | 'answered' | 'error';
+    answerMachineMinNumberOfIterations: number;
+    answerMachineMaxNumberOfIterations: number;
+    answerMachineCurrentIteration: number;
+    answerMachineStatus: 'not_started' | 'pending' | 'answered' | 'error';
     answerMachineErrorReason: string;
     answerMachineUsedOpencode: boolean;
     answerMachineUsedWebSearch: boolean;
+    answerMachineIntermediateAnswers: string[];
 
     // auth
     username: string;

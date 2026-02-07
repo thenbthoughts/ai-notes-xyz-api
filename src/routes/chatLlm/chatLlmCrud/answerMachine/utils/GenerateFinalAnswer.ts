@@ -30,7 +30,7 @@ class GenerateFinalAnswer {
     /**
      * Initialize the class by loading thread data and LLM config
      */
-    private async initialize(): Promise<boolean> {
+    async initialize(): Promise<boolean> {
         try {
             // Get thread
             this.thread = await ModelChatLlmThread.findOne({
