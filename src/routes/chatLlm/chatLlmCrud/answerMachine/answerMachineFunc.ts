@@ -12,6 +12,16 @@ import { ModelAnswerMachineSubQuestion } from "../../../../schema/schemaChatLlm/
 import { IAnswerMachineSubQuestion } from "../../../../types/typesSchema/typesChatLlm/typesAnswerMachine/SchemaAnswerMachineSubQuestions.types";
 import AnswerSubQuestion from "./utils/AnswerSubQuestion";
 import GenerateFinalAnswer from "./utils/GenerateFinalAnswer";
+import completeAnswerMachine from "./utils/completeAnswerMachine";
+import { 
+    validateAndGetSettings, 
+    updateThreadStatus, 
+    checkIterationLimits, 
+    shouldContinueIteration,
+    handleLastMessageIsAi,
+    handleNoQuestionsGenerated,
+    getPreviousGaps
+} from "./utils/answerMachineHelpers";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -110,6 +120,9 @@ const getLlmConfigForThread = async ({
     }
 };
 
+/**
+ * Get conversation messages for the thread
+ */
 const step1GetConversation = async ({
     threadId,
     username,
@@ -124,8 +137,8 @@ const step1GetConversation = async ({
         });
         return conversation;
     } catch (error) {
-        console.error('❌ Error in step1GetConversation:', error);
-        return [];
+        console.error(`❌ Error in step1GetConversation (thread ${threadId}):`, error);
+        throw new Error(`Failed to get conversation: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 
@@ -357,6 +370,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         });
 
         if (!llmConfig) {
+            console.error(`[Question Generation] No LLM config found for user ${thread.username}`);
             return [];
         }
 
@@ -374,17 +388,19 @@ const step2CreateQuestionDecompositionAndInsert = async ({
         });
 
         if (!llmResult.success || !llmResult.content) {
-            console.error('Failed to generate question decomposition:', llmResult.error);
+            const errorMsg = `Failed to generate question decomposition: ${llmResult.error || 'Unknown error'}`;
+            console.error(`[Question Generation] ${errorMsg}`);
             return [];
         }
 
-        console.log('llmResult.content', llmResult.content);
+        console.log(`[Question Generation] LLM response received (length: ${llmResult.content.length})`);
 
         let parsed: any;
         try {
             parsed = JSON.parse(llmResult.content);
         } catch (err) {
-            console.error('Failed to parse LLM result content:', llmResult.content);
+            const errorMsg = `Failed to parse LLM result: ${err instanceof Error ? err.message : 'Unknown error'}`;
+            console.error(`[Question Generation] ${errorMsg}. Content: ${llmResult.content.substring(0, 200)}...`);
             return [];
         }
 
@@ -483,19 +499,26 @@ const step3AnswerSubQuestions = async ({
                     });
                 }
             } catch (error) {
-                console.error(`Error processing sub-question ${subQuestion._id}:`, error);
+                const errorMsg = `Failed to process sub-question ${subQuestion._id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                console.error(`[Answer Sub-Questions] ${errorMsg}`);
                 // Update with error status
-                await ModelAnswerMachineSubQuestion.findByIdAndUpdate(subQuestion._id, {
-                    $set: {
-                        status: 'error',
-                        errorReason: error instanceof Error ? error.message : 'Unknown error',
-                        updatedAtUtc: new Date(),
-                    }
-                });
+                try {
+                    await ModelAnswerMachineSubQuestion.findByIdAndUpdate(subQuestion._id, {
+                        $set: {
+                            status: 'error',
+                            errorReason: error instanceof Error ? error.message : 'Unknown error',
+                            updatedAtUtc: new Date(),
+                        }
+                    });
+                } catch (updateError) {
+                    console.error(`[Answer Sub-Questions] Failed to update error status for ${subQuestion._id}:`, updateError);
+                }
             }
         }
     } catch (error) {
-        console.error('❌ Error in step3AnswerSubQuestions:', error);
+        const errorMsg = `Error in step3AnswerSubQuestions: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(`[Answer Sub-Questions] ❌ ${errorMsg}`);
+        // Don't throw - allow process to continue
     }
 }
 
@@ -521,7 +544,7 @@ const generateAndStoreIntermediateAnswer = async ({
 
         // Only generate answer if there are answered sub-questions
         if (answeredSubQuestions.length === 0) {
-            console.log(`Iteration ${currentIteration}: No answered sub-questions found, skipping intermediate answer generation`);
+            console.log(`[Intermediate Answer] Iteration ${currentIteration}: No answered sub-questions found, skipping`);
             return '';
         }
 
@@ -529,14 +552,16 @@ const generateAndStoreIntermediateAnswer = async ({
         const generateFinalAnswer = new GenerateFinalAnswer(threadId, username);
         const initialized = await generateFinalAnswer.initialize();
         if (!initialized) {
-            console.error(`Iteration ${currentIteration}: Failed to initialize GenerateFinalAnswer`);
-            return '';
+            const errorMsg = `Iteration ${currentIteration}: Failed to initialize GenerateFinalAnswer`;
+            console.error(`[Intermediate Answer] ${errorMsg}`);
+            throw new Error(errorMsg);
         }
 
         const intermediateAnswer = await generateFinalAnswer.generateFinalAnswer();
         if (!intermediateAnswer) {
-            console.error(`Iteration ${currentIteration}: Failed to generate intermediate answer`);
-            return '';
+            const errorMsg = `Iteration ${currentIteration}: Failed to generate intermediate answer`;
+            console.error(`[Intermediate Answer] ${errorMsg}`);
+            throw new Error(errorMsg);
         }
 
         // Store intermediate answer in thread
@@ -546,51 +571,16 @@ const generateAndStoreIntermediateAnswer = async ({
             }
         });
 
-        console.log(`Iteration ${currentIteration}: Intermediate answer generated and stored (length: ${intermediateAnswer.length})`);
+        console.log(`[Intermediate Answer] Iteration ${currentIteration}: Generated and stored (length: ${intermediateAnswer.length})`);
         return intermediateAnswer;
     } catch (error) {
-        console.error(`❌ Error in generateAndStoreIntermediateAnswer (iteration ${currentIteration}):`, error);
+        const errorMsg = `Failed to generate intermediate answer: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(`[Intermediate Answer] ❌ Error in iteration ${currentIteration}:`, errorMsg);
+        // Return empty string but log the error - this allows the process to continue
         return '';
     }
 }
 
-/**
- * Generate final answer and create message (only called when all iterations are complete)
- */
-const step4GenerateFinalAnswer = async ({
-    threadId,
-    username,
-}: {
-    threadId: mongoose.Types.ObjectId;
-    username: string;
-}): Promise<void> => {
-    try {
-        // Check if there are any answered sub-questions
-        const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId,
-            username,
-            status: 'answered',
-        });
-
-        // Only generate final answer if there are answered sub-questions
-        if (answeredSubQuestions.length === 0) {
-            console.log('No answered sub-questions found, skipping final answer generation');
-            return;
-        }
-
-        // Create GenerateFinalAnswer instance and execute (this will create the message)
-        const generateFinalAnswer = new GenerateFinalAnswer(threadId, username);
-        const result = await generateFinalAnswer.execute();
-
-        if (result.success) {
-            console.log('Final answer generated successfully and message created, messageId:', result.messageId);
-        } else {
-            console.error('Failed to generate final answer:', result.errorReason);
-        }
-    } catch (error) {
-        console.error('❌ Error in step4GenerateFinalAnswer:', error);
-    }
-}
 
 const evaluateAnswerSatisfaction = async ({
     threadId,
@@ -711,36 +701,41 @@ Be strict but fair. Only mark as unsatisfactory if there are clear gaps that pre
         });
 
         if (!llmResult.success || !llmResult.content) {
-            console.error('Failed to evaluate answer satisfaction:', llmResult.error);
-            // Default to satisfactory if evaluation fails
+            const errorMsg = `Failed to evaluate answer satisfaction: ${llmResult.error || 'Unknown error'}`;
+            console.error(`[Evaluation] ${errorMsg}`);
+            // Default to satisfactory if evaluation fails to prevent infinite loops
             return {
                 isSatisfactory: true,
                 gaps: [],
-                reasoning: 'Evaluation failed, assuming satisfactory',
+                reasoning: `Evaluation failed: ${llmResult.error || 'Unknown error'}`,
             };
         }
 
         try {
             const parsed = JSON.parse(llmResult.content);
-            return {
+            const result = {
                 isSatisfactory: parsed.isSatisfactory === true,
                 gaps: Array.isArray(parsed.gaps) ? parsed.gaps : [],
                 reasoning: parsed.reasoning || 'No reasoning provided',
             };
+            console.log(`[Evaluation] Parsed result: satisfactory=${result.isSatisfactory}, gaps=${result.gaps.length}`);
+            return result;
         } catch (parseError) {
-            console.error('Failed to parse satisfaction evaluation:', parseError);
+            const errorMsg = `Failed to parse evaluation JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`;
+            console.error(`[Evaluation] ${errorMsg}. Content: ${llmResult.content.substring(0, 200)}...`);
             return {
                 isSatisfactory: true,
                 gaps: [],
-                reasoning: 'Failed to parse evaluation result',
+                reasoning: `Parse error: ${errorMsg}`,
             };
         }
     } catch (error) {
-        console.error('❌ Error in evaluateAnswerSatisfaction:', error);
+        const errorMsg = `Error in evaluateAnswerSatisfaction: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(`[Evaluation] ❌ ${errorMsg}`);
         return {
             isSatisfactory: true,
             gaps: [],
-            reasoning: 'Error during evaluation',
+            reasoning: `Exception: ${errorMsg}`,
         };
     }
 }
@@ -759,33 +754,29 @@ const answerMachineFunc = async ({
     data: null;
 }> => {
     try {
-        // Load thread to get iteration settings
-        const thread = await ModelChatLlmThread.findById(threadId);
-        if (!thread) {
+        // Validate and get settings
+        const settings = await validateAndGetSettings(threadId);
+        if (!settings.success || !settings.thread || settings.minIterations === undefined || 
+            settings.maxIterations === undefined || settings.currentIteration === undefined) {
+            const errorReason = settings.errorReason || 'Validation failed or missing settings';
+            await updateThreadStatus(threadId, 'error', {
+                errorReason,
+            });
             return {
                 success: false,
-                errorReason: 'Thread not found',
+                errorReason,
                 data: null,
             };
         }
 
-        const minIterations = thread.answerMachineMinNumberOfIterations || 1;
-        const maxIterations = thread.answerMachineMaxNumberOfIterations || 1;
-        const currentIteration = (thread.answerMachineCurrentIteration || 0) + 1;
+        const { thread, minIterations, maxIterations, currentIteration } = settings;
 
-        // Check if max iterations reached
+        // Check iteration limits
+        const limits = checkIterationLimits(currentIteration, minIterations, maxIterations);
+
+        // If we've exceeded max iterations, complete immediately
         if (currentIteration > maxIterations) {
-            // Generate final answer and create message
-            await step4GenerateFinalAnswer({
-                threadId,
-                username,
-            });
-            
-            await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                $set: {
-                    answerMachineStatus: 'answered',
-                }
-            });
+            await completeAnswerMachine({ threadId, username });
             return {
                 success: true,
                 errorReason: 'Max iterations reached',
@@ -794,25 +785,32 @@ const answerMachineFunc = async ({
         }
 
         // Update thread iteration and status
-        await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-            $set: {
-                answerMachineCurrentIteration: currentIteration,
-                answerMachineStatus: 'pending',
-            }
+        await updateThreadStatus(threadId, 'pending', {
+            currentIteration,
         });
 
-        // get conversation
-        const conversationList = await step1GetConversation({
-            threadId,
-            username,
-        });
+        // Get conversation
+        let conversationList: IChatLlm[];
+        try {
+            conversationList = await step1GetConversation({
+                threadId,
+                username,
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to get conversation';
+            await updateThreadStatus(threadId, 'error', {
+                errorReason: errorMessage,
+            });
+            return {
+                success: false,
+                errorReason: errorMessage,
+                data: null,
+            };
+        }
 
         if (conversationList.length === 0) {
-            await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                $set: {
-                    answerMachineStatus: 'error',
-                    answerMachineErrorReason: 'No conversation found',
-                }
+            await updateThreadStatus(threadId, 'error', {
+                errorReason: 'No conversation found',
             });
             return {
                 success: false,
@@ -821,72 +819,57 @@ const answerMachineFunc = async ({
             };
         }
 
-        // is last conversation is ai, then return (only for iteration 1, but respect minimum iterations)
-        if (currentIteration === 1 && conversationList[conversationList.length - 1].isAi === true) {
-            // Check if we've reached minimum iterations
-            if (currentIteration >= minIterations) {
-                // Generate final answer and create message
-                await step4GenerateFinalAnswer({
-                    threadId,
-                    username,
-                });
-                
-                await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                    $set: {
-                        answerMachineStatus: 'answered',
-                    }
-                });
+        // Handle case where last message is already AI (iteration 1 only)
+        const lastMessageCheck = await handleLastMessageIsAi(
+            currentIteration,
+            conversationList,
+            limits,
+            minIterations
+        );
+        
+        if (lastMessageCheck.shouldHandle) {
+            if (lastMessageCheck.shouldComplete) {
+                await completeAnswerMachine({ threadId, username });
                 return {
                     success: false,
                     errorReason: 'Last conversation is ai',
                     data: null,
                 };
             } else {
-                // Below minimum iterations, continue even though last message is AI
                 console.log(`Iteration ${currentIteration}: Last message is AI but minimum iterations (${minIterations}) not reached, continuing`);
-                // Continue to next iteration
                 const nextIterationResult = await answerMachineFunc({
                     threadId,
                     username,
-                    previousGapsFromEvaluation: [], // No gaps, but continue for min iterations
+                    previousGapsFromEvaluation: [],
                 });
                 return nextIterationResult;
             }
         }
 
         // Get previous gaps if iteration > 1
-        let previousGaps: string[] = [];
-        let isContinuingForMinIterations = false;
+        const gapsInfo = getPreviousGaps(currentIteration, previousGapsFromEvaluation);
+        let previousGaps = gapsInfo.previousGaps;
+        let isContinuingForMinIterations = gapsInfo.isContinuingForMinIterations;
         
-        if (currentIteration > 1) {
-            // Check if gaps were explicitly passed (from recursive call)
-            // vs undefined (need to evaluate previous iteration)
-            if (previousGapsFromEvaluation !== undefined) {
-                // Gaps were explicitly passed (either empty array [] or with gaps)
-                previousGaps = previousGapsFromEvaluation;
-                if (previousGaps.length === 0) {
-                    // Empty gaps array means we're continuing for min iterations
-                    isContinuingForMinIterations = true;
-                    console.log(`Iteration ${currentIteration}: Continuing for minimum iterations (no gaps)`);
-                } else {
-                    console.log(`Iteration ${currentIteration}: Using gaps from previous evaluation:`, previousGaps);
-                }
-            } else {
-                // Get the last final answer and evaluate it
-                const lastAiMessage = conversationList
-                    .filter(msg => msg.isAi)
-                    .slice(-1)[0];
-                
-                if (lastAiMessage) {
-                    const evaluation = await evaluateAnswerSatisfaction({
-                        threadId,
-                        username,
-                        currentIteration: currentIteration - 1,
-                    });
-                    previousGaps = evaluation.gaps;
-                    console.log(`Iteration ${currentIteration}: Previous gaps identified:`, previousGaps);
-                }
+        // If we need to evaluate previous iteration, do it now
+        if (gapsInfo.needsEvaluation) {
+            const lastAiMessage = conversationList
+                .filter(msg => msg.isAi)
+                .slice(-1)[0];
+            
+            if (lastAiMessage) {
+                const evaluation = await evaluateAnswerSatisfaction({
+                    threadId,
+                    username,
+                    currentIteration: currentIteration - 1,
+                });
+                previousGaps = evaluation.gaps;
+                console.log(`Iteration ${currentIteration}: Previous gaps identified:`, previousGaps);
             }
+        } else if (previousGaps.length === 0 && currentIteration > 1) {
+            console.log(`Iteration ${currentIteration}: Continuing for minimum iterations (no gaps)`);
+        } else if (previousGaps.length > 0) {
+            console.log(`Iteration ${currentIteration}: Using gaps from previous evaluation:`, previousGaps);
         }
 
         // create question decomposition (with iteration and gaps info)
@@ -901,45 +884,26 @@ const answerMachineFunc = async ({
         // Handle case where no questions are generated
         if (questionDecomposition.length === 0) {
             if (currentIteration === 1) {
-                // In iteration 1, if no questions are needed, the answer might already be complete
-                // Check if there are any existing answered sub-questions from previous runs
-                const existingAnsweredQuestions = await ModelAnswerMachineSubQuestion.find({
+                const noQuestionsCheck = await handleNoQuestionsGenerated(
+                    currentIteration,
                     threadId,
                     username,
-                    status: 'answered',
-                });
+                    limits,
+                    minIterations
+                );
 
-                if (existingAnsweredQuestions.length === 0) {
-                    // No questions needed and no existing answers
-                    // Check if we've reached minimum iterations
-                    if (currentIteration >= minIterations) {
-                        // Reached minimum iterations, generate final answer and mark as complete
-                        console.log(`Iteration ${currentIteration}: No questions needed and minimum iterations (${minIterations}) reached, generating final answer`);
-                        
-                        // Generate final answer and create message
-                        await step4GenerateFinalAnswer({
-                            threadId,
-                            username,
-                        });
-                        
-                        await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                            $set: {
-                                answerMachineStatus: 'answered',
-                            }
-                        });
-                        return {
-                            success: true,
-                            errorReason: 'No questions needed',
-                            data: null,
-                        };
-                    } else {
-                        // Below minimum iterations, continue even though no questions needed
-                        console.log(`Iteration ${currentIteration}: No questions needed but minimum iterations (${minIterations}) not reached, continuing to iteration ${currentIteration + 1}`);
-                        // Continue to generate final answer and then continue to next iteration
-                        // (Don't return early, let it proceed to answer generation and evaluation)
-                    }
+                if (noQuestionsCheck.shouldComplete) {
+                    console.log(`Iteration ${currentIteration}: No questions needed and minimum iterations (${minIterations}) reached, completing`);
+                    await completeAnswerMachine({ threadId, username });
+                    return {
+                        success: true,
+                        errorReason: 'No questions needed',
+                        data: null,
+                    };
+                } else {
+                    console.log(`Iteration ${currentIteration}: No questions needed but minimum iterations (${minIterations}) not reached, continuing`);
+                    // Continue to generate intermediate answer and evaluate
                 }
-                // If there are existing answered questions, continue to generate final answer
             } else {
                 // In iteration 2+, if no new questions generated, gaps might not be addressable with questions
                 // Still try to improve final answer with all existing context
@@ -960,8 +924,8 @@ const answerMachineFunc = async ({
             currentIteration,
         });
 
-        // If not at max iterations, evaluate satisfaction and potentially continue
-        if (currentIteration < maxIterations) {
+        // Evaluate satisfaction and decide next step
+        if (limits.shouldContinue) {
             const evaluation = await evaluateAnswerSatisfaction({
                 threadId,
                 username,
@@ -974,103 +938,34 @@ const answerMachineFunc = async ({
                 reasoning: evaluation.reasoning,
             });
 
-            // Check if we've reached minimum iterations
-            const hasReachedMinIterations = currentIteration >= minIterations;
-
-            if (!evaluation.isSatisfactory && evaluation.gaps.length > 0) {
-                // Answer not satisfactory, continue to next iteration automatically
-                console.log(`Iteration ${currentIteration} not satisfactory, continuing to iteration ${currentIteration + 1}`);
+            // Decide if we should continue
+            const decision = shouldContinueIteration(evaluation, limits);
+            
+            if (decision.shouldContinue) {
+                // Continue to next iteration
+                console.log(`Iteration ${currentIteration}: ${decision.reason}, continuing to iteration ${currentIteration + 1}`);
                 
-                // Recursively call the function to continue to next iteration
-                // Pass the gaps we just identified to avoid re-evaluation
                 const nextIterationResult = await answerMachineFunc({
                     threadId,
                     username,
-                    previousGapsFromEvaluation: evaluation.gaps,
+                    previousGapsFromEvaluation: evaluation.gaps.length > 0 ? evaluation.gaps : [],
                 });
                 
                 return nextIterationResult;
-            } else if (evaluation.isSatisfactory && hasReachedMinIterations) {
-                // Answer is satisfactory AND we've reached minimum iterations, generate final answer and mark as complete
-                console.log(`Iteration ${currentIteration} satisfactory and minimum iterations (${minIterations}) reached, generating final answer`);
-                
-                // Generate final answer and create message
-                await step4GenerateFinalAnswer({
-                    threadId,
-                    username,
-                });
-                
-                await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                    $set: {
-                        answerMachineStatus: 'answered',
-                    }
-                });
+            } else {
+                // Stop and complete
+                console.log(`Iteration ${currentIteration}: ${decision.reason}, completing`);
+                await completeAnswerMachine({ threadId, username });
                 return {
                     success: true,
                     errorReason: '',
                     data: null,
                 };
-            } else if (evaluation.isSatisfactory && !hasReachedMinIterations) {
-                // Answer is satisfactory but haven't reached minimum iterations yet, continue
-                console.log(`Iteration ${currentIteration} satisfactory but minimum iterations (${minIterations}) not reached, continuing to iteration ${currentIteration + 1}`);
-                
-                // Continue to next iteration even though answer is satisfactory
-                const nextIterationResult = await answerMachineFunc({
-                    threadId,
-                    username,
-                    previousGapsFromEvaluation: [], // No gaps, but continue for min iterations
-                });
-                
-                return nextIterationResult;
-            } else {
-                // Edge case: not satisfactory but no gaps, or other edge cases
-                // Always check minimum iterations before marking as complete
-                if (hasReachedMinIterations) {
-                    // Reached minimum iterations, generate final answer and mark as complete even if not satisfactory (no gaps to address)
-                    console.log(`Iteration ${currentIteration}: Edge case - minimum iterations (${minIterations}) reached, generating final answer`);
-                    
-                    // Generate final answer and create message
-                    await step4GenerateFinalAnswer({
-                        threadId,
-                        username,
-                    });
-                    
-                    await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                        $set: {
-                            answerMachineStatus: 'answered',
-                        }
-                    });
-                    return {
-                        success: true,
-                        errorReason: '',
-                        data: null,
-                    };
-                } else {
-                    // Below minimum iterations, continue even in edge cases
-                    console.log(`Iteration ${currentIteration}: Edge case - minimum iterations (${minIterations}) not reached, continuing to iteration ${currentIteration + 1}`);
-                    const nextIterationResult = await answerMachineFunc({
-                        threadId,
-                        username,
-                        previousGapsFromEvaluation: [],
-                    });
-                    return nextIterationResult;
-                }
             }
         } else {
-            // Max iterations reached, generate final answer and mark as complete
-            console.log(`Max iterations (${maxIterations}) reached, generating final answer`);
-            
-            // Generate final answer and create message
-            await step4GenerateFinalAnswer({
-                threadId,
-                username,
-            });
-            
-            await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-                $set: {
-                    answerMachineStatus: 'answered',
-                }
-            });
+            // Max iterations reached, complete
+            console.log(`Max iterations (${maxIterations}) reached, completing`);
+            await completeAnswerMachine({ threadId, username });
             return {
                 success: true,
                 errorReason: '',
@@ -1078,16 +973,20 @@ const answerMachineFunc = async ({
             };
         }
     } catch (error) {
-        console.error('❌ Error in answerMachineFunc:', error);
-        await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-            $set: {
-                answerMachineStatus: 'error',
-                answerMachineErrorReason: error instanceof Error ? error.message : 'Internal server error',
-            }
-        }).catch(err => console.error('Failed to update thread error status:', err));
+        console.error(`❌ Error in answerMachineFunc (thread ${threadId}):`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+        
+        try {
+            await updateThreadStatus(threadId, 'error', {
+                errorReason: errorMessage,
+            });
+        } catch (updateError) {
+            console.error('Failed to update thread error status:', updateError);
+        }
+        
         return {
             success: false,
-            errorReason: 'Internal server error',
+            errorReason: errorMessage,
             data: null,
         };
     }
