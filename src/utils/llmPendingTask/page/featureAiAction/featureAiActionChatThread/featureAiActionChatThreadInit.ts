@@ -6,6 +6,7 @@ import generateChatThreadAiTitleById from "./generateChatThreadAiTitleById";
 import generateEmbeddingByChatThreadId from "./generateEmbeddingByChatThreadId";
 import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
 import { reindexDocument } from "../../../../search/reindexGlobalSearch";
+import generateMemoryFromChatThread from "./generateMemoryFromChatThread";
 
 const featureAiActionChatThreadInit = async ({
     targetRecordId,
@@ -55,6 +56,12 @@ const featureAiActionChatThreadInit = async ({
         });
         console.log('resultKeywords', resultKeywords);
 
+        // 7. chatThread - generate memory from chat thread
+        const resultMemory = await generateMemoryFromChatThread({
+            targetRecordId,
+        });
+        console.log('resultMemory', resultMemory);
+
         // reindex the document in global search after all AI actions are complete
         const chatThreadRecord = await ModelChatLlmThread.findById(targetRecordId).select('username').lean();
         if (chatThreadRecord) {
@@ -64,6 +71,7 @@ const featureAiActionChatThreadInit = async ({
                     documentId: targetRecordId,
                 }],
             });
+
         }
 
         // return result of all feature ai actions

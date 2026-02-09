@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import envKeys from "../../src/config/envKeys";
 import { ModelLlmPendingTaskCron } from "../../src/schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
+import { llmPendingTaskTypes } from "../../src/utils/llmPendingTask/llmPendingTaskConstants";
 
 // Example usage
 const init = async () => {
@@ -11,8 +12,8 @@ const init = async () => {
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
         "username": "example",
-        "taskType": "pageChat_generateChatTagsById",
-        "targetRecordId": "681345543e4cbd8e1707125f",
+        "taskType": llmPendingTaskTypes.page.featureAiActions.chatThread,
+        "targetRecordId": "68e2b9f0b5a33b7965cd6324",
     });
 
     console.time('total-time');

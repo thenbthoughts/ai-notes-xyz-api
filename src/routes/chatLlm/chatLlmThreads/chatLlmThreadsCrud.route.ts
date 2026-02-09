@@ -226,6 +226,7 @@ router.post(
             const {
                 isAutoAiContextSelectEnabled,
                 isPersonalContextEnabled,
+                isMemoryEnabled,
 
                 // model settings
                 aiModelName,
@@ -250,6 +251,7 @@ router.post(
                 threadTitle: threadTitle.trim(),
                 isAutoAiContextSelectEnabled: false,
                 isPersonalContextEnabled: false,
+                isMemoryEnabled: false,
 
                 // model settings
                 aiModelName: '',
@@ -276,6 +278,10 @@ router.post(
 
             if (typeof isPersonalContextEnabled === 'boolean') {
                 addData.isPersonalContextEnabled = isPersonalContextEnabled;
+            };
+
+            if (typeof isMemoryEnabled === 'boolean') {
+                addData.isMemoryEnabled = isMemoryEnabled;
             };
 
             if (typeof aiModelName === 'string') {
@@ -413,6 +419,7 @@ router.post(
                 threadTitle,
                 isAutoAiContextSelectEnabled,
                 isPersonalContextEnabled,
+                isMemoryEnabled,
 
                 // model settings
                 aiModelName,
@@ -454,6 +461,10 @@ router.post(
 
             if (typeof isPersonalContextEnabled === 'boolean') {
                 updateData.isPersonalContextEnabled = isPersonalContextEnabled;
+            };
+
+            if (typeof isMemoryEnabled === 'boolean') {
+                updateData.isMemoryEnabled = isMemoryEnabled;
             };
 
             if (typeof aiModelName === 'string') {

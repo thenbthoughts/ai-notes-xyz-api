@@ -32,6 +32,7 @@ export interface IChatLlmThread extends Document {
     // context
     isPersonalContextEnabled: boolean;
     isAutoAiContextSelectEnabled: boolean;
+    isMemoryEnabled: boolean;
 
     // answer type
     answerEngine: 'conciseAnswer' | 'answerMachine';

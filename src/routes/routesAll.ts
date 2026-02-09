@@ -13,6 +13,7 @@ import routeUserRevalidate from './user/userRevalidate.route';
 import routeUserLoginHistory from './user/userLoginHistory';
 import routeUserNotification from './user/userNotification.route';
 import routeUserOpenaiCompatibleModel from './user/userOpenaiCompatibleModel.route';
+import routeUserMemory from './user/userMemory.route';
 
 // chat llm
 import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
@@ -97,6 +98,7 @@ router.use('/user/revalidate', routeUserRevalidate);
 router.use('/user/login-history', routeUserLoginHistory);
 router.use('/user/notification', routeUserNotification);
 router.use('/user/openai-compatible-model/crud', routeUserOpenaiCompatibleModel);
+router.use('/setting/user/memory', routeUserMemory);
 
 // routes -> chat llm
 router.use('/chat-llm/crud', routesChatLlmCrud);

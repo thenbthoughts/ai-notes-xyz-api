@@ -16,6 +16,10 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Boolean,
         default: true,
     },
+    isMemoryEnabled: {
+        type: Boolean,
+        default: false,
+    },
     systemPrompt: {
         type: String,
         default: ''
