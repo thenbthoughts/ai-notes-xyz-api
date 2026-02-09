@@ -117,6 +117,16 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        // stage -> match -> titleExact
+        const arg_titleExact = req.body.titleExact;
+        if (typeof arg_titleExact === 'string') {
+            if (arg_titleExact.length >= 1) {
+                tempStage = { $match: { title: arg_titleExact } };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         // stage -> match -> isStar
         if (typeof req.body?.isStar === 'string') {
             if (
