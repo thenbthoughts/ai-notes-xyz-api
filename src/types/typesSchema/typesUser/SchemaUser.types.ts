@@ -42,6 +42,9 @@ interface IUser extends Document {
     featureAiActionsTask: boolean;
     featureAiActionsLifeEvents: boolean;
     featureAiActionsInfoVault: boolean;
+
+    // memory limit
+    memoryLimit: number;
 }
 
 export default IUser;

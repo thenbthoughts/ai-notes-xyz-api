@@ -5,6 +5,7 @@ import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
 import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelNotes } from "../../../../schema/schemaNotes/SchemaNotes.schema";
+import { ModelUserMemory } from "../../../../schema/schemaUser/SchemaUserMemory.schema";
 import {
     ModelChatLlmThreadContextReference
 } from "../../../../schema/schemaChatLlm/SchemaChatLlmThreadContextReference.schema";
@@ -305,8 +306,53 @@ const getPersonalContext = async ({
     } catch (error) {
         return '';
     }
+};
 
-}
+const getMemoryContext = async ({
+    threadInfo,
+    username,
+}: {
+    threadInfo: IChatLlmThread,
+    username: string,
+}) => {
+    try {
+        if (!threadInfo.isMemoryEnabled) {
+            return '';
+        }
+
+        // Get user's memory limit
+        const user = await ModelUser.findOne({ username }).exec();
+        if (!user) {
+            return '';
+        }
+
+        const memoryLimit = user.memoryLimit || 15;
+
+        // Fetch memories up to the limit, sorted by most recently updated
+        const memories = await ModelUserMemory.find({
+            username: username,
+        })
+            .sort({ updatedAtUtc: -1 })
+            .limit(memoryLimit)
+            .lean();
+
+        if (!memories || memories.length === 0) {
+            return '';
+        }
+
+        // Format memories as a string
+        let memoryContext = '\n\nUser Memories (Important facts and information to remember):\n';
+        memories.forEach((memory, index) => {
+            memoryContext += `${index + 1}. ${memory.content}\n`;
+        });
+        memoryContext += '\n';
+
+        return memoryContext;
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
 
 const getTasks = async ({
     username,
@@ -758,6 +804,18 @@ const getNextMessageFromLast30Conversation = async ({
         role: "user",
         content: personalContext,
     });
+
+    // memory context
+    const memoryContext = await getMemoryContext({
+        threadInfo,
+        username,
+    });
+    if (memoryContext.length > 0) {
+        messages.push({
+            role: "user",
+            content: memoryContext,
+        });
+    }
 
     // user info
     const userInfo = await ModelUser.findOne({ username }).exec();
