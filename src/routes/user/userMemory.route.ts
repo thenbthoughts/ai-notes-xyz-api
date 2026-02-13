@@ -173,7 +173,7 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const memoryLimit = user.memoryLimit || 15;
+        const userMemoriesLimit = user.userMemoriesLimit || 15;
         
         // Only count non-permanent memories towards the limit
         const currentNonPermanentCount = await ModelUserMemory.countDocuments({
@@ -183,13 +183,13 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
 
         // If creating a non-permanent memory and limit exceeded, delete oldest non-permanent memories
         const willBePermanent = typeof isPermanent === 'boolean' ? isPermanent : false;
-        if (!willBePermanent && currentNonPermanentCount >= memoryLimit) {
+        if (!willBePermanent && currentNonPermanentCount >= userMemoriesLimit) {
             const memoriesToDelete = await ModelUserMemory.find({
                 username: res.locals.auth_username,
                 isPermanent: false,
             })
                 .sort({ updatedAtUtc: 1, createdAtUtc: 1 }) // oldest first
-                .limit(currentNonPermanentCount - memoryLimit + 1); // delete enough to make room
+                .limit(currentNonPermanentCount - userMemoriesLimit + 1); // delete enough to make room
 
             if (memoriesToDelete.length > 0) {
                 const idsToDelete = memoriesToDelete.map(m => m._id);
@@ -260,20 +260,20 @@ router.post('/memoryUpdate', middlewareUserAuth, middlewareActionDatetime, async
         if (updateObj.isPermanent === false && existingMemory.isPermanent === true) {
             const user = await ModelUser.findOne({ username: res.locals.auth_username });
             if (user) {
-                const memoryLimit = user.memoryLimit || 15;
+                const userMemoriesLimit = user.userMemoriesLimit || 15;
                 const currentNonPermanentCount = await ModelUserMemory.countDocuments({
                     username: res.locals.auth_username,
                     isPermanent: false,
                 });
 
                 // If limit exceeded, delete oldest non-permanent memories
-                if (currentNonPermanentCount >= memoryLimit) {
+                if (currentNonPermanentCount >= userMemoriesLimit) {
                     const memoriesToDelete = await ModelUserMemory.find({
                         username: res.locals.auth_username,
                         isPermanent: false,
                     })
                         .sort({ updatedAtUtc: 1, createdAtUtc: 1 }) // oldest first
-                        .limit(currentNonPermanentCount - memoryLimit + 1); // delete enough to make room
+                        .limit(currentNonPermanentCount - userMemoriesLimit + 1); // delete enough to make room
 
                     if (memoriesToDelete.length > 0) {
                         const idsToDelete = memoriesToDelete.map(m => m._id);
