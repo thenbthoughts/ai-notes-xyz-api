@@ -112,8 +112,12 @@ const userSchema = new Schema<IUser>({
         default: true,
     },
 
-    // memory limit (maximum number of non-permanent memories)
-    memoryLimit: {
+    // memory settings
+    isStoreUserMemoriesEnabled: {
+        type: Boolean,
+        default: true,
+    },
+    userMemoriesLimit: {
         type: Number,
         default: 25,
         // Note: This limit only applies to non-permanent memories. Permanent memories do not count towards this limit.

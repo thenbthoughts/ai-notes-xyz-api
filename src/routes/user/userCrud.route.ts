@@ -259,6 +259,16 @@ router.post(
                 updateObj.featureAiActionsInfoVault = updateData.featureAiActionsInfoVault;
             }
 
+            // Memory Settings
+            if (typeof updateData.isStoreUserMemoriesEnabled === 'boolean') {
+                updateObj.isStoreUserMemoriesEnabled = updateData.isStoreUserMemoriesEnabled;
+            }
+            if (typeof updateData.userMemoriesLimit === 'number') {
+                if (updateData.userMemoriesLimit >= 0 && updateData.userMemoriesLimit <= 100) {
+                    updateObj.userMemoriesLimit = updateData.userMemoriesLimit;
+                }
+            }
+
             if (Object.keys(updateObj).length === 0) {
                 return res.status(400).json({ message: 'No valid fields provided for update' });
             }

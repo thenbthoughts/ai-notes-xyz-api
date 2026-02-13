@@ -130,6 +130,12 @@ const generateMemoryFromChatThread = async ({
         const user = await ModelUser.findOne({ username: thread.username });
         if (!user?.featureAiActionsChatMessage) return true;
 
+        // Check if user has memory storage enabled
+        if (!user.isStoreUserMemoriesEnabled) {
+            console.log('User has memory storage disabled, skipping memory generation');
+            return true;
+        }
+
         // Get last 6 conversations from the thread
         const lastConversations = await ModelChatLlm.find({
             username: thread.username,
@@ -276,7 +282,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
 
         if (memories.length === 0) return true;
 
-        const memoryLimit = user.memoryLimit || 15;
+        const userMemoriesLimit = user.userMemoriesLimit || 15;
         
         // Use the most recent conversation's datetime for action
         const mostRecentConv = lastConversations[lastConversations.length - 1];
@@ -336,7 +342,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
             .select('_id content updatedAtUtc createdAtUtc')
             .lean();
 
-        if (allNonPermanentMemories.length > memoryLimit) {
+        if (allNonPermanentMemories.length > userMemoriesLimit) {
             try {
                 const memoriesToKeep = await selectMemoriesToKeepUsingLLM({
                     memories: allNonPermanentMemories.map(m => ({
@@ -345,7 +351,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
                         updatedAtUtc: m.updatedAtUtc,
                         createdAtUtc: m.createdAtUtc,
                     })),
-                    maxLimit: memoryLimit,
+                    maxLimit: userMemoriesLimit,
                     username: thread.username,
                 });
 

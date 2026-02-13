@@ -308,7 +308,7 @@ const getPersonalContext = async ({
     }
 };
 
-const getMemoryContext = async ({
+const getUserMemoriesContext = async ({
     threadInfo,
     username,
 }: {
@@ -326,14 +326,19 @@ const getMemoryContext = async ({
             return '';
         }
 
-        const memoryLimit = user.memoryLimit || 15;
+        // Check if user has memory storage enabled
+        if (!user.isStoreUserMemoriesEnabled) {
+            return '';
+        }
+
+        const userMemoriesLimit = user.userMemoriesLimit || 15;
 
         // Fetch memories up to the limit, sorted by most recently updated
         const memories = await ModelUserMemory.find({
             username: username,
         })
             .sort({ updatedAtUtc: -1 })
-            .limit(memoryLimit)
+            .limit(userMemoriesLimit)
             .lean();
 
         if (!memories || memories.length === 0) {
@@ -806,7 +811,7 @@ const getNextMessageFromLast30Conversation = async ({
     });
 
     // memory context
-    const memoryContext = await getMemoryContext({
+    const memoryContext = await getUserMemoriesContext({
         threadInfo,
         username,
     });
