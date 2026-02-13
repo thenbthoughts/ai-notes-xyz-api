@@ -166,6 +166,24 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
             }
         }
 
+        // stage -> match -> hideDailyDiary
+        if (typeof req.body?.hideDailyDiary === 'boolean') {
+            if (req.body.hideDailyDiary === true) {
+                tempStage = {
+                    $match: {
+                        title: {
+                            $not: {
+                                $regex: '(Daily|Weekly|Monthly) Summary by AI',
+                                $options: 'i',
+                            }
+                        }
+                    },
+                };
+                pipelineDocument.push(tempStage);
+                pipelineCount.push(tempStage);
+            }
+        }
+
         if (typeof req.body?.startDate === 'string' && typeof req.body?.endDate === 'string') {
             let startDateUtc = `${req.body.startDate}`;
             let endDateUtc = `${req.body.endDate}`;
