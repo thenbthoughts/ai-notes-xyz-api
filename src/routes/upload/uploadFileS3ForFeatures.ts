@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import path from 'path';
 import mongoose from 'mongoose';
+import mime from 'mime';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserFileUpload } from '../../schema/schemaUser/SchemaUserFileUpload.schema';
@@ -56,7 +57,8 @@ router.get(
                 return res.status(404).json({ message: fileData.error || 'File not found' });
             }
 
-            res.setHeader('Content-Type', fileData.contentType || 'application/octet-stream');
+            const contentType = mime.getType(fileRecord.originalName || fileRecord.fileUploadPath) || 'application/octet-stream';
+            res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Disposition', `inline; filename="${fileRecord.originalName || fileRecord.fileUploadPath}"`);
             res.setHeader('Content-Length', fileData.content.length.toString());
             res.send(fileData.content);
