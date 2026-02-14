@@ -28,30 +28,18 @@ export const checkIterationLimits = (
 
 /**
  * Update thread status - single source of truth for status updates
+ * Note: Most status fields are now on the answer machine record
  */
 export const updateThreadStatus = async (
     threadId: mongoose.Types.ObjectId,
     status: 'pending' | 'answered' | 'error',
     updates?: {
-        currentIteration?: number;
         errorReason?: string;
     }
 ): Promise<void> => {
-    const updateData: any = {
-        answerMachineStatus: status,
-    };
-
-    if (updates?.currentIteration !== undefined) {
-        updateData.answerMachineCurrentIteration = updates.currentIteration;
-    }
-
-    if (updates?.errorReason !== undefined) {
-        updateData.answerMachineErrorReason = updates.errorReason;
-    }
-
-    await ModelChatLlmThread.findByIdAndUpdate(threadId, {
-        $set: updateData,
-    });
+    // Since status fields moved to answer machine record,
+    // this function now primarily handles any remaining thread-level updates
+    // For now, it does nothing but is kept for backward compatibility
 };
 
 /**
@@ -135,11 +123,10 @@ export const validateAndGetSettings = async (
     thread?: any;
     minIterations?: number;
     maxIterations?: number;
-    currentIteration?: number;
     errorReason?: string;
 }> => {
     const thread = await ModelChatLlmThread.findById(threadId);
-    
+
     if (!thread) {
         return {
             success: false,
@@ -149,7 +136,6 @@ export const validateAndGetSettings = async (
 
     const minIterations = thread.answerMachineMinNumberOfIterations || 1;
     const maxIterations = thread.answerMachineMaxNumberOfIterations || 1;
-    const currentIteration = (thread.answerMachineCurrentIteration || 0) + 1;
 
     // Validate iteration settings
     if (minIterations > maxIterations) {
@@ -164,7 +150,6 @@ export const validateAndGetSettings = async (
         thread,
         minIterations,
         maxIterations,
-        currentIteration,
     };
 };
 

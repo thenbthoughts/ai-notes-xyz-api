@@ -4,6 +4,12 @@ import { IAnswerMachineSubQuestion } from '../../../types/typesSchema/typesChatL
 
 const answerMachineSubQuestionSchema = new Schema<IAnswerMachineSubQuestion>({
     // identification
+    answerMachineId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        ref: 'chatLlmAnswerMachine',
+    },
     threadId: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,

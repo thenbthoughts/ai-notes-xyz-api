@@ -3,14 +3,20 @@ import mongoose, { Schema } from 'mongoose';
 import { IChatLlmAnswerMachineTokenRecord } from '../../types/typesSchema/typesChatLlm/SchemaChatLlmAnswerMachineTokenRecord.types';
 
 const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTokenRecord>({
-    // reference to thread
+    // references
+    answerMachineId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        ref: 'chatLlmAnswerMachine',
+    },
     threadId: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
         index: true,
         ref: 'chatLlmThread',
     },
-    
+
     // query type
     queryType: {
         type: String,
@@ -18,7 +24,7 @@ const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTo
         required: true,
         index: true,
     },
-    
+
     // token counts for this single execution
     promptTokens: {
         type: Number,
@@ -40,7 +46,7 @@ const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTo
         type: Number,
         default: 0,
     },
-    
+
     // auth
     username: {
         type: String,
@@ -48,7 +54,7 @@ const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTo
         default: '',
         index: true,
     },
-    
+
     // auto
     createdAtUtc: {
         type: Date,

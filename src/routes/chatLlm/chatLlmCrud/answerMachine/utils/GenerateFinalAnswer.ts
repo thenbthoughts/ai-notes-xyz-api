@@ -9,6 +9,7 @@ import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/ut
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { extractTokensFromRawResponse, calculateCostInUsd } from "./tokenTracking";
 import { trackAnswerMachineTokens } from "../answerMachineFunc";
+import { ModelChatLlmAnswerMachine } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachine.schema";
 import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
 
 interface LlmConfig {
@@ -22,12 +23,14 @@ interface LlmConfig {
 class GenerateFinalAnswer {
     private threadId: mongoose.Types.ObjectId;
     private username: string;
+    private answerMachineId: mongoose.Types.ObjectId | null = null;
     private llmConfig: LlmConfig | null = null;
     private thread: any = null;
 
-    constructor(threadId: mongoose.Types.ObjectId, username: string) {
+    constructor(threadId: mongoose.Types.ObjectId, username: string, answerMachineId?: mongoose.Types.ObjectId) {
         this.threadId = threadId;
         this.username = username;
+        this.answerMachineId = answerMachineId || null;
     }
 
     /**
@@ -214,11 +217,10 @@ class GenerateFinalAnswer {
         answer: string;
     }>> {
         try {
-            const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find({
-                threadId: this.threadId,
-                username: this.username,
-                status: 'answered',
-            }).sort({ createdAtUtc: 1 });
+            const query = this.answerMachineId
+                ? { answerMachineId: this.answerMachineId, status: 'answered' }
+                : { threadId: this.threadId, username: this.username, status: 'answered' };
+            const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find(query).sort({ createdAtUtc: 1 });
 
             return answeredSubQuestions
                 .filter(sq => sq.question && sq.answer)
@@ -385,7 +387,10 @@ class GenerateFinalAnswer {
             // Get aggregated tokens from individual records if not provided
             let finalTokens = tokens;
             if (!finalTokens) {
-                const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId: this.threadId });
+                const query = this.answerMachineId
+                    ? { answerMachineId: this.answerMachineId }
+                    : { threadId: this.threadId };
+                const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find(query);
                 
                 finalTokens = {
                     promptTokens: 0,
@@ -462,8 +467,8 @@ class GenerateFinalAnswer {
             }
 
             // Track tokens from final answer generation
-            if (finalAnswerResult.tokens) {
-                await trackAnswerMachineTokens(this.threadId, finalAnswerResult.tokens, this.username, 'final_answer');
+            if (finalAnswerResult.tokens && this.answerMachineId) {
+                await trackAnswerMachineTokens(this.answerMachineId, this.threadId, finalAnswerResult.tokens, this.username, 'final_answer');
             }
 
             // Create message (will use aggregated tokens from thread)

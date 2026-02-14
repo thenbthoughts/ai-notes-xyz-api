@@ -8,6 +8,7 @@ import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatL
 
 import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
 import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { ModelChatLlmAnswerMachine } from "../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachine.schema";
 import fetchLlmUnified, { Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { ModelAnswerMachineSubQuestion } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 import { IAnswerMachineSubQuestion } from "../../../../types/typesSchema/typesChatLlm/typesAnswerMachine/SchemaAnswerMachineSubQuestions.types";
@@ -249,11 +250,33 @@ const filterUnnecessaryQuestions = (
     }
 }
 
+// Helper to update answer machine record inline
+const updateAnswerMachineRecord = async (
+    answerMachineId: mongoose.Types.ObjectId,
+    updates: {
+        currentIteration?: number;
+        intermediateAnswers?: string[];
+        finalAnswer?: string;
+        totalPromptTokens?: number;
+        totalCompletionTokens?: number;
+        totalReasoningTokens?: number;
+        totalTokens?: number;
+        costInUsd?: number;
+        status?: 'pending' | 'answered' | 'error';
+        errorReason?: string;
+    }
+) => {
+    await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineId, {
+        $set: { ...updates, updatedAtUtc: new Date() }
+    });
+};
+
 /**
  * Track tokens for answer machine - stores individual token records
  * Aggregated totals are calculated dynamically when needed
  */
 export const trackAnswerMachineTokens = async (
+    answerMachineId: mongoose.Types.ObjectId,
     threadId: mongoose.Types.ObjectId,
     tokens: {
         promptTokens: number;
@@ -269,6 +292,7 @@ export const trackAnswerMachineTokens = async (
         // Create individual token record for this execution
         if (queryType) {
             await ModelChatLlmAnswerMachineTokenRecord.create({
+                answerMachineId,
                 threadId,
                 username,
                 queryType,
@@ -285,11 +309,13 @@ export const trackAnswerMachineTokens = async (
 };
 
 const step2CreateQuestionDecompositionAndInsert = async ({
+    answerMachineId,
     threadId,
     currentIteration = 1,
     previousGaps = [],
     isContinuingForMinIterations = false,
 }: {
+    answerMachineId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
     currentIteration?: number;
     previousGaps?: string[];
@@ -490,6 +516,7 @@ const step2CreateQuestionDecompositionAndInsert = async ({
 
         for (const question of allQuestions) {
             insertManyArr.push({
+                answerMachineId,
                 threadId,
                 parentMessageId: lastMessageId,
                 question,
@@ -520,16 +547,18 @@ const step2CreateQuestionDecompositionAndInsert = async ({
 }
 
 const step3AnswerSubQuestions = async ({
+    answerMachineId,
     threadId,
     username,
 }: {
+    answerMachineId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
     username: string;
 }): Promise<void> => {
     try {
-        // Get all pending sub-questions for this thread
+        // Get all pending sub-questions for this answer machine
         const pendingSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId,
+            answerMachineId,
             status: 'pending',
         });
 
@@ -557,7 +586,7 @@ const step3AnswerSubQuestions = async ({
                     
                     // Track tokens from sub-question answering
                     if (result.tokens) {
-                        await trackAnswerMachineTokens(threadId, result.tokens, username, 'sub_question_answer');
+                        await trackAnswerMachineTokens(answerMachineId, threadId, result.tokens, username, 'sub_question_answer');
                     }
                 } else {
                     // Update with error status
@@ -597,10 +626,12 @@ const step3AnswerSubQuestions = async ({
  * Generate intermediate answer and store it (without creating a message)
  */
 const generateAndStoreIntermediateAnswer = async ({
+    answerMachineId,
     threadId,
     username,
     currentIteration,
 }: {
+    answerMachineId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
     username: string;
     currentIteration: number;
@@ -608,8 +639,7 @@ const generateAndStoreIntermediateAnswer = async ({
     try {
         // Check if there are any answered sub-questions
         const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId,
-            username,
+            answerMachineId,
             status: 'answered',
         });
 
@@ -620,7 +650,7 @@ const generateAndStoreIntermediateAnswer = async ({
         }
 
         // Create GenerateFinalAnswer instance and generate answer (without creating message)
-        const generateFinalAnswer = new GenerateFinalAnswer(threadId, username);
+        const generateFinalAnswer = new GenerateFinalAnswer(threadId, username, answerMachineId);
         const initialized = await generateFinalAnswer.initialize();
         if (!initialized) {
             const errorMsg = `Iteration ${currentIteration}: Failed to initialize GenerateFinalAnswer`;
@@ -637,7 +667,7 @@ const generateAndStoreIntermediateAnswer = async ({
 
         // Track tokens from intermediate answer generation
         if (intermediateAnswerResult.tokens) {
-            await trackAnswerMachineTokens(threadId, intermediateAnswerResult.tokens, username, 'intermediate_answer');
+            await trackAnswerMachineTokens(answerMachineId, threadId, intermediateAnswerResult.tokens, username, 'intermediate_answer');
         }
 
         // Store intermediate answer in thread
@@ -659,10 +689,12 @@ const generateAndStoreIntermediateAnswer = async ({
 
 
 const evaluateAnswerSatisfaction = async ({
+    answerMachineId,
     threadId,
     username,
     currentIteration,
 }: {
+    answerMachineId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
     username: string;
     currentIteration: number;
@@ -711,7 +743,8 @@ const evaluateAnswerSatisfaction = async ({
         }
 
         // Get the latest intermediate answer (the one we just generated)
-        const intermediateAnswers = thread.answerMachineIntermediateAnswers || [];
+        const currentRecord = await ModelChatLlmAnswerMachine.findById(answerMachineId);
+        const intermediateAnswers = currentRecord?.intermediateAnswers || [];
         const latestIntermediateAnswer = intermediateAnswers[intermediateAnswers.length - 1];
 
         if (!latestIntermediateAnswer) {
@@ -787,10 +820,19 @@ Be strict but fair. Only mark as unsatisfactory if there are clear gaps that pre
         );
         
         // Track tokens from evaluation
-        await trackAnswerMachineTokens(threadId, {
+        await trackAnswerMachineTokens(answerMachineId, threadId, {
             ...tokenInfo,
             costInUsd,
         }, username, 'evaluation');
+
+        // Update record with evaluation tokens
+        await updateAnswerMachineRecord(answerMachineId, {
+            totalPromptTokens: tokenInfo.promptTokens,
+            totalCompletionTokens: tokenInfo.completionTokens,
+            totalReasoningTokens: tokenInfo.reasoningTokens,
+            totalTokens: tokenInfo.totalTokens,
+            costInUsd,
+        });
 
         if (!llmResult.success || !llmResult.content) {
             const errorMsg = `Failed to evaluate answer satisfaction: ${llmResult.error || 'Unknown error'}`;
@@ -836,10 +878,12 @@ const answerMachineFunc = async ({
     threadId,
     username,
     previousGapsFromEvaluation,
+    continueExistingRun = false,
 }: {
     threadId: mongoose.Types.ObjectId;
     username: string;
     previousGapsFromEvaluation?: string[];
+    continueExistingRun?: boolean;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -848,8 +892,8 @@ const answerMachineFunc = async ({
     try {
         // Validate and get settings
         const settings = await validateAndGetSettings(threadId);
-        if (!settings.success || !settings.thread || settings.minIterations === undefined || 
-            settings.maxIterations === undefined || settings.currentIteration === undefined) {
+        if (!settings.success || !settings.thread || settings.minIterations === undefined ||
+            settings.maxIterations === undefined) {
             const errorReason = settings.errorReason || 'Validation failed or missing settings';
             await updateThreadStatus(threadId, 'error', {
                 errorReason,
@@ -861,27 +905,94 @@ const answerMachineFunc = async ({
             };
         }
 
-        const { thread, minIterations, maxIterations, currentIteration } = settings;
+        const { thread, minIterations, maxIterations } = settings;
+
+        // Handle run continuation vs new run
+        let answerMachineId: mongoose.Types.ObjectId | undefined;
+        let currentIteration: number;
+
+        if (continueExistingRun && thread.answerMachineId) {
+            // Continue existing run - get current iteration from database
+            const existingRecord = await ModelChatLlmAnswerMachine.findById(thread.answerMachineId);
+            if (existingRecord) {
+                answerMachineId = thread.answerMachineId;
+                currentIteration = existingRecord.currentIteration || 1;
+                console.log(`Continuing existing run at iteration ${currentIteration}`);
+            } else {
+                // Record doesn't exist, start fresh
+                console.log('Existing answer machine record not found, starting fresh');
+                currentIteration = 1;
+                continueExistingRun = false; // Fall back to new run
+            }
+        } else {
+            // Start fresh for new user message
+            currentIteration = 1;
+
+            // Reset any previous run state for this thread
+            if (thread.answerMachineId) {
+                // Delete previous sub-questions for this thread
+                await ModelAnswerMachineSubQuestion.deleteMany({
+                    threadId,
+                    username,
+                });
+
+                // Clear thread answer machine reference
+                await ModelChatLlmThread.findByIdAndUpdate(threadId, {
+                    $set: {
+                        answerMachineId: null,
+                    }
+                });
+            }
+        }
+
+        // Create new answer machine record if this is a new run
+        if (!answerMachineId) {
+            const lastUserMessage = await ModelChatLlm.findOne({
+                threadId,
+                username,
+                isAi: false,
+            }).sort({ createdAtUtc: -1 });
+
+            if (!lastUserMessage) {
+                const errorReason = 'No user message found';
+                await updateThreadStatus(threadId, 'error', { errorReason });
+                return { success: false, errorReason, data: null };
+            }
+
+            const answerMachineRecord = await ModelChatLlmAnswerMachine.create({
+                threadId,
+                parentMessageId: lastUserMessage._id,
+                username,
+                status: 'pending',
+                currentIteration: 1,
+                intermediateAnswers: [],
+                finalAnswer: '',
+                totalPromptTokens: 0,
+                totalCompletionTokens: 0,
+                totalReasoningTokens: 0,
+                totalTokens: 0,
+                costInUsd: 0,
+            });
+
+            answerMachineId = answerMachineRecord._id;
+
+            // Update thread with answerMachineId
+            await ModelChatLlmThread.findByIdAndUpdate(threadId, {
+                $set: { answerMachineId }
+            });
+        }
+
+        // At this point, answerMachineId should be assigned
+        if (!answerMachineId) {
+            const errorReason = 'Failed to initialize answer machine ID';
+            await updateThreadStatus(threadId, 'error', { errorReason });
+            return { success: false, errorReason, data: null };
+        }
 
         // Check iteration limits
         const limits = checkIterationLimits(currentIteration, minIterations, maxIterations);
 
-        // If we've exceeded max iterations, complete immediately
-        if (currentIteration > maxIterations) {
-            await completeAnswerMachine({ threadId, username });
-            return {
-                success: true,
-                errorReason: 'Max iterations reached',
-                data: null,
-            };
-        }
-
-        // Update thread iteration and status
-        await updateThreadStatus(threadId, 'pending', {
-            currentIteration,
-        });
-
-        // Get conversation
+        // Get conversation (needed for question generation)
         let conversationList: IChatLlm[];
         try {
             conversationList = await step1GetConversation({
@@ -918,7 +1029,7 @@ const answerMachineFunc = async ({
             limits,
             minIterations
         );
-        
+
         if (lastMessageCheck.shouldHandle) {
             if (lastMessageCheck.shouldComplete) {
                 await completeAnswerMachine({ threadId, username });
@@ -942,15 +1053,16 @@ const answerMachineFunc = async ({
         const gapsInfo = getPreviousGaps(currentIteration, previousGapsFromEvaluation);
         let previousGaps = gapsInfo.previousGaps;
         let isContinuingForMinIterations = gapsInfo.isContinuingForMinIterations;
-        
+
         // If we need to evaluate previous iteration, do it now
         if (gapsInfo.needsEvaluation) {
             const lastAiMessage = conversationList
                 .filter(msg => msg.isAi)
                 .slice(-1)[0];
-            
+
             if (lastAiMessage) {
                 const evaluation = await evaluateAnswerSatisfaction({
+                    answerMachineId,
                     threadId,
                     username,
                     currentIteration: currentIteration - 1,
@@ -966,22 +1078,38 @@ const answerMachineFunc = async ({
 
         // create question decomposition (with iteration and gaps info)
         const questionDecompositionResult = await step2CreateQuestionDecompositionAndInsert({
+            answerMachineId,
             threadId,
             currentIteration,
             previousGaps,
             isContinuingForMinIterations,
         });
         const questionDecomposition = questionDecompositionResult.questions;
-        
+
         // Track tokens from question generation
         if (questionDecompositionResult.tokens) {
-            const thread = await ModelChatLlmThread.findById(threadId);
-            if (thread) {
-                await trackAnswerMachineTokens(threadId, questionDecompositionResult.tokens, thread.username, 'question_generation');
-            }
+            await trackAnswerMachineTokens(answerMachineId, threadId, questionDecompositionResult.tokens, username, 'question_generation');
+            // Update record with question generation tokens
+            await updateAnswerMachineRecord(answerMachineId, {
+                totalPromptTokens: questionDecompositionResult.tokens.promptTokens,
+                totalCompletionTokens: questionDecompositionResult.tokens.completionTokens,
+                totalReasoningTokens: questionDecompositionResult.tokens.reasoningTokens,
+                totalTokens: questionDecompositionResult.tokens.totalTokens,
+                costInUsd: questionDecompositionResult.tokens.costInUsd,
+            });
         }
-        
+
         console.log(`Iteration ${currentIteration} - questionDecomposition:`, questionDecomposition);
+
+        // If we've exceeded max iterations, complete immediately
+        if (currentIteration > maxIterations) {
+            await completeAnswerMachine({ threadId, username });
+            return {
+                success: true,
+                errorReason: 'Max iterations reached',
+                data: null,
+            };
+        }
 
         // Handle case where no questions are generated
         if (questionDecomposition.length === 0) {
@@ -1015,6 +1143,7 @@ const answerMachineFunc = async ({
 
         // answer sub-questions (only if there are pending questions)
         await step3AnswerSubQuestions({
+            answerMachineId,
             threadId,
             username,
         });
@@ -1022,14 +1151,32 @@ const answerMachineFunc = async ({
         // Generate intermediate answer and store it (don't create message yet)
         // This will use all answered sub-questions from all iterations
         const intermediateAnswer = await generateAndStoreIntermediateAnswer({
+            answerMachineId,
             threadId,
             username,
             currentIteration,
         });
 
+        // Get current answer machine record to access intermediateAnswers
+        const currentRecord = await ModelChatLlmAnswerMachine.findById(answerMachineId);
+        const currentIntermediateAnswers = currentRecord?.intermediateAnswers || [];
+
+        // Increment current iteration for next iteration
+        currentIteration++;
+
+        // Update record with intermediate answer and incremented iteration
+        await updateAnswerMachineRecord(answerMachineId, {
+            currentIteration,
+            intermediateAnswers: intermediateAnswer ? [...currentIntermediateAnswers, intermediateAnswer] : currentIntermediateAnswers,
+        });
+
+        // Recalculate limits with updated iteration
+        const updatedLimits = checkIterationLimits(currentIteration, minIterations, maxIterations);
+
         // Evaluate satisfaction and decide next step
-        if (limits.shouldContinue) {
+        if (updatedLimits.shouldContinue) {
             const evaluation = await evaluateAnswerSatisfaction({
+                answerMachineId,
                 threadId,
                 username,
                 currentIteration,
@@ -1042,7 +1189,7 @@ const answerMachineFunc = async ({
             });
 
             // Decide if we should continue
-            const decision = shouldContinueIteration(evaluation, limits);
+            const decision = shouldContinueIteration(evaluation, updatedLimits);
             
             if (decision.shouldContinue) {
                 // Continue to next iteration
@@ -1052,6 +1199,7 @@ const answerMachineFunc = async ({
                     threadId,
                     username,
                     previousGapsFromEvaluation: evaluation.gaps.length > 0 ? evaluation.gaps : [],
+                    continueExistingRun: true,
                 });
                 
                 return nextIterationResult;

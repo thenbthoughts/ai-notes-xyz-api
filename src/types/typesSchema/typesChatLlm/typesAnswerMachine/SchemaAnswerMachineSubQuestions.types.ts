@@ -4,6 +4,7 @@ import mongoose, { Document } from 'mongoose';
 export interface IAnswerMachineSubQuestion extends Document {
     // identification
     _id: mongoose.Types.ObjectId;
+    answerMachineId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId | null;
     parentMessageId: mongoose.Types.ObjectId | null; // Refers to the main user's message
 
