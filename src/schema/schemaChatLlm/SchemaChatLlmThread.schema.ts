@@ -88,19 +88,6 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Number,
         default: 1,
     },
-    answerMachineCurrentIteration: {
-        type: Number,
-        default: 0,
-    },
-    answerMachineStatus: {
-        type: String,
-        enum: ['not_started', 'pending', 'answered', 'error'],
-        default: 'not_started',
-    },
-    answerMachineErrorReason: {
-        type: String,
-        default: '',
-    },
     answerMachineUsedOpencode: {
         type: Boolean,
         default: false,
@@ -109,12 +96,6 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Boolean,
         default: false,
     },
-    answerMachineIntermediateAnswers: [
-        {
-            type: String,
-            default: '',
-        }
-    ],
 
     // auth
     username: { type: String, required: true, default: '', index: true, },

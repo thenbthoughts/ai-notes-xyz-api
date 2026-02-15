@@ -6,6 +6,7 @@ import { ModelAnswerMachineSubQuestion } from '../../../schema/schemaChatLlm/Sch
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema';
+import { ModelChatLlmAnswerMachine } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema';
 
 const router = Router();
 
@@ -34,10 +35,29 @@ router.post(
             }
 
             // Get all sub-questions for this thread, sorted by creation time
-            const subQuestions = await ModelAnswerMachineSubQuestion.find({
-                threadId,
-                username: auth_username,
-            }).sort({ createdAtUtc: 1 });
+            const subQuestions = await ModelAnswerMachineSubQuestion.aggregate([
+                {
+                    $match: {
+                        threadId,
+                        username: auth_username,
+                    },
+                },
+                {
+                    $sort: {
+                        createdAtUtc: 1,
+                    },
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        parentMessageId: 1,
+                        question: 1,
+                        answer: 1,
+                        status: 1,
+                        errorReason: 1,
+                    },
+                },
+            ]);
 
             // Count sub-questions by status
             const subQuestionsStatus = {
@@ -49,13 +69,87 @@ router.post(
             };
 
             // Map sub-questions to include question and answer details
-            const subQuestionsDetails = subQuestions.map(sq => ({
+            const subQuestionsDetails = subQuestions.map((sq) => ({
                 id: sq._id.toString(),
                 question: sq.question || '',
                 answer: sq.answer || '',
                 status: sq.status,
                 errorReason: sq.errorReason || '',
             }));
+
+            // Build historical answer machine jobs for this thread
+            const answerMachineJobs = await ModelChatLlmAnswerMachine.aggregate([
+                {
+                    $match: {
+                        threadId,
+                        username: auth_username,
+                    },
+                },
+                {
+                    $sort: {
+                        createdAt: -1,
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'answerMachineSubQuestion',
+                        let: {
+                            localParentMessageId: '$parentMessageId',
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    threadId,
+                                    username: auth_username,
+                                    $expr: {
+                                        $eq: ['$parentMessageId', '$$localParentMessageId'],
+                                    },
+                                },
+                            },
+                            {
+                                $sort: {
+                                    createdAtUtc: 1,
+                                },
+                            },
+                            {
+                                $project: {
+                                    _id: 1,
+                                    question: 1,
+                                    answer: 1,
+                                    status: 1,
+                                    errorReason: 1,
+                                },
+                            },
+                        ],
+                        as: 'subQuestions',
+                    },
+                },
+            ]);
+
+            const answerMachineJobsDetails = answerMachineJobs.map((job) => {
+                const jobSubQuestions = (job.subQuestions || []).map((sq: any) => ({
+                    id: sq._id.toString(),
+                    question: sq.question || '',
+                    answer: sq.answer || '',
+                    status: sq.status,
+                    errorReason: sq.errorReason || '',
+                }));
+
+                return {
+                    id: job._id.toString(),
+                    parentMessageId: job.parentMessageId?.toString() || '',
+                    status: job.status,
+                    errorReason: job.errorReason || '',
+                    finalAnswer: job.finalAnswer || '',
+                    intermediateAnswers: Array.isArray(job.intermediateAnswers) ? job.intermediateAnswers : [],
+                    minNumberOfIterations: job.minNumberOfIterations || 1,
+                    maxNumberOfIterations: job.maxNumberOfIterations || 1,
+                    currentIteration: job.currentIteration || 0,
+                    subQuestions: jobSubQuestions,
+                    createdAt: job.createdAt,
+                    updatedAt: job.updatedAt,
+                };
+            });
 
             // Get the last user message
             const lastUserMessage = await ModelChatLlm.findOne({
@@ -79,58 +173,65 @@ router.post(
                 (!lastUserMessage || lastAiMessage.createdAtUtc > lastUserMessage.createdAtUtc);
 
             // Calculate token totals and breakdown dynamically from individual records
-            const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId });
-            
-            // Calculate aggregated totals
-            let totalPromptTokens = 0;
-            let totalCompletionTokens = 0;
-            let totalReasoningTokens = 0;
-            let totalTokens = 0;
-            let totalCostInUsd = 0;
-            const queryTypesSet = new Set<string>();
+            const tokenSummaryPipeline = await ModelChatLlmAnswerMachineTokenRecord.aggregate([
+                {
+                    $match: {
+                        threadId,
+                    },
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalPromptTokens: { $sum: { $ifNull: ['$promptTokens', 0] } },
+                        totalCompletionTokens: { $sum: { $ifNull: ['$completionTokens', 0] } },
+                        totalReasoningTokens: { $sum: { $ifNull: ['$reasoningTokens', 0] } },
+                        totalTokens: { $sum: { $ifNull: ['$totalTokens', 0] } },
+                        totalCostInUsd: { $sum: { $ifNull: ['$costInUsd', 0] } },
+                    },
+                },
+            ]);
+
+            const tokenByTypePipeline = await ModelChatLlmAnswerMachineTokenRecord.aggregate([
+                {
+                    $match: {
+                        threadId,
+                        queryType: { $ne: null },
+                    },
+                },
+                {
+                    $group: {
+                        _id: '$queryType',
+                        promptTokens: { $sum: { $ifNull: ['$promptTokens', 0] } },
+                        completionTokens: { $sum: { $ifNull: ['$completionTokens', 0] } },
+                        reasoningTokens: { $sum: { $ifNull: ['$reasoningTokens', 0] } },
+                        totalTokens: { $sum: { $ifNull: ['$totalTokens', 0] } },
+                        costInUsd: { $sum: { $ifNull: ['$costInUsd', 0] } },
+                        count: { $sum: 1 },
+                        maxSingleQueryTokens: { $max: { $ifNull: ['$totalTokens', 0] } },
+                    },
+                },
+            ]);
+
+            const tokenSummary = tokenSummaryPipeline[0] || {
+                totalPromptTokens: 0,
+                totalCompletionTokens: 0,
+                totalReasoningTokens: 0,
+                totalTokens: 0,
+                totalCostInUsd: 0,
+            };
+
             const queryTypeTokens: any = {};
-            
-            tokenRecords.forEach((record) => {
-                const type = record.queryType;
-                
-                // Aggregate totals
-                totalPromptTokens += record.promptTokens || 0;
-                totalCompletionTokens += record.completionTokens || 0;
-                totalReasoningTokens += record.reasoningTokens || 0;
-                totalTokens += record.totalTokens || 0;
-                totalCostInUsd += record.costInUsd || 0;
-                
-                // Track query types
-                if (type) {
-                    queryTypesSet.add(type);
-                }
-                
-                // Calculate per-query-type breakdown
-                if (type) {
-                    if (!queryTypeTokens[type]) {
-                        queryTypeTokens[type] = {
-                            promptTokens: 0,
-                            completionTokens: 0,
-                            reasoningTokens: 0,
-                            totalTokens: 0,
-                            costInUsd: 0,
-                            count: 0,
-                            maxSingleQueryTokens: 0, // Maximum tokens from a single execution
-                        };
-                    }
-                    queryTypeTokens[type].promptTokens += record.promptTokens || 0;
-                    queryTypeTokens[type].completionTokens += record.completionTokens || 0;
-                    queryTypeTokens[type].reasoningTokens += record.reasoningTokens || 0;
-                    queryTypeTokens[type].totalTokens += record.totalTokens || 0;
-                    queryTypeTokens[type].costInUsd += record.costInUsd || 0;
-                    queryTypeTokens[type].count += 1;
-                    
-                    // Track maximum tokens from a single execution
-                    const recordTotalTokens = record.totalTokens || 0;
-                    if (recordTotalTokens > queryTypeTokens[type].maxSingleQueryTokens) {
-                        queryTypeTokens[type].maxSingleQueryTokens = recordTotalTokens;
-                    }
-                }
+            const answerMachineQueryTypes = tokenByTypePipeline.map((item) => item._id);
+            tokenByTypePipeline.forEach((item) => {
+                queryTypeTokens[item._id] = {
+                    promptTokens: item.promptTokens || 0,
+                    completionTokens: item.completionTokens || 0,
+                    reasoningTokens: item.reasoningTokens || 0,
+                    totalTokens: item.totalTokens || 0,
+                    costInUsd: item.costInUsd || 0,
+                    count: item.count || 0,
+                    maxSingleQueryTokens: item.maxSingleQueryTokens || 0,
+                };
             });
 
             // Determine overall status
@@ -181,19 +282,18 @@ router.post(
                 // Answer Machine iteration info
                 answerMachineMinNumberOfIterations: thread.answerMachineMinNumberOfIterations || 1,
                 answerMachineMaxNumberOfIterations: thread.answerMachineMaxNumberOfIterations || 1,
-                answerMachineCurrentIteration: thread.answerMachineCurrentIteration || 0,
-                answerMachineStatus: thread.answerMachineStatus || 'not_started',
-                answerMachineErrorReason: thread.answerMachineErrorReason || '',
                 // Answer Machine token tracking (calculated dynamically from individual records)
-                answerMachinePromptTokens: totalPromptTokens,
-                answerMachineCompletionTokens: totalCompletionTokens,
-                answerMachineReasoningTokens: totalReasoningTokens,
-                answerMachineTotalTokens: totalTokens,
-                answerMachineCostInUsd: totalCostInUsd,
+                answerMachinePromptTokens: tokenSummary.totalPromptTokens || 0,
+                answerMachineCompletionTokens: tokenSummary.totalCompletionTokens || 0,
+                answerMachineReasoningTokens: tokenSummary.totalReasoningTokens || 0,
+                answerMachineTotalTokens: tokenSummary.totalTokens || 0,
+                answerMachineCostInUsd: tokenSummary.totalCostInUsd || 0,
                 // Query types used (calculated dynamically)
-                answerMachineQueryTypes: Array.from(queryTypesSet),
+                answerMachineQueryTypes: answerMachineQueryTypes,
                 // Per-query-type token breakdown (calculated dynamically)
                 answerMachineQueryTypeTokens: queryTypeTokens,
+                // Historical answer machine jobs
+                answerMachineJobs: answerMachineJobsDetails,
             });
         } catch (error) {
             console.error('Error in answerMachineStatus polling:', error);

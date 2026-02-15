@@ -40,12 +40,8 @@ export interface IChatLlmThread extends Document {
     // answerEngine -> answerMachine
     answerMachineMinNumberOfIterations: number;
     answerMachineMaxNumberOfIterations: number;
-    answerMachineCurrentIteration: number;
-    answerMachineStatus: 'not_started' | 'pending' | 'answered' | 'error';
-    answerMachineErrorReason: string;
     answerMachineUsedOpencode: boolean;
     answerMachineUsedWebSearch: boolean;
-    answerMachineIntermediateAnswers: string[];
 
     // auth
     username: string;
