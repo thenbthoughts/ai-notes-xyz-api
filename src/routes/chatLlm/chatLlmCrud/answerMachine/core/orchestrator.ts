@@ -47,77 +47,37 @@ export class AnswerMachineOrchestrator {
             }
 
             const { answerMachineId, currentIteration } = runResult;
-            if (!currentIteration) {
+            if (!currentIteration || !answerMachineId) {
                 await updateThreadStatus(threadId, 'error', { errorReason: 'Failed to get current iteration' });
                 return { success: false, errorReason: 'Failed to get current iteration', data: null } as AnswerMachineResult;
             }
 
         // Step 3: Process iterations until completion
         let iterationGaps = previousGapsFromEvaluation;
-        let iterationCounter = currentIteration!;
+        let iterationCounter = currentIteration;
 
         while (true) {
             const iterationResult = await IterationProcessor.processIteration(
-                answerMachineId!,
+                answerMachineId,
                 threadId,
                 username,
-                iterationCounter!,
+                iterationCounter,
                 minIterations,
                 maxIterations,
                 iterationGaps
             );
 
-            if (!iterationResult.shouldContinue) {
-                // Generate final answer before completing
-                console.log(`[Orchestrator] Generating final answer for thread ${threadId}`);
-                console.log(`[Orchestrator] Answer Machine ID: ${answerMachineId}`);
-                const finalAnswerResult = await FinalAnswerGenerator.generateFinalAnswer(
-                    threadId,
-                    username,
-                    answerMachineId!
-                );
-
-                console.log(`[Orchestrator] Final answer generation result:`, {
-                    success: finalAnswerResult.success,
-                    hasAnswer: !!finalAnswerResult.answer,
-                    answerLength: finalAnswerResult.answer?.length || 0,
-                    errorReason: finalAnswerResult.errorReason
-                });
-
-                if (!finalAnswerResult.success || !finalAnswerResult.answer) {
-                    const errorMsg = finalAnswerResult.errorReason || 'Failed to generate final answer';
-                    console.error(`[Orchestrator] Final answer generation failed: ${errorMsg}`);
-                    await updateThreadStatus(threadId, 'error', { errorReason: errorMsg });
-                    return { success: false, errorReason: errorMsg, data: null } as AnswerMachineResult;
-                }
-
-                // Save final answer to database
-                await AnswerMachineRepository.update(answerMachineId!, {
-                    finalAnswer: finalAnswerResult.answer,
-                });
-
-                // Create final answer message in chat conversation
-                await createFinalAnswerMessage(threadId, username, finalAnswerResult.answer);
-
-                // Complete the answer machine
-                await completeAnswerMachine(threadId, username);
-
-                if (iterationResult.errorReason) {
-                    await updateThreadStatus(threadId, 'error', { errorReason: iterationResult.errorReason });
-                    return { success: false, errorReason: iterationResult.errorReason, data: null } as AnswerMachineResult;
-                }
-
-                console.log(`[Orchestrator] Answer Machine completed successfully with final answer for thread ${threadId}`);
-                return {
-                    success: true,
-                    errorReason: '',
-                    data: null,
-                } as AnswerMachineResult;
+            if (iterationResult.errorReason) {
+                console.error(`[Orchestrator] Iteration ${iterationCounter} error: ${iterationResult.errorReason}`);
+                return await this.failWithIterationError(threadId, iterationResult.errorReason);
             }
 
-            // Continue to next iteration
+            if (!iterationResult.shouldContinue) {
+                return await this.finalizeAnswerMachine(threadId, username, answerMachineId);
+            }
+
             iterationCounter++;
-            iterationGaps = iterationResult.nextGaps;
+            iterationGaps = iterationResult.nextGaps ?? [];
         }
 
         } catch (error) {
@@ -136,5 +96,58 @@ export class AnswerMachineOrchestrator {
                 data: null,
             } as AnswerMachineResult;
         }
+    }
+
+    private static async finalizeAnswerMachine(
+        threadId: mongoose.Types.ObjectId,
+        username: string,
+        answerMachineId: mongoose.Types.ObjectId
+    ): Promise<AnswerMachineResult> {
+        console.log(`[Orchestrator] Generating final answer for thread ${threadId}`);
+        console.log(`[Orchestrator] Answer Machine ID: ${answerMachineId}`);
+        const finalAnswerResult = await FinalAnswerGenerator.generateFinalAnswer(
+            threadId,
+            username,
+            answerMachineId
+        );
+
+        console.log(`[Orchestrator] Final answer generation result:`, {
+            success: finalAnswerResult.success,
+            hasAnswer: !!finalAnswerResult.answer,
+            answerLength: finalAnswerResult.answer?.length || 0,
+            errorReason: finalAnswerResult.errorReason
+        });
+
+        if (!finalAnswerResult.success || !finalAnswerResult.answer) {
+            const errorMsg = finalAnswerResult.errorReason || 'Failed to generate final answer';
+            console.error(`[Orchestrator] Final answer generation failed: ${errorMsg}`);
+            return await this.failWithIterationError(threadId, errorMsg);
+        }
+
+        await AnswerMachineRepository.update(answerMachineId, {
+            finalAnswer: finalAnswerResult.answer,
+        });
+
+        await createFinalAnswerMessage(threadId, username, finalAnswerResult.answer);
+        await completeAnswerMachine(threadId, username);
+
+        console.log(`[Orchestrator] Answer Machine completed successfully with final answer for thread ${threadId}`);
+        return {
+            success: true,
+            errorReason: '',
+            data: null,
+        } as AnswerMachineResult;
+    }
+
+    private static async failWithIterationError(
+        threadId: mongoose.Types.ObjectId,
+        errorReason: string
+    ): Promise<AnswerMachineResult> {
+        await updateThreadStatus(threadId, 'error', { errorReason });
+        return {
+            success: false,
+            errorReason,
+            data: null,
+        } as AnswerMachineResult;
     }
 }
