@@ -12,7 +12,7 @@ import { llmPendingTaskTypes } from '../../../utils/llmPendingTask/llmPendingTas
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
-import answerMachineFunc from './answerMachine/answerMachineFunc';
+import answerMachineInitiateFunc from './answerMachineV2/answerMachineInitiateFunc';
 
 // Router
 const router = Router();
@@ -145,10 +145,20 @@ router.post(
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
             }
 
-            // answer machine
-            const result = await answerMachineFunc({
-                threadId,
+            // get last message in thread
+            const lastMessage = await ModelChatLlm.findOne({
+                threadId: threadId,
                 username: auth_username,
+                isAi: false,
+            }).sort({ createdAt: -1 });
+            if (!lastMessage) {
+                return res.status(400).json({ message: 'Last message not found' });
+            }
+            const messageId = lastMessage._id;
+
+            // answer machine
+            const result = await answerMachineInitiateFunc({
+                messageId: messageId,
             });
 
             if (result.success === false) {
