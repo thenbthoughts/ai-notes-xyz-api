@@ -77,6 +77,9 @@ const step5EvaluateAnswer = async ({
         // 2 >= 3 = false
         // 3 >= 3 = true
 
+        const currentIntermediateAnswers = answerMachineRecord.intermediateAnswers || [];
+        const updatedIntermediateAnswers = [...currentIntermediateAnswers, finalAnswer];
+
         if (
             evaluation.isSatisfactory &&
             answerMachineRecord.currentIteration >= answerMachineRecord.minNumberOfIterations // minimum number of iterations reached
@@ -86,6 +89,7 @@ const step5EvaluateAnswer = async ({
                 $set: {
                     status: 'answered',
                     finalAnswer: finalAnswer,
+                    intermediateAnswers: updatedIntermediateAnswers,
                 }
             });
 
@@ -96,6 +100,12 @@ const step5EvaluateAnswer = async ({
                 answerMachineRecord.username,
                 llmConfig
             );
+        } else {
+            await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
+                $set: {
+                    intermediateAnswers: updatedIntermediateAnswers,
+                }
+            });
         }
 
         return {
