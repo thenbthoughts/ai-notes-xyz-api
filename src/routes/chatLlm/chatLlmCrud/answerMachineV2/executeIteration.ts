@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 import { ModelChatLlmAnswerMachine } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema";
 
+import step2CreateQuestionDecomposition from "./step2CreateQuestionDecomposition/step2CreateQuestionDecomposition";
+
 // -----
 
 const executeIteration = async ({
@@ -22,16 +24,16 @@ const executeIteration = async ({
         console.log('answerMachineRecord', answerMachineRecord?.currentIteration);
 
         // Step 2: Generate the sub questions
-        // const executeSubQuestions = await step2CreateQuestionDecomposition({
-        //     answerMachineRecordId,
-        // });
-        // if(executeSubQuestions === false) {
-        //     return {
-        //         success: false,
-        //         errorReason: 'Failed to create sub questions',
-        //         data: null,
-        //     };
-        // }
+        const resultSubQuestions = await step2CreateQuestionDecomposition({
+            answerMachineRecordId,
+        });
+        if (resultSubQuestions.success === false) {
+            return {
+                success: false,
+                errorReason: 'Failed to create sub questions',
+                data: null,
+            };
+        }
 
         // Step 3: Answer the sub questions
 
