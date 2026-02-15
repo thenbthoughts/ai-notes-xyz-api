@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { ModelChatLlmAnswerMachine } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema";
 import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
 import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { getLlmConfig, LlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
 
 interface EvaluationResult {
     isSatisfactory: boolean;
@@ -17,7 +19,7 @@ const step5EvaluateAnswer = async ({
     success: boolean;
     errorReason: string;
     data: {
-        isSatisfactory: boolean;
+        isSatisfactoryFinalAnswer: boolean;
         evaluationReason: string;
     } | null;
 }> => {
@@ -43,10 +45,20 @@ const step5EvaluateAnswer = async ({
             };
         }
 
+        // Get LLM configuration for proper token tracking
+        const llmConfig = await getLlmConfig({ threadId: answerMachineRecord.threadId });
+
         const finalAnswer = answerMachineRecord.finalAnswer || '';
 
         // Evaluate the final answer
         const evaluation = evaluateFinalAnswer(finalAnswer);
+
+        // Update the answer machine record with evaluation results
+        await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
+            $set: {
+                isSatisfactoryFinalAnswer: evaluation.isSatisfactory,
+            }
+        });
 
         // Check if minimum iterations reached (e.g., 3 >= 3 = true)
         // Ex: Here, currentIteration = 3, minNumberOfIterations = 3
@@ -66,26 +78,20 @@ const step5EvaluateAnswer = async ({
                 }
             });
 
-            // create a message in the thread
-            await ModelChatLlm.create({
-                type: 'text',
-                content: finalAnswer,
-                username: answerMachineRecord.username,
-                threadId: answerMachineRecord.threadId,
-                isAi: true,
-                aiModelProvider: thread.aiModelProvider,
-                aiModelName: thread.aiModelName,
-
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
+            // create a message in the thread with proper token aggregation
+            await createFinalAnswerMessageWithTokens(
+                finalAnswer,
+                answerMachineRecord.threadId,
+                answerMachineRecord.username,
+                llmConfig
+            );
         }
 
         return {
             success: true,
             errorReason: '',
             data: {
-                isSatisfactory: evaluation.isSatisfactory,
+                isSatisfactoryFinalAnswer: evaluation.isSatisfactory,
                 evaluationReason: evaluation.reason,
             },
         };
@@ -100,6 +106,64 @@ const step5EvaluateAnswer = async ({
         };
     }
 };
+
+/**
+ * Create final answer message in chat with proper token aggregation
+ */
+async function createFinalAnswerMessageWithTokens(
+    finalAnswer: string,
+    threadId: mongoose.Types.ObjectId,
+    username: string,
+    llmConfig: LlmConfig | null
+): Promise<mongoose.Types.ObjectId | null> {
+    try {
+        if (!finalAnswer || finalAnswer.trim().length === 0) {
+            return null;
+        }
+
+        // Get aggregated tokens from individual records
+        const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId: threadId });
+
+        let finalTokens = {
+            promptTokens: 0,
+            completionTokens: 0,
+            reasoningTokens: 0,
+            totalTokens: 0,
+            costInUsd: 0,
+        };
+
+        tokenRecords.forEach((record) => {
+            finalTokens.promptTokens += record.promptTokens || 0;
+            finalTokens.completionTokens += record.completionTokens || 0;
+            finalTokens.reasoningTokens += record.reasoningTokens || 0;
+            finalTokens.totalTokens += record.totalTokens || 0;
+            finalTokens.costInUsd += record.costInUsd || 0;
+        });
+
+        const newMessage = await ModelChatLlm.create({
+            type: 'text',
+            content: finalAnswer,
+            username: username,
+            threadId: threadId,
+            isAi: true,
+            aiModelProvider: llmConfig?.provider || '',
+            aiModelName: llmConfig?.model || '',
+            // Token stats - aggregated from all answer machine operations
+            promptTokens: finalTokens.promptTokens || 0,
+            completionTokens: finalTokens.completionTokens || 0,
+            reasoningTokens: finalTokens.reasoningTokens || 0,
+            totalTokens: finalTokens.totalTokens || 0,
+            costInUsd: finalTokens.costInUsd || 0,
+            createdAtUtc: new Date(),
+            updatedAtUtc: new Date(),
+        });
+
+        return newMessage._id as mongoose.Types.ObjectId;
+    } catch (error) {
+        console.error('Error in createFinalAnswerMessageWithTokens:', error);
+        return null;
+    }
+}
 
 /**
  * Evaluate if the final answer is satisfactory

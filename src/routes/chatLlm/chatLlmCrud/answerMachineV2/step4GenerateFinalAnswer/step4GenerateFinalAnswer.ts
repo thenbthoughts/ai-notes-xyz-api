@@ -9,7 +9,6 @@ import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaCh
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { extractTokensFromRawResponse, calculateCostInUsd, trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
-import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -142,21 +141,11 @@ async function generateFinalAnswerInline(
         await trackAnswerMachineTokens(threadId, finalAnswerResult.tokens, username, 'final_answer');
     }
 
-    // Create message
-    const messageId = await createFinalAnswerMessageInline(finalAnswerResult.answer, threadId, username, llmConfig);
-    if (!messageId) {
-        return {
-            success: false,
-            finalAnswer: finalAnswerResult.answer,
-            messageId: null,
-            errorReason: 'Failed to create final answer message',
-        };
-    }
-
+    // Note: Message creation is now handled in step5 (evaluation) to ensure final answer is generated only once
     return {
         success: true,
         finalAnswer: finalAnswerResult.answer,
-        messageId,
+        messageId: null, // Message will be created in step5 when evaluation is satisfactory
     };
 }
 
@@ -467,62 +456,5 @@ async function generateFinalAnswerContent(
     }
 }
 
-/**
- * Create final answer message in chat
- */
-async function createFinalAnswerMessageInline(
-    finalAnswer: string,
-    threadId: mongoose.Types.ObjectId,
-    username: string,
-    llmConfig: LlmConfig
-): Promise<mongoose.Types.ObjectId | null> {
-    try {
-        if (!finalAnswer || finalAnswer.trim().length === 0) {
-            return null;
-        }
-
-        // Get aggregated tokens from individual records
-        const tokenRecords = await ModelChatLlmAnswerMachineTokenRecord.find({ threadId: threadId });
-
-        let finalTokens = {
-            promptTokens: 0,
-            completionTokens: 0,
-            reasoningTokens: 0,
-            totalTokens: 0,
-            costInUsd: 0,
-        };
-
-        tokenRecords.forEach((record) => {
-            finalTokens.promptTokens += record.promptTokens || 0;
-            finalTokens.completionTokens += record.completionTokens || 0;
-            finalTokens.reasoningTokens += record.reasoningTokens || 0;
-            finalTokens.totalTokens += record.totalTokens || 0;
-            finalTokens.costInUsd += record.costInUsd || 0;
-        });
-
-        const newMessage = await ModelChatLlm.create({
-            type: 'text',
-            content: finalAnswer,
-            username: username,
-            threadId: threadId,
-            isAi: true,
-            aiModelProvider: llmConfig.provider || '',
-            aiModelName: llmConfig.model || '',
-            // Token stats - aggregated from all answer machine operations
-            promptTokens: finalTokens.promptTokens || 0,
-            completionTokens: finalTokens.completionTokens || 0,
-            reasoningTokens: finalTokens.reasoningTokens || 0,
-            totalTokens: finalTokens.totalTokens || 0,
-            costInUsd: finalTokens.costInUsd || 0,
-            createdAtUtc: new Date(),
-            updatedAtUtc: new Date(),
-        });
-
-        return newMessage._id as mongoose.Types.ObjectId;
-    } catch (error) {
-        console.error('Error in createFinalAnswerMessage:', error);
-        return null;
-    }
-}
 
 export default step4GenerateFinalAnswer;
