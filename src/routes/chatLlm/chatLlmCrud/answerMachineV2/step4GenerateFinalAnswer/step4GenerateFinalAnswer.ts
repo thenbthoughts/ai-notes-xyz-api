@@ -355,6 +355,19 @@ function formatSubQuestionAnswers(subQuestions: Array<{ question: string; answer
 }
 
 /**
+ * Format intermediate answers for LLM
+ */
+function formatIntermediateAnswers(intermediateAnswers: string[]): string {
+    if (!Array.isArray(intermediateAnswers) || intermediateAnswers.length === 0) {
+        return '';
+    }
+    return intermediateAnswers
+        .filter((a) => a && typeof a === 'string' && a.trim())
+        .map((a, index) => `Intermediate ${index + 1}:\n${a.trim()}`)
+        .join('\n\n');
+}
+
+/**
  * Generate final comprehensive answer
  */
 async function generateFinalAnswerContent(
@@ -382,6 +395,11 @@ async function generateFinalAnswerContent(
         const answeredSubQuestions = await getAnsweredSubQuestions(answerMachineRecordId);
         const subQuestionsText = formatSubQuestionAnswers(answeredSubQuestions);
 
+        // Get intermediate answers from answer machine record (if any)
+        const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
+        const intermediateAnswers = answerMachineRecord?.intermediateAnswers ?? [];
+        const intermediateAnswersText = formatIntermediateAnswers(intermediateAnswers);
+
         // Get system prompt from thread
         const systemPrompt = thread?.systemPrompt || 'You are a helpful AI assistant.';
 
@@ -396,7 +414,13 @@ async function generateFinalAnswerContent(
             userPrompt += `RESEARCH FINDINGS (Answers to sub-questions):\n${subQuestionsText}\n\n`;
         }
 
-        userPrompt += `Based on the conversation history and the research findings above, provide a comprehensive final answer that:\n`;
+        if (intermediateAnswersText) {
+            userPrompt += `INTERMEDIATE ANSWERS (from previous iterations):\n${intermediateAnswersText}\n\n`;
+        }
+
+        const contextParts = ['conversation history', 'research findings'];
+        if (intermediateAnswersText) contextParts.push('intermediate answers');
+        userPrompt += `Based on the ${contextParts.join(', ')} above, provide a comprehensive final answer that:\n`;
         userPrompt += `1. Directly addresses the user's main question or problem\n`;
         userPrompt += `2. Synthesizes information from the research findings\n`;
         userPrompt += `3. Provides a clear, well-structured response\n`;
