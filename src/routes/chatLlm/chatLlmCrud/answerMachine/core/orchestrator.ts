@@ -52,33 +52,33 @@ export class AnswerMachineOrchestrator {
                 return { success: false, errorReason: 'Failed to get current iteration', data: null } as AnswerMachineResult;
             }
 
-        // Step 3: Process iterations until completion
-        let iterationGaps = previousGapsFromEvaluation;
-        let iterationCounter = currentIteration;
+            // Step 3: Process iterations until completion
+            let iterationGaps = previousGapsFromEvaluation;
+            let iterationCounter = currentIteration;
 
-        while (true) {
-            const iterationResult = await IterationProcessor.processIteration(
-                answerMachineId,
-                threadId,
-                username,
-                iterationCounter,
-                minIterations,
-                maxIterations,
-                iterationGaps
-            );
+            while (true) {
+                const iterationResult = await IterationProcessor.processIteration(
+                    answerMachineId,
+                    threadId,
+                    username,
+                    iterationCounter,
+                    minIterations,
+                    maxIterations,
+                    iterationGaps
+                );
 
-            if (iterationResult.errorReason) {
-                console.error(`[Orchestrator] Iteration ${iterationCounter} error: ${iterationResult.errorReason}`);
-                return await this.failWithIterationError(threadId, iterationResult.errorReason);
+                if (iterationResult.errorReason) {
+                    console.error(`[Orchestrator] Iteration ${iterationCounter} error: ${iterationResult.errorReason}`);
+                    return await this.failWithIterationError(threadId, iterationResult.errorReason);
+                }
+
+                if (!iterationResult.shouldContinue) {
+                    return await this.finalizeAnswerMachine(threadId, username, answerMachineId);
+                }
+
+                iterationCounter++;
+                iterationGaps = iterationResult.nextGaps ?? [];
             }
-
-            if (!iterationResult.shouldContinue) {
-                return await this.finalizeAnswerMachine(threadId, username, answerMachineId);
-            }
-
-            iterationCounter++;
-            iterationGaps = iterationResult.nextGaps ?? [];
-        }
 
         } catch (error) {
             console.error(`❌ Error in AnswerMachineOrchestrator (thread ${threadId}):`, error);
