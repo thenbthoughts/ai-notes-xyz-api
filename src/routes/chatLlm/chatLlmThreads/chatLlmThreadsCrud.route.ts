@@ -238,7 +238,6 @@ router.post(
 
                 // answer type
                 answerEngine,
-                answerMachineErrorReason,
                 answerMachineUsedOpencode,
                 answerMachineUsedWebSearch,
                 
@@ -304,9 +303,6 @@ router.post(
                 if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
                     addData.answerEngine = answerEngine;
                 }
-            };
-            if (typeof answerMachineErrorReason === 'string') {
-                addData.answerMachineErrorReason = answerMachineErrorReason;
             };
             if (typeof answerMachineUsedOpencode === 'boolean') {
                 addData.answerMachineUsedOpencode = answerMachineUsedOpencode;
@@ -440,7 +436,6 @@ router.post(
                 answerEngine,
 
                 // answer engine -> answer machine
-                answerMachineErrorReason,
                 answerMachineUsedOpencode,
                 answerMachineUsedWebSearch,
                 
@@ -509,9 +504,6 @@ router.post(
                 if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
                     updateData.answerEngine = answerEngine;
                 }
-            };
-            if (typeof answerMachineErrorReason === 'string') {
-                updateData.answerMachineErrorReason = answerMachineErrorReason;
             };
             if (typeof answerMachineUsedOpencode === 'boolean') {
                 updateData.answerMachineUsedOpencode = answerMachineUsedOpencode;

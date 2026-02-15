@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import envKeys from "../../src/config/envKeys";
 
-import answerMachineFunc from "../../src/routes/chatLlm/chatLlmCrud/answerMachine/answerMachineFunc";
+import answerMachineInitiateFunc from "../../src/routes/chatLlm/chatLlmCrud/answerMachineV2/answerMachineInitiateFunc";
 
 const testAnswerMachine = async () => {
     console.log('testAnswerMachine');
@@ -11,9 +11,8 @@ const testAnswerMachine = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
         console.log('mongoose connected');
 
-        const resultAnswerMachine = await answerMachineFunc({
-            threadId: new mongoose.Types.ObjectId('69771a93cc85f2d03c4c3418'),
-            username: 'nibf',
+        const resultAnswerMachine = await answerMachineInitiateFunc({
+            messageId: new mongoose.Types.ObjectId('6991a891a1ba7ca8660eeb9f'),
         });
         console.log('resultAnswerMachine', resultAnswerMachine);
 
