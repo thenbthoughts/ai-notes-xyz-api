@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 import { ModelChatLlmAnswerMachine } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema";
 import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
 import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { ModelAnswerMachineSubQuestion } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 import { getLlmConfig, LlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
@@ -60,7 +62,7 @@ const step5EvaluateAnswer = async ({
         const finalAnswer = answerMachineRecord.finalAnswer || '';
 
         // Evaluate the final answer using LLM
-        const evaluation = await evaluateFinalAnswer(finalAnswer, llmConfig, answerMachineRecord.threadId, answerMachineRecord.username);
+        const evaluation = await evaluateFinalAnswer(finalAnswer, llmConfig, answerMachineRecord.threadId, answerMachineRecord.username, answerMachineRecordId);
 
         // Update the answer machine record with evaluation results
         await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
@@ -181,7 +183,8 @@ const evaluateFinalAnswer = async (
     finalAnswer: string,
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
-    username: string
+    username: string,
+    answerMachineRecordId: mongoose.Types.ObjectId
 ): Promise<EvaluationResult> => {
     if (!finalAnswer || finalAnswer.trim().length === 0) {
         return {
@@ -192,10 +195,71 @@ const evaluateFinalAnswer = async (
     }
 
     try {
-        // Create evaluation prompt
-        const evaluationPrompt = `You are an expert evaluator. Evaluate the following answer for quality, completeness, and accuracy.
+        // Get last 10 conversations
+        const last10Messages = await ModelChatLlm.aggregate([
+            {
+                $match: {
+                    threadId: threadId,
+                    username: username,
+                    type: 'text',
+                }
+            },
+            {
+                $sort: {
+                    createdAtUtc: -1,
+                }
+            },
+            {
+                $limit: 10,
+            },
+            {
+                $sort: {
+                    createdAtUtc: 1,
+                }
+            }
+        ]) as IChatLlm[];
 
-Answer to evaluate:
+        const conversationContext = last10Messages
+            .map(msg => msg.content)
+            .filter(content => typeof content === 'string' && content.trim().length > 0)
+            .join('\n')
+            .trim();
+
+        // Get sub-questions for this answer machine record
+        const subQuestions = await ModelAnswerMachineSubQuestion.find({
+            answerMachineRecordId,
+            status: 'answered',
+        }).sort({ createdAtUtc: 1 });
+
+        const subQuestionsContext = subQuestions
+            .map(sq => `Q: ${sq.question || 'N/A'}\nA: ${sq.answer || 'N/A'}`)
+            .join('\n\n');
+
+        // Get intermediate answers from answer machine record
+        const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
+        const intermediateAnswers = answerMachineRecord?.intermediateAnswers ?? [];
+
+        const intermediateAnswersContext = intermediateAnswers
+            .filter(answer => answer && typeof answer === 'string' && answer.trim())
+            .map((answer, index) => `Intermediate ${index + 1}:\n${answer.trim()}`)
+            .join('\n\n');
+
+        // Create evaluation prompt
+        let evaluationPrompt = `You are an expert evaluator. Evaluate the following answer for quality, completeness, and accuracy.`;
+
+        if (conversationContext) {
+            evaluationPrompt += `\n\nCONVERSATION CONTEXT:\n${conversationContext}`;
+        }
+
+        if (subQuestionsContext) {
+            evaluationPrompt += `\n\nSUB-QUESTIONS AND ANSWERS:\n${subQuestionsContext}`;
+        }
+
+        if (intermediateAnswersContext) {
+            evaluationPrompt += `\n\nINTERMEDIATE ANSWERS (from previous iterations):\n${intermediateAnswersContext}`;
+        }
+
+        evaluationPrompt += `\n\nAnswer to evaluate:
 ${finalAnswer}
 
 Please evaluate this answer on the following criteria:
@@ -238,9 +302,12 @@ Be strict but fair in your evaluation. Only mark as satisfactory if the answer i
         });
 
         if (!llmResult.success || !llmResult.content) {
-            console.warn('[Evaluation] LLM evaluation failed, falling back to basic check');
-            // Fallback to basic programmatic evaluation
-            return fallbackEvaluation(finalAnswer);
+            console.warn('[Evaluation] LLM evaluation failed');
+            return {
+                isSatisfactory: false,
+                reason: 'LLM evaluation failed',
+                confidence: 0,
+            };
         }
 
         // Track tokens for evaluation
@@ -270,50 +337,31 @@ Be strict but fair in your evaluation. Only mark as satisfactory if the answer i
                     reason: parsed.reason.substring(0, 100), // Limit reason length
                 };
             } else {
-                console.warn('[Evaluation] Invalid LLM response structure, falling back to basic check');
-                return fallbackEvaluation(finalAnswer);
+                console.warn('[Evaluation] Invalid LLM response structure');
+                return {
+                    isSatisfactory: false,
+                    reason: 'Invalid LLM response structure',
+                    confidence: 0,
+                };
             }
         } catch (parseError) {
-            console.warn('[Evaluation] Failed to parse LLM response, falling back to basic check:', parseError);
-            return fallbackEvaluation(finalAnswer);
+            console.warn('[Evaluation] Failed to parse LLM response:', parseError);
+            return {
+                isSatisfactory: false,
+                reason: 'Failed to parse LLM response',
+                confidence: 0,
+            };
         }
 
     } catch (error) {
         console.error('[Evaluation] Error during LLM evaluation:', error);
-        // Fallback to basic programmatic evaluation
-        return fallbackEvaluation(finalAnswer);
-    }
-};
-
-/**
- * Fallback evaluation when LLM evaluation fails
- */
-const fallbackEvaluation = (finalAnswer: string): EvaluationResult => {
-    if (!finalAnswer || finalAnswer.trim().length === 0) {
         return {
             isSatisfactory: false,
-            reason: 'Final answer is empty',
+            reason: 'Error during LLM evaluation',
             confidence: 0,
         };
     }
-
-    const trimmedAnswer = finalAnswer.trim();
-    let score = 0;
-    const maxScore = 100;
-
-    // Basic quality checks
-    if (trimmedAnswer.length >= 50) score += 40; // Length
-    if (trimmedAnswer.split(/[.!?]+/).length >= 3) score += 30; // Multiple sentences
-    if (!trimmedAnswer.includes('?')) score += 30; // No lingering questions
-
-    const isSatisfactory = score >= 70;
-    const confidence = Math.min(score / maxScore, 1);
-
-    return {
-        isSatisfactory,
-        reason: `Fallback evaluation: ${isSatisfactory ? 'Passed' : 'Failed'} basic quality checks`,
-        confidence,
-    };
 };
+
 
 export default step5EvaluateAnswer;
