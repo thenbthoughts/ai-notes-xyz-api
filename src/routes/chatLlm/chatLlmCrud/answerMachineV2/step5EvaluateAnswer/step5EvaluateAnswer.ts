@@ -4,6 +4,8 @@ import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.
 import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
 import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
 import { getLlmConfig, LlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
+import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
+import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 
 interface EvaluationResult {
     isSatisfactory: boolean;
@@ -47,11 +49,18 @@ const step5EvaluateAnswer = async ({
 
         // Get LLM configuration for proper token tracking
         const llmConfig = await getLlmConfig({ threadId: answerMachineRecord.threadId });
+        if (!llmConfig) {
+            return {
+                success: false,
+                errorReason: 'Failed to get LLM configuration for evaluation',
+                data: null,
+            };
+        }
 
         const finalAnswer = answerMachineRecord.finalAnswer || '';
 
-        // Evaluate the final answer
-        const evaluation = evaluateFinalAnswer(finalAnswer);
+        // Evaluate the final answer using LLM
+        const evaluation = await evaluateFinalAnswer(finalAnswer, llmConfig, answerMachineRecord.threadId, answerMachineRecord.username);
 
         // Update the answer machine record with evaluation results
         await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
@@ -166,9 +175,120 @@ async function createFinalAnswerMessageWithTokens(
 }
 
 /**
- * Evaluate if the final answer is satisfactory
+ * Evaluate if the final answer is satisfactory using LLM
  */
-const evaluateFinalAnswer = (finalAnswer: string): EvaluationResult => {
+const evaluateFinalAnswer = async (
+    finalAnswer: string,
+    llmConfig: LlmConfig,
+    threadId: mongoose.Types.ObjectId,
+    username: string
+): Promise<EvaluationResult> => {
+    if (!finalAnswer || finalAnswer.trim().length === 0) {
+        return {
+            isSatisfactory: false,
+            reason: 'Final answer is empty',
+            confidence: 0,
+        };
+    }
+
+    try {
+        // Create evaluation prompt
+        const evaluationPrompt = `You are an expert evaluator. Evaluate the following answer for quality, completeness, and accuracy.
+
+Answer to evaluate:
+${finalAnswer}
+
+Please evaluate this answer on the following criteria:
+1. Completeness - Does it fully answer the question?
+2. Accuracy - Is the information correct and well-founded?
+3. Clarity - Is it clearly written and easy to understand?
+4. Relevance - Does it stay on topic and provide relevant information?
+
+Respond with a JSON object in this exact format:
+{
+  "isSatisfactory": boolean (true if the answer meets quality standards, false otherwise),
+  "confidence": number (0.0 to 1.0 - how confident you are in your evaluation),
+  "reason": "string (brief explanation of your evaluation, max 100 characters)"
+}
+
+Be strict but fair in your evaluation. Only mark as satisfactory if the answer is truly comprehensive and accurate.`;
+
+        const messages: Message[] = [
+            {
+                role: 'system',
+                content: 'You are an expert evaluator. Always respond with valid JSON in the specified format.',
+            },
+            {
+                role: 'user',
+                content: evaluationPrompt,
+            },
+        ];
+
+        // Call LLM for evaluation
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider,
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.model,
+            messages,
+            temperature: 0.1, // Low temperature for consistent evaluation
+            maxTokens: 200,
+            responseFormat: 'json_object',
+            headersExtra: llmConfig.customHeaders,
+        });
+
+        if (!llmResult.success || !llmResult.content) {
+            console.warn('[Evaluation] LLM evaluation failed, falling back to basic check');
+            // Fallback to basic programmatic evaluation
+            return fallbackEvaluation(finalAnswer);
+        }
+
+        // Track tokens for evaluation
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'evaluation'
+            );
+        } catch (tokenError) {
+            console.warn('[Evaluation] Failed to track tokens:', tokenError);
+        }
+
+        // Parse LLM evaluation result
+        try {
+            const parsed = JSON.parse(llmResult.content);
+
+            // Validate the response structure
+            if (typeof parsed.isSatisfactory === 'boolean' &&
+                typeof parsed.confidence === 'number' &&
+                typeof parsed.reason === 'string') {
+
+                return {
+                    isSatisfactory: parsed.isSatisfactory,
+                    confidence: Math.max(0, Math.min(1, parsed.confidence)), // Clamp to 0-1
+                    reason: parsed.reason.substring(0, 100), // Limit reason length
+                };
+            } else {
+                console.warn('[Evaluation] Invalid LLM response structure, falling back to basic check');
+                return fallbackEvaluation(finalAnswer);
+            }
+        } catch (parseError) {
+            console.warn('[Evaluation] Failed to parse LLM response, falling back to basic check:', parseError);
+            return fallbackEvaluation(finalAnswer);
+        }
+
+    } catch (error) {
+        console.error('[Evaluation] Error during LLM evaluation:', error);
+        // Fallback to basic programmatic evaluation
+        return fallbackEvaluation(finalAnswer);
+    }
+};
+
+/**
+ * Fallback evaluation when LLM evaluation fails
+ */
+const fallbackEvaluation = (finalAnswer: string): EvaluationResult => {
     if (!finalAnswer || finalAnswer.trim().length === 0) {
         return {
             isSatisfactory: false,
@@ -180,53 +300,18 @@ const evaluateFinalAnswer = (finalAnswer: string): EvaluationResult => {
     const trimmedAnswer = finalAnswer.trim();
     let score = 0;
     const maxScore = 100;
-    let reasons: string[] = [];
 
-    // Length check (minimum 50 characters for a meaningful answer)
-    if (trimmedAnswer.length >= 50) {
-        score += 30;
-        reasons.push('Sufficient length');
-    } else {
-        reasons.push('Answer too short');
-    }
+    // Basic quality checks
+    if (trimmedAnswer.length >= 50) score += 40; // Length
+    if (trimmedAnswer.split(/[.!?]+/).length >= 3) score += 30; // Multiple sentences
+    if (!trimmedAnswer.includes('?')) score += 30; // No lingering questions
 
-    // Content diversity check (has multiple sentences)
-    const sentences = trimmedAnswer.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    if (sentences.length >= 3) {
-        score += 25;
-        reasons.push('Multiple sentences indicate comprehensive answer');
-    } else {
-        reasons.push('Answer lacks detail (few sentences)');
-    }
-
-    // Check for question-answering indicators
-    const hasAnswerIndicators = /\b(because|therefore|thus|so|accordingly|consequently|as a result)\b/i.test(trimmedAnswer) ||
-        /\b(I recommend|you should|consider|try|use)\b/i.test(trimmedAnswer) ||
-        trimmedAnswer.includes('?') === false; // No lingering questions
-
-    if (hasAnswerIndicators) {
-        score += 25;
-        reasons.push('Contains answer indicators');
-    } else {
-        reasons.push('Missing answer indicators');
-    }
-
-    // Check for completeness (doesn't end with "..." or similar)
-    const endsIncompletely = /\.{3,}$|\.{2}$|etc\.?$|and so on\.?$/i.test(trimmedAnswer);
-    if (!endsIncompletely) {
-        score += 20;
-        reasons.push('Answer appears complete');
-    } else {
-        reasons.push('Answer appears incomplete');
-    }
-
-    // Determine if satisfactory (threshold: 70% score)
     const isSatisfactory = score >= 70;
     const confidence = Math.min(score / maxScore, 1);
 
     return {
         isSatisfactory,
-        reason: reasons.join('; '),
+        reason: `Fallback evaluation: ${isSatisfactory ? 'Passed' : 'Failed'} basic quality checks`,
         confidence,
     };
 };

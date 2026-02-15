@@ -52,7 +52,7 @@ export const trackAnswerMachineTokens = async (
         costInUsd: number;
     },
     username: string,
-    queryType?: 'question_generation' | 'sub_question_answer' | 'intermediate_answer' | 'evaluation' | 'final_answer'
+    queryType?: 'question_generation' | 'sub_question_answer' | 'evaluation' | 'final_answer'
 ): Promise<void> => {
     try {
         // Create individual token record for this execution
