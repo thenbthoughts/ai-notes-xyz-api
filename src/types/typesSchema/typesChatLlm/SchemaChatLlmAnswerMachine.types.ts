@@ -24,7 +24,6 @@ export interface IChatLlmAnswerMachine extends Document {
     // answers
     intermediateAnswers: string[];
     finalAnswer: string;
-    isSatisfactoryFinalAnswer: boolean;
 
     // token tracking
     totalPromptTokens: number;

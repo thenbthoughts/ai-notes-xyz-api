@@ -65,17 +65,7 @@ const answerMachineInitiateFunc = async ({
             const answerMachineRecordValidate = await ModelChatLlmAnswerMachine.findOne({ _id: answerMachineRecord._id });
             if (answerMachineRecordValidate) {
 
-                let shouldBreak = false;
-
-                if (i + 1 > answerMachineRecord.maxNumberOfIterations) {
-                    shouldBreak = true;
-                }
-                if (answerMachineRecordValidate.isSatisfactoryFinalAnswer) {
-                    shouldBreak = true;
-                }
-
-                if (shouldBreak) {
-                    // answer machine has finished (successfully or unsuccessfully)
+                if (answerMachineRecordValidate.status === 'answered') {
                     break;
                 }
 
@@ -91,7 +81,7 @@ const answerMachineInitiateFunc = async ({
         // get the final answer from the answer machine record
         const finalAnswer = await ModelChatLlmAnswerMachine.findOne({ _id: answerMachineRecord._id });
         if (finalAnswer) {
-            if (finalAnswer?.isSatisfactoryFinalAnswer) {
+            if (finalAnswer?.status === 'answered') {
                 return {
                     success: true,
                     errorReason: '',

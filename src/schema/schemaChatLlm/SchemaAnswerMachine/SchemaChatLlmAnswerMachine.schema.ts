@@ -69,10 +69,6 @@ const chatLlmAnswerMachineSchema = new Schema<IChatLlmAnswerMachine>({
         type: String,
         default: '',
     },
-    isSatisfactoryFinalAnswer: {
-        type: Boolean,
-        default: false,
-    },
 
     // token tracking - totals only (details in embedded tokenRecords)
     totalPromptTokens: {

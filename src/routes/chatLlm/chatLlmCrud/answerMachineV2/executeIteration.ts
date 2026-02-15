@@ -62,7 +62,7 @@ const executeIteration = async ({
             };
         }
 
-        // Step 5: Evaluate the answer and set the isSatisfactoryFinalAnswer
+        // Step 5: Evaluate the answer and set the status to answered if satisfactory
         const resultEvaluateAnswer = await step5EvaluateAnswer({
             answerMachineRecordId,
         });

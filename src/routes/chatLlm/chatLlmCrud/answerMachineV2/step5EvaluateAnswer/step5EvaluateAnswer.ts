@@ -17,7 +17,7 @@ const step5EvaluateAnswer = async ({
     success: boolean;
     errorReason: string;
     data: {
-        isSatisfactoryFinalAnswer: boolean;
+        isSatisfactory: boolean;
         evaluationReason: string;
     } | null;
 }> => {
@@ -58,10 +58,10 @@ const step5EvaluateAnswer = async ({
             evaluation.isSatisfactory &&
             answerMachineRecord.currentIteration >= answerMachineRecord.minNumberOfIterations // minimum number of iterations reached
         ) {
-            // set the isSatisfactoryFinalAnswer to true
+            // set the status to answered
             await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
                 $set: {
-                    isSatisfactoryFinalAnswer: true,
+                    status: 'answered',
                     finalAnswer: finalAnswer,
                 }
             });
@@ -85,7 +85,7 @@ const step5EvaluateAnswer = async ({
             success: true,
             errorReason: '',
             data: {
-                isSatisfactoryFinalAnswer: evaluation.isSatisfactory,
+                isSatisfactory: evaluation.isSatisfactory,
                 evaluationReason: evaluation.reason,
             },
         };
@@ -137,8 +137,8 @@ const evaluateFinalAnswer = (finalAnswer: string): EvaluationResult => {
 
     // Check for question-answering indicators
     const hasAnswerIndicators = /\b(because|therefore|thus|so|accordingly|consequently|as a result)\b/i.test(trimmedAnswer) ||
-                               /\b(I recommend|you should|consider|try|use)\b/i.test(trimmedAnswer) ||
-                               trimmedAnswer.includes('?') === false; // No lingering questions
+        /\b(I recommend|you should|consider|try|use)\b/i.test(trimmedAnswer) ||
+        trimmedAnswer.includes('?') === false; // No lingering questions
 
     if (hasAnswerIndicators) {
         score += 25;
