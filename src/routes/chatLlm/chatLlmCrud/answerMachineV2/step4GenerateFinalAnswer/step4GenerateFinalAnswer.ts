@@ -49,7 +49,7 @@ const step4GenerateFinalAnswer = async ({
         console.log('Generating final answer for thread:', threadId);
 
         // Inline implementation from GenerateFinalAnswer class
-        const result = await generateFinalAnswerInline(threadId, username);
+        const result = await generateFinalAnswerInline(threadId, username, answerMachineRecordId);
 
         if (!result.success) {
             console.error('Failed to generate final answer:', result.errorReason);
@@ -93,7 +93,8 @@ const step4GenerateFinalAnswer = async ({
  */
 async function generateFinalAnswerInline(
     threadId: mongoose.Types.ObjectId,
-    username: string
+    username: string,
+    answerMachineRecordId: mongoose.Types.ObjectId
 ): Promise<{
     success: boolean;
     finalAnswer: string;
@@ -126,7 +127,7 @@ async function generateFinalAnswerInline(
     }
 
     // Generate final answer
-    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username);
+    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username, answerMachineRecordId);
     if (!finalAnswerResult.answer) {
         return {
             success: false,
@@ -298,16 +299,15 @@ async function getConversationMessages(threadId: mongoose.Types.ObjectId, userna
 }
 
 /**
- * Get all answered sub-questions
+ * Get all answered sub-questions for a specific answer machine record
  */
-async function getAnsweredSubQuestions(threadId: mongoose.Types.ObjectId, username: string): Promise<Array<{
+async function getAnsweredSubQuestions(answerMachineRecordId: mongoose.Types.ObjectId): Promise<Array<{
     question: string;
     answer: string;
 }>> {
     try {
         const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId: threadId,
-            username: username,
+            answerMachineRecordId: answerMachineRecordId,
             status: 'answered',
         }).sort({ createdAtUtc: 1 });
 
@@ -355,13 +355,27 @@ function formatSubQuestionAnswers(subQuestions: Array<{ question: string; answer
 }
 
 /**
+ * Format intermediate answers for LLM
+ */
+function formatIntermediateAnswers(intermediateAnswers: string[]): string {
+    if (!Array.isArray(intermediateAnswers) || intermediateAnswers.length === 0) {
+        return '';
+    }
+    return intermediateAnswers
+        .filter((a) => a && typeof a === 'string' && a.trim())
+        .map((a, index) => `Intermediate ${index + 1}:\n${a.trim()}`)
+        .join('\n\n');
+}
+
+/**
  * Generate final comprehensive answer
  */
 async function generateFinalAnswerContent(
     thread: any,
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
-    username: string
+    username: string,
+    answerMachineRecordId: mongoose.Types.ObjectId
 ): Promise<{
     answer: string;
     tokens?: {
@@ -377,9 +391,14 @@ async function generateFinalAnswerContent(
         const conversationMessages = await getConversationMessages(threadId, username);
         const conversationText = formatConversationMessages(conversationMessages);
 
-        // Get answered sub-questions
-        const answeredSubQuestions = await getAnsweredSubQuestions(threadId, username);
+        // Get answered sub-questions for this specific answer machine record
+        const answeredSubQuestions = await getAnsweredSubQuestions(answerMachineRecordId);
         const subQuestionsText = formatSubQuestionAnswers(answeredSubQuestions);
+
+        // Get intermediate answers from answer machine record (if any)
+        const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
+        const intermediateAnswers = answerMachineRecord?.intermediateAnswers ?? [];
+        const intermediateAnswersText = formatIntermediateAnswers(intermediateAnswers);
 
         // Get system prompt from thread
         const systemPrompt = thread?.systemPrompt || 'You are a helpful AI assistant.';
@@ -395,7 +414,13 @@ async function generateFinalAnswerContent(
             userPrompt += `RESEARCH FINDINGS (Answers to sub-questions):\n${subQuestionsText}\n\n`;
         }
 
-        userPrompt += `Based on the conversation history and the research findings above, provide a comprehensive final answer that:\n`;
+        if (intermediateAnswersText) {
+            userPrompt += `INTERMEDIATE ANSWERS (from previous iterations):\n${intermediateAnswersText}\n\n`;
+        }
+
+        const contextParts = ['conversation history', 'research findings'];
+        if (intermediateAnswersText) contextParts.push('intermediate answers');
+        userPrompt += `Based on the ${contextParts.join(', ')} above, provide a comprehensive final answer that:\n`;
         userPrompt += `1. Directly addresses the user's main question or problem\n`;
         userPrompt += `2. Synthesizes information from the research findings\n`;
         userPrompt += `3. Provides a clear, well-structured response\n`;

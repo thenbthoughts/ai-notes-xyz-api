@@ -14,7 +14,7 @@ const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTo
     // query type
     queryType: {
         type: String,
-        enum: ['question_generation', 'sub_question_answer', 'intermediate_answer', 'evaluation', 'final_answer'],
+        enum: ['question_generation', 'sub_question_answer', 'evaluation', 'final_answer'],
         required: true,
         index: true,
     },

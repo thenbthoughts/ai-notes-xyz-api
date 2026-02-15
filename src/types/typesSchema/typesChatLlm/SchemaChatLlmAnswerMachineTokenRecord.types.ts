@@ -3,7 +3,6 @@ import mongoose, { Document } from 'mongoose';
 export type AnswerMachineQueryType = 
     | 'question_generation' 
     | 'sub_question_answer' 
-    | 'intermediate_answer' 
     | 'evaluation' 
     | 'final_answer';
 

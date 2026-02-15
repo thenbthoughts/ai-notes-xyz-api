@@ -45,10 +45,9 @@ const step3AnswerSubQuestions = async ({
 
         const { threadId, username } = answerMachineRecord;
 
-        // Find all pending sub-questions for this thread
+        // Find all pending sub-questions for this specific answer machine record
         const pendingSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId,
-            username,
+            answerMachineRecordId,
             status: 'pending',
         });
 
