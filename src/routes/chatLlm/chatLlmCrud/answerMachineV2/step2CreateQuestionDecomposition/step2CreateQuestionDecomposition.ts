@@ -96,10 +96,12 @@ const step2CreateQuestionDecomposition = async ({
                 systemPrompt += `The previous answer had the following gaps or unsatisfactory areas:\n`;
                 systemPrompt += intermediateAnswers.map((answer: string, i: number) => `${i + 1}. ${answer}`).join('\n');
             }
-            systemPrompt += `\n\nGenerate questions specifically to address these gaps and improve the answer quality.\n`;
+            systemPrompt += `\n\nGenerate detailed, keyword-rich questions specifically to address these gaps and improve the answer quality.\n`;
             systemPrompt += `Focus ONLY on questions that will help fill these specific gaps.\n`;
+            systemPrompt += `Make each question comprehensive and specific, including relevant keywords and technical terms that will help search and retrieve relevant context from documents, notes, and knowledge base.\n`;
+            systemPrompt += `Explore various related keywords, synonyms, alternative terms, and different phrasings to maximize context retrieval: include technical jargon, brand names, abbreviations, industry terms, and related concepts that might be documented under different names.\n`;
             systemPrompt += `Reply with a JSON object:\n`;
-            systemPrompt += `{"missingRequirements": [questions addressing the gaps], "contextualQuestions": [], "implementationDetails": []}.\n`;
+            systemPrompt += `{"missingRequirements": [detailed questions with keywords addressing the gaps], "contextualQuestions": [], "implementationDetails": []}.\n`;
             systemPrompt += `Maximum 3-5 questions total, only if truly needed to address the gaps. Use empty arrays if no questions are needed.`;
         } else {
             // Iteration 1: Standard question generation with improved filtering
@@ -110,17 +112,21 @@ const step2CreateQuestionDecomposition = async ({
             systemPrompt += `3. Exclude formatting, presentation, UI, or display preferences\n`;
             systemPrompt += `4. Prioritize questions that directly help solve the user's problem\n`;
             systemPrompt += `5. Maximum 3-5 total questions, only if truly essential\n`;
+            systemPrompt += `6. Make each question detailed and keyword-rich, including specific technical terms, product names, concepts, and search terms that will help retrieve relevant context from documents and knowledge base\n`;
+            systemPrompt += `7. Structure questions to be comprehensive enough to generate meaningful search queries for finding related information\n`;
+            systemPrompt += `8. Include various related keywords, synonyms, alternative terms, and different phrasings of the same concepts to maximize context retrieval efficiency\n`;
+            systemPrompt += `9. Consider multiple search angles: technical terms, brand names, common abbreviations, industry jargon, and related concepts that users might have documented under different names\n`;
             systemPrompt += `Reply with a JSON object:\n`;
-            systemPrompt += `{"missingRequirements": [essential questions only], "contextualQuestions": [0-1 if critical], "implementationDetails": [0-1 if critical]}.\n`;
+            systemPrompt += `{"missingRequirements": [detailed keyword-rich questions], "contextualQuestions": [0-1 if critical], "implementationDetails": [0-1 if critical]}.\n`;
             systemPrompt += `Use empty arrays if nothing is missing.`;
         }
 
         let userPrompt = '';
         if (currentIteration > 1) {
-            userPrompt += `Analyze the conversation and the identified gaps above. Generate questions that will help gather information to address these specific gaps:\n\n${messagesContent}`;
+            userPrompt += `Analyze the conversation and the identified gaps above. Generate detailed, keyword-rich questions that will help gather information to address these specific gaps. Each question should be comprehensive and explore various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will efficiently retrieve context from documents, notes, tasks, and knowledge base:\n\n${messagesContent}`;
         } else {
             userPrompt += `Analyze the following conversation and identify any missing requirements needed to solve the user's question.`;
-            userPrompt += `Focus on information that is actually required but not provided:\n\n${messagesContent}`;
+            userPrompt += `Focus on information that is actually required but not provided. Make each question detailed and keyword-rich, exploring various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will help search and retrieve relevant context efficiently from all available sources:\n\n${messagesContent}`;
         }
 
         // Prepare LLM messages
