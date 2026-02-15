@@ -8,7 +8,7 @@ import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaCh
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
-import { extractTokensFromRawResponse, calculateCostInUsd, trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
+import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -433,22 +433,21 @@ async function generateFinalAnswerContent(
             return { answer: '' };
         }
 
-        // Extract token information
-        const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
-        const costInUsd = calculateCostInUsd(
-            tokenInfo.promptTokens,
-            tokenInfo.completionTokens,
-            tokenInfo.reasoningTokens,
-            llmConfig.model,
-            llmConfig.provider
-        );
+        // Track tokens for final answer generation using usageStats from fetchLlmUnified
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'final_answer'
+            );
+        } catch (tokenError) {
+            console.warn(`[Final Answer] Failed to track tokens:`, tokenError);
+        }
 
         return {
             answer: llmResult.content.trim(),
-            tokens: {
-                ...tokenInfo,
-                costInUsd,
-            },
+            tokens: llmResult.usageStats,
         };
     } catch (error) {
         console.error('Error in generateFinalAnswer:', error);

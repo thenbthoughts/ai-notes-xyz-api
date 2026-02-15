@@ -116,6 +116,13 @@ export interface FetchLlmResult {
   error: string; // non-empty when success === false
   // Tool/function calls (if any)
   toolCalls?: ToolCall[];
+  usageStats: {
+    promptTokens: number;
+    completionTokens: number;
+    reasoningTokens: number;
+    totalTokens: number;
+    costInUsd: number;
+  };
 }
 
 /**
@@ -209,7 +216,13 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
     if (params.provider === 'ollama') {
       // apiEndpoint is required for Ollama (e.g., http://localhost:11434)
       if (!params.apiEndpoint) {
-        return { success: false, content: '', raw: null, error: 'Ollama endpoint is required' };
+        return {
+          success: false,
+          content: '',
+          raw: null,
+          error: 'Ollama endpoint is required',
+          usageStats: { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0, costInUsd: 0 }
+        };
       }
 
       // Try to pull the model if it doesn't exist
@@ -257,7 +270,29 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
 
       const content: string = response?.data?.message?.content ?? '';
       const toolCalls: ToolCall[] | undefined = response?.data?.message?.tool_calls;
-      return { success: content.length > 0 || !!toolCalls?.length, content, raw: response.data, error: '', toolCalls };
+
+      // Extract usage statistics from Ollama response
+      const usage = response?.data;
+      const promptTokens = usage?.prompt_eval_count || 0;
+      const completionTokens = usage?.eval_count || 0;
+      const totalTokens = promptTokens + completionTokens;
+
+      const usageStats = {
+        promptTokens,
+        completionTokens,
+        reasoningTokens: 0, // Ollama doesn't typically provide reasoning tokens
+        totalTokens,
+        costInUsd: 0, // Cost calculation can be done elsewhere if needed
+      };
+
+      return {
+        success: content.length > 0 || !!toolCalls?.length,
+        content,
+        raw: response.data,
+        error: '',
+        toolCalls,
+        usageStats
+      };
     }
 
     // OpenAI-compatible providers via REST like openrouter, groq, openai, etc.
@@ -303,14 +338,50 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
     const choice: any = (response as any)?.data?.choices?.[0];
     const content: string = choice?.message?.content ?? '';
     const toolCalls: ToolCall[] | undefined = choice?.message?.tool_calls;
-    return { success: content.length > 0 || !!toolCalls?.length, content, raw: response.data, error: '', toolCalls };
+
+    // Extract usage statistics from OpenAI-compatible response
+    const usage = response?.data?.usage;
+    const promptTokens = usage?.prompt_tokens || usage?.promptTokens || 0;
+    const completionTokens = usage?.completion_tokens || usage?.completionTokens || 0;
+    const reasoningTokens = usage?.reasoning_tokens || usage?.reasoningTokens || 0;
+    const totalTokens = usage?.total_tokens || usage?.totalTokens || (promptTokens + completionTokens + reasoningTokens);
+    const costInUsd = usage?.cost || 0; 
+
+    const usageStats = {
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      totalTokens,
+      costInUsd,
+    };
+
+    return {
+      success: content.length > 0 || !!toolCalls?.length,
+      content,
+      raw: response.data,
+      error: '',
+      toolCalls,
+      usageStats
+    };
   } catch (error: any) {
     console.error('Llm failed error: ', error);
     console.error('Llm failed error data: ', error?.response?.data);
     if (isAxiosError(error)) {
-      return { success: false, content: '', raw: error.response?.data, error: error.message };
+      return {
+        success: false,
+        content: '',
+        raw: error.response?.data,
+        error: error.message,
+        usageStats: { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0, costInUsd: 0 }
+      };
     }
-    return { success: false, content: '', raw: null, error: (error as Error)?.message || 'Unknown error' };
+    return {
+      success: false,
+      content: '',
+      raw: null,
+      error: (error as Error)?.message || 'Unknown error',
+      usageStats: { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0, costInUsd: 0 }
+    };
   }
 }
 

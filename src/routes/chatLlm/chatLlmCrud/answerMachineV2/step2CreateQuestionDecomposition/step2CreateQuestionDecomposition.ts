@@ -6,6 +6,7 @@ import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/ut
 import { ModelAnswerMachineSubQuestion } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 
 import { getLlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
+import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 
 const step2CreateQuestionDecomposition = async ({
     answerMachineRecordId,
@@ -169,6 +170,18 @@ const step2CreateQuestionDecomposition = async ({
                 errorReason: errorMsg,
                 data: null,
             };
+        }
+
+        // Track tokens for question generation using usageStats from fetchLlmUnified
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'question_generation'
+            );
+        } catch (tokenError) {
+            console.warn(`[Question Generation] Failed to track tokens:`, tokenError);
         }
 
         // Parse the JSON response
