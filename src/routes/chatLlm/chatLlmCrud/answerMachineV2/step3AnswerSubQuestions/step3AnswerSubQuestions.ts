@@ -10,7 +10,7 @@ import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfo
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { NodeHtmlMarkdown } from "node-html-markdown";
-import { extractTokensFromRawResponse, calculateCostInUsd, trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
+import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 import { getLlmConfig, LlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
 
 interface RelevantContextResponse {
@@ -43,10 +43,12 @@ const step3AnswerSubQuestions = async ({
             };
         }
 
+        const { threadId, username } = answerMachineRecord;
+
         // Find all pending sub-questions for this thread
         const pendingSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId: answerMachineRecord.threadId,
-            username: answerMachineRecord.username,
+            threadId,
+            username,
             status: 'pending',
         });
 
@@ -195,7 +197,7 @@ async function answerSubQuestionInline(subQuestionId: mongoose.Types.ObjectId): 
         const { threadId, username, question, llmConfig } = initData;
 
         // Step 1: Generate keywords
-        const keywords = await generateKeywordsInline(question, llmConfig);
+        const keywords = await generateKeywordsInline(question, llmConfig, threadId, username);
         if (keywords.length === 0) {
             return {
                 success: false,
@@ -289,7 +291,7 @@ async function initializeSubQuestion(subQuestionId: mongoose.Types.ObjectId): Pr
 /**
  * Generate keywords from the sub-question
  */
-async function generateKeywordsInline(question: string, llmConfig: LlmConfig): Promise<string[]> {
+async function generateKeywordsInline(question: string, llmConfig: LlmConfig, threadId: mongoose.Types.ObjectId, username: string): Promise<string[]> {
     try {
         const llmMessages: Message[] = [
             {
@@ -317,6 +319,18 @@ async function generateKeywordsInline(question: string, llmConfig: LlmConfig): P
         if (!llmResult.success || !llmResult.content) {
             console.error('Failed to generate keywords:', llmResult.error);
             return [];
+        }
+
+        // Track tokens for sub question answer (keyword extraction) using usageStats from fetchLlmUnified
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'sub_question_answer'
+            );
+        } catch (tokenError) {
+            console.warn(`[Sub Question Answer - Keywords] Failed to track tokens:`, tokenError);
         }
 
         try {
@@ -478,6 +492,18 @@ async function scoreContextReferencesInline(
         if (!llmResult.success || !llmResult.content) {
             console.error('Failed to score context references:', llmResult.error);
             return [];
+        }
+
+        // Track tokens for sub question answer (context scoring) using usageStats from fetchLlmUnified
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'sub_question_answer'
+            );
+        } catch (tokenError) {
+            console.warn(`[Sub Question Answer - Context Scoring] Failed to track tokens:`, tokenError);
         }
 
         try {
@@ -868,22 +894,21 @@ async function generateAnswerInline(
             return { answer: '' };
         }
 
-        // Extract token information
-        const tokenInfo = extractTokensFromRawResponse(llmResult.raw);
-        const costInUsd = calculateCostInUsd(
-            tokenInfo.promptTokens,
-            tokenInfo.completionTokens,
-            tokenInfo.reasoningTokens,
-            llmConfig.model,
-            llmConfig.provider
-        );
+        // Track tokens for sub question answer (final answer generation) using usageStats from fetchLlmUnified
+        try {
+            await trackAnswerMachineTokens(
+                threadId,
+                llmResult.usageStats,
+                username,
+                'sub_question_answer'
+            );
+        } catch (tokenError) {
+            console.warn(`[Sub Question Answer - Final Answer] Failed to track tokens:`, tokenError);
+        }
 
         return {
             answer: llmResult.content.trim(),
-            tokens: {
-                ...tokenInfo,
-                costInUsd,
-            },
+            tokens: llmResult.usageStats,
         };
     } catch (error) {
         console.error('Error in generateAnswerInline:', error);
