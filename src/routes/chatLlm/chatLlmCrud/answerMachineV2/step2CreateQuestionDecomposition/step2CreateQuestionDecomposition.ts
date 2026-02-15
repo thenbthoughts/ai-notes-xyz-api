@@ -225,7 +225,7 @@ const step2CreateQuestionDecomposition = async ({
                 answer: '',
                 status: 'pending' as const,
                 questionOrder: index,
-                iteration: currentIteration,
+                answerMachineIteration: currentIteration,
             }));
 
             await ModelAnswerMachineSubQuestion.insertMany(insertManyArr);

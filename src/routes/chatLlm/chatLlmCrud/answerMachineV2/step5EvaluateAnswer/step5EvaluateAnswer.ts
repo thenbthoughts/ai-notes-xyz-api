@@ -232,7 +232,7 @@ Be strict but fair in your evaluation. Only mark as satisfactory if the answer i
             model: llmConfig.model,
             messages,
             temperature: 0.1, // Low temperature for consistent evaluation
-            maxTokens: 200,
+            maxTokens: 1024,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
         });

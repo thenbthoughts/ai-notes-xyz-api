@@ -4,8 +4,10 @@ import mongoose, { Document } from 'mongoose';
 export interface IAnswerMachineSubQuestion extends Document {
     // identification
     _id: mongoose.Types.ObjectId;
-    threadId: mongoose.Types.ObjectId | null;
-    parentMessageId: mongoose.Types.ObjectId | null; // Refers to the main user's message
+    threadId: mongoose.Types.ObjectId;
+    parentMessageId: mongoose.Types.ObjectId; // Refers to the main user's message
+    answerMachineRecordId: mongoose.Types.ObjectId;
+    answerMachineIteration: number;
 
     // fields
     question: string; // The actual sub-question text

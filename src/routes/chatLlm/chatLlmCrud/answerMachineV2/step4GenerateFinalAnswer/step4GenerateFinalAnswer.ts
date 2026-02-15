@@ -49,7 +49,7 @@ const step4GenerateFinalAnswer = async ({
         console.log('Generating final answer for thread:', threadId);
 
         // Inline implementation from GenerateFinalAnswer class
-        const result = await generateFinalAnswerInline(threadId, username);
+        const result = await generateFinalAnswerInline(threadId, username, answerMachineRecordId);
 
         if (!result.success) {
             console.error('Failed to generate final answer:', result.errorReason);
@@ -93,7 +93,8 @@ const step4GenerateFinalAnswer = async ({
  */
 async function generateFinalAnswerInline(
     threadId: mongoose.Types.ObjectId,
-    username: string
+    username: string,
+    answerMachineRecordId: mongoose.Types.ObjectId
 ): Promise<{
     success: boolean;
     finalAnswer: string;
@@ -126,7 +127,7 @@ async function generateFinalAnswerInline(
     }
 
     // Generate final answer
-    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username);
+    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username, answerMachineRecordId);
     if (!finalAnswerResult.answer) {
         return {
             success: false,
@@ -298,16 +299,15 @@ async function getConversationMessages(threadId: mongoose.Types.ObjectId, userna
 }
 
 /**
- * Get all answered sub-questions
+ * Get all answered sub-questions for a specific answer machine record
  */
-async function getAnsweredSubQuestions(threadId: mongoose.Types.ObjectId, username: string): Promise<Array<{
+async function getAnsweredSubQuestions(answerMachineRecordId: mongoose.Types.ObjectId): Promise<Array<{
     question: string;
     answer: string;
 }>> {
     try {
         const answeredSubQuestions = await ModelAnswerMachineSubQuestion.find({
-            threadId: threadId,
-            username: username,
+            answerMachineRecordId: answerMachineRecordId,
             status: 'answered',
         }).sort({ createdAtUtc: 1 });
 
@@ -361,7 +361,8 @@ async function generateFinalAnswerContent(
     thread: any,
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
-    username: string
+    username: string,
+    answerMachineRecordId: mongoose.Types.ObjectId
 ): Promise<{
     answer: string;
     tokens?: {
@@ -377,8 +378,8 @@ async function generateFinalAnswerContent(
         const conversationMessages = await getConversationMessages(threadId, username);
         const conversationText = formatConversationMessages(conversationMessages);
 
-        // Get answered sub-questions
-        const answeredSubQuestions = await getAnsweredSubQuestions(threadId, username);
+        // Get answered sub-questions for this specific answer machine record
+        const answeredSubQuestions = await getAnsweredSubQuestions(answerMachineRecordId);
         const subQuestionsText = formatSubQuestionAnswers(answeredSubQuestions);
 
         // Get system prompt from thread

@@ -16,6 +16,17 @@ const answerMachineSubQuestionSchema = new Schema<IAnswerMachineSubQuestion>({
         index: true,
         ref: 'chatLlm',
     },
+    answerMachineRecordId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        ref: 'chatLlmAnswerMachine',
+    },
+    answerMachineIteration: {
+        type: Number,
+        required: true,
+        index: true,
+    },
 
     // fields
     question: { type: String }, // The actual sub-question text
