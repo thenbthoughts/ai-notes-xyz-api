@@ -5,7 +5,7 @@ import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOr
 import { ModelAnswerMachineSubQuestion } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema';
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
-import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema';
+import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema';
 
 const router = Router();
 

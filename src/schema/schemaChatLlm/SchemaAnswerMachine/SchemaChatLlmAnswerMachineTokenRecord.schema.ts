@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { IChatLlmAnswerMachineTokenRecord } from '../../types/typesSchema/typesChatLlm/SchemaChatLlmAnswerMachineTokenRecord.types';
+import { IChatLlmAnswerMachineTokenRecord } from '../../../types/typesSchema/typesChatLlm/SchemaChatLlmAnswerMachineTokenRecord.types';
 
 const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTokenRecord>({
     // reference to thread

@@ -7,7 +7,7 @@ import { ModelChatLlm } from "../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import { IChatLlm } from "../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 
 import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
-import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
 import fetchLlmUnified, { Message } from "../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { ModelAnswerMachineSubQuestion } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 import { IAnswerMachineSubQuestion } from "../../../../types/typesSchema/typesChatLlm/typesAnswerMachine/SchemaAnswerMachineSubQuestions.types";

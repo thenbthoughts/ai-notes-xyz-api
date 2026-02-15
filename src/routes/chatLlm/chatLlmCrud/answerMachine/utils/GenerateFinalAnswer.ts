@@ -9,7 +9,7 @@ import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/ut
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { extractTokensFromRawResponse, calculateCostInUsd } from "./tokenTracking";
 import { trackAnswerMachineTokens } from "../answerMachineFunc";
-import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
