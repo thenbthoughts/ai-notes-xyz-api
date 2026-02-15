@@ -69,10 +69,14 @@ const step2CreateQuestionDecomposition = async ({
             };
         }
 
-        // Prepare messages for LLM
+        // Prepare messages for LLM with rich context
         const messagesContent = last10Messages
             .filter(msg => msg.type === 'text' && msg.content)
-            .map(msg => msg.content)
+            .map((msg, index) => {
+                const role = msg.isAi ? 'Assistant' : 'User';
+                const timestamp = new Date(msg.createdAtUtc).toLocaleTimeString();
+                return `[${timestamp}] ${role}: ${msg.content}`;
+            })
             .join('\n\n');
 
         if (!messagesContent || messagesContent.trim().length === 0) {
@@ -90,17 +94,16 @@ const step2CreateQuestionDecomposition = async ({
         let systemPrompt = '';
 
         if (currentIteration > 1) {
-            // Iteration 2+: Focus on gaps from previous answer
+            // Iteration 2+: Focus on intermediate answers from previous iterations
             systemPrompt += `This is iteration ${currentIteration} of the answer machine.\n`;
-            if (intermediateAnswers.length > 0) {
-                systemPrompt += `The previous answer had the following gaps or unsatisfactory areas:\n`;
-                systemPrompt += intermediateAnswers.map((answer: string, i: number) => `${i + 1}. ${answer}`).join('\n');
-            }
-            systemPrompt += `\n\nGenerate questions specifically to address these gaps and improve the answer quality.\n`;
-            systemPrompt += `Focus ONLY on questions that will help fill these specific gaps.\n`;
+            systemPrompt += `You will be provided with intermediate answers from previous iterations that were evaluated as not satisfactory.\n\n`;
+            systemPrompt += `Generate detailed, keyword-rich questions specifically to address these intermediate answers and improve the final answer quality.\n`;
+            systemPrompt += `Focus ONLY on questions that will help improve these specific intermediate answers.\n`;
+            systemPrompt += `Make each question comprehensive and specific, including relevant keywords and technical terms that will help search and retrieve relevant context from documents, notes, and knowledge base.\n`;
+            systemPrompt += `Explore various related keywords, synonyms, alternative terms, and different phrasings to maximize context retrieval: include technical jargon, brand names, abbreviations, industry terms, and related concepts that might be documented under different names.\n`;
             systemPrompt += `Reply with a JSON object:\n`;
-            systemPrompt += `{"missingRequirements": [questions addressing the gaps], "contextualQuestions": [], "implementationDetails": []}.\n`;
-            systemPrompt += `Maximum 3-5 questions total, only if truly needed to address the gaps. Use empty arrays if no questions are needed.`;
+            systemPrompt += `{"missingRequirements": [detailed questions with keywords addressing the intermediate answers], "contextualQuestions": [], "implementationDetails": []}.\n`;
+            systemPrompt += `Maximum 3-5 questions total, only if truly needed to address the intermediate answers. Use empty arrays if no questions are needed.`;
         } else {
             // Iteration 1: Standard question generation with improved filtering
             systemPrompt += `Given a user conversation, identify ONLY essential missing information required to solve the user's core problem. Be very selective - only ask questions that are absolutely necessary.\n`;
@@ -110,30 +113,50 @@ const step2CreateQuestionDecomposition = async ({
             systemPrompt += `3. Exclude formatting, presentation, UI, or display preferences\n`;
             systemPrompt += `4. Prioritize questions that directly help solve the user's problem\n`;
             systemPrompt += `5. Maximum 3-5 total questions, only if truly essential\n`;
+            systemPrompt += `6. Make each question detailed and keyword-rich, including specific technical terms, product names, concepts, and search terms that will help retrieve relevant context from documents and knowledge base\n`;
+            systemPrompt += `7. Structure questions to be comprehensive enough to generate meaningful search queries for finding related information\n`;
+            systemPrompt += `8. Include various related keywords, synonyms, alternative terms, and different phrasings of the same concepts to maximize context retrieval efficiency\n`;
+            systemPrompt += `9. Consider multiple search angles: technical terms, brand names, common abbreviations, industry jargon, and related concepts that users might have documented under different names\n`;
             systemPrompt += `Reply with a JSON object:\n`;
-            systemPrompt += `{"missingRequirements": [essential questions only], "contextualQuestions": [0-1 if critical], "implementationDetails": [0-1 if critical]}.\n`;
+            systemPrompt += `{"missingRequirements": [detailed keyword-rich questions], "contextualQuestions": [0-1 if critical], "implementationDetails": [0-1 if critical]}.\n`;
             systemPrompt += `Use empty arrays if nothing is missing.`;
         }
 
-        let userPrompt = '';
-        if (currentIteration > 1) {
-            userPrompt += `Analyze the conversation and the identified gaps above. Generate questions that will help gather information to address these specific gaps:\n\n${messagesContent}`;
-        } else {
-            userPrompt += `Analyze the following conversation and identify any missing requirements needed to solve the user's question.`;
-            userPrompt += `Focus on information that is actually required but not provided:\n\n${messagesContent}`;
-        }
 
-        // Prepare LLM messages
+        // Prepare LLM messages with additional context
         const llmMessages: Message[] = [
             {
                 role: 'system',
                 content: systemPrompt,
             },
-            {
-                role: 'user',
-                content: userPrompt,
-            },
         ];
+
+        // Add intermediate answers context as separate message (if available)
+        if (currentIteration > 1 && intermediateAnswers.length > 0) {
+            llmMessages.push({
+                role: 'user',
+                content: `INTERMEDIATE ANSWERS (from previous iterations that were not satisfactory):\n${intermediateAnswers.map((answer: string, i: number) => `${i + 1}. ${answer}`).join('\n')}\n\nThese are answers generated in previous iterations that were evaluated as not satisfactory. Please generate questions that specifically address these intermediate answers and improve the final answer quality.`,
+            });
+        }
+
+        // Add conversation context as separate message
+        llmMessages.push({
+            role: 'user',
+            content: `CONVERSATION CONTEXT:\n${messagesContent}`,
+        });
+
+        // Add final instruction as separate message
+        if (currentIteration > 1) {
+            llmMessages.push({
+                role: 'user',
+                content: `Based on the intermediate answers (from previous iterations that were not satisfactory) and conversation context above, generate detailed, keyword-rich questions that will help gather information to improve these intermediate answers. Each question should be comprehensive and explore various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will efficiently retrieve context from documents, notes, tasks, and knowledge base.`,
+            });
+        } else {
+            llmMessages.push({
+                role: 'user',
+                content: `Based on the conversation context above, analyze and identify any missing requirements needed to solve the user's question. Focus on information that is actually required but not provided. Make each question detailed and keyword-rich, exploring various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will help search and retrieve relevant context efficiently from all available sources.`,
+            });
+        }
 
         // Get LLM configuration
         const llmConfig = await getLlmConfig({

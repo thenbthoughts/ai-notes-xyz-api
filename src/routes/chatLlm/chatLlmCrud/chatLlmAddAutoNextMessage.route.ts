@@ -1,8 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import { ObjectId } from 'mongoose';
-import mongoose from 'mongoose';
 import getNextMessageFromLast30Conversation from './utils/getNextMessageFromLast25Conversation';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
@@ -165,6 +163,13 @@ router.post(
                 return res.status(500).json({ message: 'Server error', error: result.errorReason });
             }
 
+            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Title, Embedding)
+            await ModelLlmPendingTaskCron.create({
+                username: auth_username,
+                taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
+                targetRecordId: threadId,
+            });
+
             return res.status(200).json({ message: 'Success' });
         } catch (error) {
             console.error(error);
@@ -172,4 +177,5 @@ router.post(
         }
     }
 );
+
 export default router;
