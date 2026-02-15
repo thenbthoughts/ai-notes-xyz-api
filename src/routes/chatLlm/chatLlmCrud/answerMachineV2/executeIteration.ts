@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 import { ModelChatLlmAnswerMachine } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema";
 
 import step2CreateQuestionDecomposition from "./step2CreateQuestionDecomposition/step2CreateQuestionDecomposition";
+import step3AnswerSubQuestions from "./step3AnswerSubQuestions/step3AnswerSubQuestions";
+import step4GenerateFinalAnswer from "./step4GenerateFinalAnswer/step4GenerateFinalAnswer";
+import step5EvaluateAnswer from "./step5EvaluateAnswer/step5EvaluateAnswer";
 
 // -----
 
@@ -36,11 +39,40 @@ const executeIteration = async ({
         }
 
         // Step 3: Answer the sub questions
+        const resultAnswerSubQuestions = await step3AnswerSubQuestions({
+            answerMachineRecordId,
+        });
+        if (resultAnswerSubQuestions.success === false) {
+            return {
+                success: false,
+                errorReason: 'Failed to answer sub questions: ' + resultAnswerSubQuestions.errorReason,
+                data: null,
+            };
+        }
 
         // Step 4: Generate the final answer
+        const resultGenerateFinalAnswer = await step4GenerateFinalAnswer({
+            answerMachineRecordId,
+        });
+        if (resultGenerateFinalAnswer.success === false) {
+            return {
+                success: false,
+                errorReason: 'Failed to generate final answer: ' + resultGenerateFinalAnswer.errorReason,
+                data: null,
+            };
+        }
 
-        // Step 5: Evaluate the answer and if evaluation is satisfactory, set the isSatisfactoryFinalAnswer to true
-
+        // Step 5: Evaluate the answer and set the isSatisfactoryFinalAnswer
+        const resultEvaluateAnswer = await step5EvaluateAnswer({
+            answerMachineRecordId,
+        });
+        if (resultEvaluateAnswer.success === false) {
+            return {
+                success: false,
+                errorReason: 'Failed to evaluate answer: ' + resultEvaluateAnswer.errorReason,
+                data: null,
+            };
+        }
 
         return {
             success: true,
