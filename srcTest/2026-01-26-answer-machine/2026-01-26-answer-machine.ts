@@ -11,10 +11,12 @@ const testAnswerMachine = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
         console.log('mongoose connected');
 
+        console.time('answer-machine-time');
         const resultAnswerMachine = await answerMachineFunc({
-            threadId: new mongoose.Types.ObjectId('697719bcd257cadcfc2c83d0'),
+            threadId: new mongoose.Types.ObjectId('6991748766aef359155a76d1'),
             username: 'nibf',
         });
+        console.timeEnd('answer-machine-time');
         console.log('resultAnswerMachine', resultAnswerMachine);
 
         console.log('answerMachineFunc done');

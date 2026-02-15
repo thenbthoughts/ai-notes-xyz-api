@@ -168,12 +168,22 @@ router.post(
             let status: 'pending' | 'answered' | 'error' | 'not_started' = 'not_started';
             let isProcessing = false;
 
+            // Check if there's an active Answer Machine record
+            const hasActiveAnswerMachine = currentAnswerMachineRecord &&
+                (currentAnswerMachineRecord.status === 'pending' || currentAnswerMachineRecord.status === 'answered');
+
             if (subQuestions.length === 0) {
-                // No sub-questions exist - Answer Machine hasn't started or completed without sub-questions
+                // No sub-questions exist
                 if (hasFinalAnswer) {
+                    // Completed without sub-questions
                     status = 'answered';
                     isProcessing = false;
+                } else if (hasActiveAnswerMachine && currentAnswerMachineRecord.status === 'pending') {
+                    // Answer Machine record exists and is pending, but no sub-questions yet - it's starting up
+                    status = 'pending';
+                    isProcessing = true;
                 } else {
+                    // No active Answer Machine
                     status = 'not_started';
                     isProcessing = false;
                 }

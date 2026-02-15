@@ -8,7 +8,7 @@ import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaCh
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { extractTokensFromRawResponse, calculateCostInUsd } from "./tokenTracking";
-import { trackAnswerMachineTokens } from "../answerMachineFunc";
+import { trackAnswerMachineTokens } from "../shared/answerMachineRecord";
 import { ModelChatLlmAnswerMachine } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachine.schema";
 import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaChatLlmAnswerMachineTokenRecord.schema";
 

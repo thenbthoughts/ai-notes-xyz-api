@@ -145,17 +145,23 @@ router.post(
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
             }
 
-            // answer machine
+            // answer machine - wait for completion
             const result = await answerMachineFunc({
                 threadId,
                 username: auth_username,
             });
 
             if (result.success === false) {
-                return res.status(500).json({ message: 'Server error', error: result.errorReason });
+                return res.status(500).json({
+                    message: 'Answer Machine failed',
+                    error: result.errorReason
+                });
             }
 
-            return res.status(200).json({ message: 'Success' });
+            return res.status(200).json({
+                message: 'Answer Machine completed successfully',
+                status: 'completed'
+            });
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error', error: error });
