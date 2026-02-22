@@ -4,6 +4,7 @@ import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSched
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
 import { cronTaskSendRemainder } from '../routes/task/cron/taskSendRemainder';
+import cronCommonTaskExecuteEverydayForAllUsers from './cronCommonTaskExecuteEverydayForAllUsers/cronCommonTaskExecuteEverydayForAllUsers';
 
 const initCron = () => {
     cron.schedule(
@@ -66,6 +67,19 @@ const initCron = () => {
             console.log('running a task every 5 minutes - taskSendRemainder');
             await cronTaskSendRemainder();
         },
+    );
+
+    // execute every day for all users
+    cron.schedule(
+        '0 0 * * *',
+        async () => {
+            console.log('running a task every day for all users');
+            await cronCommonTaskExecuteEverydayForAllUsers();
+        },
+        {
+            timezone: 'UTC',
+            noOverlap: true,
+        }
     );
 };
 
