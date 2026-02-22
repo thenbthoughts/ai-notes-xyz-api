@@ -21,8 +21,21 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
             return res.status(400).json({ message: 'Thread ID cannot be null' });
         }
 
+        // Pagination parameters
+        let limit = 50; // Default limit
+        let skip = 0; // Default skip (0 means most recent messages)
+
+        if (typeof req.body?.limit === 'number' && req.body.limit > 0) {
+            limit = Math.min(req.body.limit, 200); // Max 200 messages per request
+        }
+
+        if (typeof req.body?.skip === 'number' && req.body.skip >= 0) {
+            skip = req.body.skip;
+        }
+
         let tempStage = {} as PipelineStage;
         const stateDocument = [] as PipelineStage[];
+        const stateCount = [] as PipelineStage[];
 
         // stateDocument -> match
         tempStage = {
@@ -32,22 +45,54 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
             }
         }
         stateDocument.push(tempStage);
+        stateCount.push(tempStage);
 
-        // stateDocument -> sort
+        // stateDocument -> sort (most recent first for pagination)
         tempStage = {
             $sort: {
-                createdAtUtc: 1,
+                createdAtUtc: -1,
             }
         }
         stateDocument.push(tempStage);
+        stateCount.push(tempStage);
+
+        // stateDocument -> skip (for pagination)
+        if (skip > 0) {
+            tempStage = {
+                $skip: skip,
+            };
+            stateDocument.push(tempStage);
+        }
+
+        // stateDocument -> limit
+        tempStage = {
+            $limit: limit,
+        };
+        stateDocument.push(tempStage);
+
+        // stateCount -> count total messages
+        stateCount.push({
+            $count: 'count'
+        });
 
         // pipeline
         const resultNotes = await ModelChatLlm.aggregate(stateDocument);
+        const resultCount = await ModelChatLlm.aggregate(stateCount);
+
+        let totalCount = 0;
+        if (resultCount.length === 1 && resultCount[0].count) {
+            totalCount = resultCount[0].count;
+        }
+
+        // Reverse the results to maintain chronological order (oldest first)
+        resultNotes.reverse();
 
         return res.json({
             message: 'Notes retrieved successfully',
             count: resultNotes.length,
+            totalCount: totalCount,
             docs: resultNotes,
+            hasMore: (skip + limit) < totalCount,
         });
     } catch (error) {
         console.error(error);
