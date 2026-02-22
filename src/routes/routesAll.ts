@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 // dashboard
 import routesDashboardSuggestTasks from './dashboard/dashboardSuggestTasks.route';
 import routesDashboard from './dashboard/dashboard.route';
+import routesDashboardHomepageSummary from './dashboard/dashboardHomepageSummary.route';
 
 // user
 import routeUserAuth from './user/userAuth.route';
@@ -149,6 +150,7 @@ router.use('/dynamic-data/model-ollama', routesDynamicDataModelOllama);
 // dashboard
 router.use('/dashboard/suggest-tasks', routesDashboardSuggestTasks);
 router.use('/dashboard/crud', routesDashboard);
+router.use('/dashboard/crud/homepage-summary', routesDashboardHomepageSummary);
 
 // maps
 router.use('/maps/crud', routesMapsCrud);
