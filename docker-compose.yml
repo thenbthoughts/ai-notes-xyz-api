@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  ai-notes-xyz:
+    build: .
+    ports:
+      - "2000:2000"
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=mongodb://host.docker.internal:27017/ai-notes-xyz-container
+      # - MONGODB_URI=mongodb://localhost:27017/ai-notes-xyz-container
+
+# How to run:
+# git clone https://github.com/thenbthoughts/ai-notes-xyz-api.git
+# cd ai-notes-xyz-api
+# docker-compose up -d --build
+
+# How to stop:
+# docker-compose down
