@@ -30,6 +30,9 @@ router.post(
                 apiKeyS3Valid: false,
                 apiKeyOllamaValid: false,
                 apiKeyQdrantValid: false,
+                apiKeyReplicateValid: false,
+                apiKeyRunpodValid: false,
+                apiKeyLocalaiValid: false,
                 smtpValid: false,
 
                 // timezone
@@ -61,6 +64,9 @@ router.post(
                             apiKeyS3Valid: false,
                             apiKeyOllamaValid: false,
                             apiKeyQdrantValid: false,
+                            apiKeyReplicateValid: false,
+                            apiKeyRunpodValid: false,
+                            apiKeyLocalaiValid: false,
                             smtpValid: false,
                         }
                     },
@@ -103,6 +109,27 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.apiKeyQdrantValid === 'boolean') {
                     resultApiKey.apiKeyQdrantValid = resultUserInfoApi.apiKeyQdrantValid;
+                }
+            }
+
+            // api key replicate
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyReplicateValid === 'boolean') {
+                    resultApiKey.apiKeyReplicateValid = resultUserInfoApi.apiKeyReplicateValid;
+                }
+            }
+
+            // api key runpod
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyRunpodValid === 'boolean') {
+                    resultApiKey.apiKeyRunpodValid = resultUserInfoApi.apiKeyRunpodValid;
+                }
+            }
+
+            // api key localai
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyLocalaiValid === 'boolean') {
+                    resultApiKey.apiKeyLocalaiValid = resultUserInfoApi.apiKeyLocalaiValid;
                 }
             }
 

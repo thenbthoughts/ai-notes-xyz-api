@@ -504,6 +504,224 @@ router.post(
     }
 );
 
+// Update User API Replicate
+router.post(
+    '/updateUserApiReplicate',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyReplicate } = req.body;
+
+            let apiKeyReplicateValid = false;
+
+            // Validate Replicate API key
+            if (apiKeyReplicate !== '') {
+                try {
+                    const config: AxiosRequestConfig = {
+                        method: 'get',
+                        url: 'https://api.replicate.com/v1/account',
+                        headers: {
+                            'Authorization': `Bearer ${apiKeyReplicate}`,
+                        }
+                    };
+
+                    const response: AxiosResponse = await axios.request(config);
+                    if (response.status === 200) {
+                        apiKeyReplicateValid = true;
+                    }
+                } catch (error) {
+                    console.error('Replicate API key validation failed:', error);
+                    apiKeyReplicateValid = false;
+                }
+            }
+
+            if (!apiKeyReplicateValid) {
+                return res.status(400).json({ message: 'Invalid API Key' });
+            }
+
+            const updatedUser = await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyReplicate: apiKeyReplicate,
+                    apiKeyReplicateValid: apiKeyReplicateValid,
+                },
+                {
+                    new: true
+                }
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API RunPod
+router.post(
+    '/updateUserApiRunpod',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyRunpod } = req.body;
+
+            let apiKeyRunpodValid = false;
+
+            // Validate RunPod API key
+            if (apiKeyRunpod !== '') {
+                try {
+                    const config: AxiosRequestConfig = {
+                        method: 'post',
+                        url: 'https://api.runpod.ai/v2/granite-4-0-h-small/runsync',
+                        headers: {
+                            'Authorization': `Bearer ${apiKeyRunpod}`,
+                            'Content-Type': 'application/json',
+                        },
+                        data: {
+                            input: {
+                                messages: [
+                                    {
+                                        role: 'system',
+                                        content: 'You are a helpful assistant. Please ensure responses are professional, accurate, and safe.'
+                                    },
+                                    {
+                                        role: 'user',
+                                        content: 'Generate a random token'
+                                    }
+                                ],
+                                sampling_params: {
+                                    max_tokens: 10,
+                                    temperature: 0.7,
+                                    seed: -1,
+                                    top_k: -1,
+                                    top_p: 1
+                                }
+                            }
+                        },
+                        timeout: 15000, // 15 second timeout for model inference
+                    };
+
+                    const response: AxiosResponse = await axios.request(config);
+                    if (response.status === 200 && response.data && response.data.output) {
+                        apiKeyRunpodValid = true;
+                    }
+                } catch (error) {
+                    console.error('RunPod API key validation failed:', error);
+                    apiKeyRunpodValid = false;
+                }
+            }
+
+            if (!apiKeyRunpodValid) {
+                return res.status(400).json({ message: 'Invalid API Key' });
+            }
+
+            const updatedUser = await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyRunpod: apiKeyRunpod,
+                    apiKeyRunpodValid: apiKeyRunpodValid,
+                },
+                {
+                    new: true
+                }
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API LocalAI
+router.post(
+    '/updateUserApiLocalai',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyLocalaiEndpoint, apiKeyLocalai } = req.body;
+
+            let apiKeyLocalaiValid = false;
+
+            // Validate LocalAI endpoint
+            if (apiKeyLocalaiEndpoint !== '') {
+                try {
+                    const headers: any = {};
+                    if (apiKeyLocalai && apiKeyLocalai.trim() !== '') {
+                        headers['Authorization'] = `Bearer ${apiKeyLocalai}`;
+                    }
+
+                    const config: AxiosRequestConfig = {
+                        method: 'get',
+                        url: `${apiKeyLocalaiEndpoint}/v1/models`,
+                        headers: headers,
+                        timeout: 10000, // 10 second timeout
+                    };
+
+                    const response: AxiosResponse = await axios.request(config);
+                    console.log('response: ', response?.data);
+                    if (response?.data && Array.isArray(response?.data?.data) && response?.data?.data.length >= 0) {
+                        apiKeyLocalaiValid = true;
+                    }
+                } catch (error) {
+                    console.error('LocalAI endpoint validation failed:', error);
+                    apiKeyLocalaiValid = false;
+                }
+            }
+
+            if (!apiKeyLocalaiValid) {
+                return res.status(400).json({ message: 'Invalid endpoint or API key' });
+            }
+
+            const updatedUser = await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyLocalaiValid: apiKeyLocalaiValid,
+                    apiKeyLocalaiEndpoint: apiKeyLocalaiEndpoint,
+                    apiKeyLocalai: apiKeyLocalai || '',
+                },
+                {
+                    new: true
+                }
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 // Update User API SMTP
 router.post(
     '/updateUserApiSmtp',

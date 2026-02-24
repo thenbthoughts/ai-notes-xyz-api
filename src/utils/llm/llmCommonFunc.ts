@@ -26,6 +26,19 @@ export interface tsUserApiKey {
     apiKeyQdrantValid: boolean;
     apiKeyQdrantEndpoint: string;
     apiKeyQdrantPassword: string;
+
+    // api key replicate
+    apiKeyReplicateValid: boolean;
+    apiKeyReplicate: string;
+
+    // api key runpod
+    apiKeyRunpodValid: boolean;
+    apiKeyRunpod: string;
+
+    // api key localai
+    apiKeyLocalaiValid: boolean;
+    apiKeyLocalaiEndpoint: string;
+    apiKeyLocalai: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -57,6 +70,19 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         apiKeyQdrantValid: false,
         apiKeyQdrantEndpoint: '',
         apiKeyQdrantPassword: '',
+
+        // api key replicate
+        apiKeyReplicateValid: false,
+        apiKeyReplicate: '',
+
+        // api key runpod
+        apiKeyRunpodValid: false,
+        apiKeyRunpod: '',
+
+        // api key localai
+        apiKeyLocalaiValid: false,
+        apiKeyLocalaiEndpoint: '',
+        apiKeyLocalai: '',
     } as tsUserApiKey;
 
     try {
@@ -128,6 +154,39 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyQdrantPassword === 'string') {
                 apiKey.apiKeyQdrantPassword = apiKeyObject.apiKeyQdrantPassword;
+            }
+
+            // api key replicate
+            if (typeof apiKeyObject.apiKeyReplicateValid === 'boolean') {
+                if(apiKeyObject.apiKeyReplicateValid) {
+                    apiKey.apiKeyReplicateValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyReplicate === 'string') {
+                apiKey.apiKeyReplicate = apiKeyObject.apiKeyReplicate;
+            }
+
+            // api key runpod
+            if (typeof apiKeyObject.apiKeyRunpodValid === 'boolean') {
+                if(apiKeyObject.apiKeyRunpodValid) {
+                    apiKey.apiKeyRunpodValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyRunpod === 'string') {
+                apiKey.apiKeyRunpod = apiKeyObject.apiKeyRunpod;
+            }
+
+            // api key localai
+            if (typeof apiKeyObject.apiKeyLocalaiValid === 'boolean') {
+                if(apiKeyObject.apiKeyLocalaiValid) {
+                    apiKey.apiKeyLocalaiValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyLocalaiEndpoint === 'string') {
+                apiKey.apiKeyLocalaiEndpoint = apiKeyObject.apiKeyLocalaiEndpoint;
+            }
+            if (typeof apiKeyObject.apiKeyLocalai === 'string') {
+                apiKey.apiKeyLocalai = apiKeyObject.apiKeyLocalai;
             }
         }
         return apiKey;

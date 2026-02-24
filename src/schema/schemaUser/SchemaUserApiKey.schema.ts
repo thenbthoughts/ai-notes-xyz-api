@@ -36,6 +36,19 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyQdrantEndpoint: { type: String, default: '' },
     apiKeyQdrantPassword: { type: String, default: '' },
 
+    // apikey - replicate
+    apiKeyReplicateValid: { type: Boolean, default: false },
+    apiKeyReplicate: { type: String, default: '' },
+
+    // apikey - runpod
+    apiKeyRunpodValid: { type: Boolean, default: false },
+    apiKeyRunpod: { type: String, default: '' },
+
+    // apikey - localai (optional)
+    apiKeyLocalaiValid: { type: Boolean, default: false },
+    apiKeyLocalaiEndpoint: { type: String, default: '' },
+    apiKeyLocalai: { type: String, default: '' },
+
     // smtp
     smtpValid: { type: Boolean, default: false },
     smtpHost: { type: String, default: '' },
