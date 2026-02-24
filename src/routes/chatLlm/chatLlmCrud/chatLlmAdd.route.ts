@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import fetchLlmGroqVision from './utils/callLlmGroqVision';
+import fetchLlmUnified from '../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getFile, S3Config } from '../../../utils/upload/uploadFunc';
-import fetchLlmGroqAudio from './utils/callLlmGroqAudio';
+import fetchAudioUnified from '../../../utils/llmPendingTask/utils/fetchAudioUnified';
 import { ObjectId } from 'mongoose';
 import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { normalizeDateTimeIpAddress } from '../../../utils/llm/normalizeDateTimeIpAddress';
@@ -52,7 +52,7 @@ const getContentFromDocument = async ({
 
     try {
         const userApiKeyDb = await ModelUserApiKey.findOne({ username });
-        
+
         const s3Config: S3Config = {
             region: apiKeys.apiKeyS3Region,
             endpoint: apiKeys.apiKeyS3Endpoint,
@@ -232,16 +232,6 @@ router.post(
             // does thread have personal context enabled?
             const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
 
-            let provider = '';
-            let llmAuthToken = '';
-            if (apiKeys.apiKeyGroqValid) {
-                provider = 'groq';
-                llmAuthToken = apiKeys.apiKeyGroq;
-            } else if (apiKeys.apiKeyOpenrouterValid) {
-                provider = 'openrouter';
-                llmAuthToken = apiKeys.apiKeyOpenrouter;
-            }
-
             // get date utc str as YYYY-MM
             if (type === 'image') {
                 const result = await ModelChatLlm.create({
@@ -258,7 +248,7 @@ router.post(
 
                 // get image
                 const userApiKeyDb = await ModelUserApiKey.findOne({ username: res.locals.auth_username });
-                
+
                 const s3Config: S3Config = {
                     region: apiKeys.apiKeyS3Region,
                     endpoint: apiKeys.apiKeyS3Endpoint,
@@ -277,14 +267,33 @@ router.post(
                     const imageBase64 = resultImage.content.toString('base64');
 
                     let contentAi = '';
-                    if (provider === 'groq' || provider === 'openrouter') {
-                        contentAi = await fetchLlmGroqVision({
-                            argContent: "What's in the image? Explain in detail.",
-                            imageBase64: `data:image/png;base64,${imageBase64}`,
+                    let modelName = '';
+                    let llmAuthToken = '';
+                    let imageProvider = '' as 'groq' | 'openrouter';
 
-                            llmAuthToken,
-                            provider,
-                        })
+                    if (apiKeys.apiKeyGroqValid) {
+                        imageProvider = 'groq';
+                        llmAuthToken = apiKeys.apiKeyGroq;
+                        modelName = 'meta-llama/llama-4-scout-17b-16e-instruct';
+                    } else if (apiKeys.apiKeyOpenrouterValid) {
+                        imageProvider = 'openrouter';
+                        llmAuthToken = apiKeys.apiKeyOpenrouter;
+                        modelName = 'mistralai/ministral-8b-2512';
+                    }
+
+                    if (imageProvider === 'groq' || imageProvider === 'openrouter') {
+                        const resultLlm = await fetchLlmUnified({
+                            provider: imageProvider,
+                            apiKey: llmAuthToken,
+                            apiEndpoint: '',
+                            model: modelName,
+                            messages: [
+                                { role: 'system', content: 'You are a helpful assistant.' },
+                                { role: 'user', content: [{ type: 'image_url', image_url: { url: `data:image/png;base64,${imageBase64}` } }] },
+                            ],
+                        });
+
+                        contentAi = resultLlm.success ? resultLlm.content : '';
                     }
 
                     if (contentAi.length >= 1) {
@@ -309,6 +318,7 @@ router.post(
             }
 
             if (type === 'audio') {
+                console.log('type is audio');
                 // type is audio
                 const result = await ModelChatLlm.create({
                     type,
@@ -321,64 +331,6 @@ router.post(
 
                     ...actionDatetimeObj,
                 });
-
-                // get audio
-                const userApiKeyDb = await ModelUserApiKey.findOne({ username: res.locals.auth_username });
-                
-                const s3Config: S3Config = {
-                    region: apiKeys.apiKeyS3Region,
-                    endpoint: apiKeys.apiKeyS3Endpoint,
-                    accessKeyId: apiKeys.apiKeyS3AccessKeyId,
-                    secretAccessKey: apiKeys.apiKeyS3SecretAccessKey,
-                    bucketName: apiKeys.apiKeyS3BucketName,
-                };
-
-                const resultAudio = await getFile({
-                    fileName: fileUrl,
-                    storageType: userApiKeyDb?.fileStorageType === 's3' ? 's3' : 'gridfs',
-                    s3Config: userApiKeyDb?.fileStorageType === 's3' ? s3Config : undefined,
-                });
-
-                if (resultAudio.success && resultAudio.content) {
-                    const buffer = resultAudio.content;
-                    const audioBufferT = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-
-                    let contentAudioToText = '';
-                    if (provider === 'groq' || provider === 'openrouter') {
-                        contentAudioToText = await fetchLlmGroqAudio({
-                            audioArrayBuffer: audioBufferT,
-
-                            provider,
-                            llmAuthToken,
-                        })
-                    }
-
-                    if (contentAudioToText.length >= 1) {
-                        const contentAudio = `Text to audio:` + '\n' + `${contentAudioToText.trim()}`
-                        const newNoteAudio = await ModelChatLlm.create({
-                            type: 'text',
-                            content: contentAudio,
-                            username: res.locals.auth_username,
-                            tags,
-                            fileUrl: fileUrl,
-                            fileUrlArr: '',
-                            threadId, // Added threadId here
-
-                            // model name
-                            isAi: true,
-                            aiModelProvider: 'groq',
-                            aiModelName: 'whisper-large-v3',
-
-                            ...actionDatetimeObj,
-                        });
-
-                        // add tags
-                        await generateTags({
-                            mongodbRecordId: newNoteAudio._id.toString(),
-                            auth_username,
-                        });
-                    }
-                }
 
                 return res.status(201).json(result);
             }
@@ -422,7 +374,7 @@ router.post(
                     actionDatetimeObj,
                     auth_username,
                 });
-                if (result.success ===false) {
+                if (result.success === false) {
                     return res.status(400).json({ message: 'Failed to add file as file type not supported' });
                 }
                 return res.status(201).json(result.doc);

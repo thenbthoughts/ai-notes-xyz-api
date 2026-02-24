@@ -34,6 +34,19 @@ interface IUserApiKey extends Document {
     apiKeyQdrantEndpoint: string;
     apiKeyQdrantPassword: string;
 
+    // apikey - replicate
+    apiKeyReplicateValid: boolean;
+    apiKeyReplicate: string;
+
+    // apikey - runpod
+    apiKeyRunpodValid: boolean;
+    apiKeyRunpod: string;
+
+    // apikey - localai (optional)
+    apiKeyLocalaiValid: boolean;
+    apiKeyLocalaiEndpoint: string;
+    apiKeyLocalai: string;
+
     // smtp
     smtpValid: boolean;
     smtpHost: string;
