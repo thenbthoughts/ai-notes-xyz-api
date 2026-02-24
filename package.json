@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node -r dotenv/config build/index.js",
     "dev": "nodemon",
-    "build": "tsc"
+    "build": "tsc",
+    "dev:swc": "nodemon --config nodemon-swc.json"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +41,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@swc/cli": "^0.8.0",
+    "@swc/core": "^1.15.13",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
