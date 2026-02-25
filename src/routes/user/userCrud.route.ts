@@ -32,6 +32,7 @@ router.post(
                 apiKeyQdrantValid: false,
                 apiKeyReplicateValid: false,
                 apiKeyRunpodValid: false,
+                apiKeyOpenaiValid: false,
                 apiKeyLocalaiValid: false,
                 smtpValid: false,
 
@@ -66,6 +67,7 @@ router.post(
                             apiKeyQdrantValid: false,
                             apiKeyReplicateValid: false,
                             apiKeyRunpodValid: false,
+                            apiKeyOpenaiValid: false,
                             apiKeyLocalaiValid: false,
                             smtpValid: false,
                         }
@@ -123,6 +125,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.apiKeyRunpodValid === 'boolean') {
                     resultApiKey.apiKeyRunpodValid = resultUserInfoApi.apiKeyRunpodValid;
+                }
+            }
+
+            // api key openai
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyOpenaiValid === 'boolean') {
+                    resultApiKey.apiKeyOpenaiValid = resultUserInfoApi.apiKeyOpenaiValid;
                 }
             }
 

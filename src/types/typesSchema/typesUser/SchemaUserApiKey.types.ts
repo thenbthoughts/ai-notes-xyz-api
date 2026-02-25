@@ -42,6 +42,10 @@ interface IUserApiKey extends Document {
     apiKeyRunpodValid: boolean;
     apiKeyRunpod: string;
 
+    // apikey - openai
+    apiKeyOpenaiValid: boolean;
+    apiKeyOpenai: string;
+
     // apikey - localai (optional)
     apiKeyLocalaiValid: boolean;
     apiKeyLocalaiEndpoint: string;

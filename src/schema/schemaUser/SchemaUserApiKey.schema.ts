@@ -44,6 +44,10 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyRunpodValid: { type: Boolean, default: false },
     apiKeyRunpod: { type: String, default: '' },
 
+    // apikey - openai
+    apiKeyOpenaiValid: { type: Boolean, default: false },
+    apiKeyOpenai: { type: String, default: '' },
+
     // apikey - localai (optional)
     apiKeyLocalaiValid: { type: Boolean, default: false },
     apiKeyLocalaiEndpoint: { type: String, default: '' },

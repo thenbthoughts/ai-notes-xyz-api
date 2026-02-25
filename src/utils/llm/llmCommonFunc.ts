@@ -35,6 +35,10 @@ export interface tsUserApiKey {
     apiKeyRunpodValid: boolean;
     apiKeyRunpod: string;
 
+    // api key openai
+    apiKeyOpenaiValid: boolean;
+    apiKeyOpenai: string;
+
     // api key localai
     apiKeyLocalaiValid: boolean;
     apiKeyLocalaiEndpoint: string;
@@ -78,6 +82,10 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         // api key runpod
         apiKeyRunpodValid: false,
         apiKeyRunpod: '',
+
+        // api key openai
+        apiKeyOpenaiValid: false,
+        apiKeyOpenai: '',
 
         // api key localai
         apiKeyLocalaiValid: false,
@@ -174,6 +182,16 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyRunpod === 'string') {
                 apiKey.apiKeyRunpod = apiKeyObject.apiKeyRunpod;
+            }
+
+            // api key openai
+            if (typeof apiKeyObject.apiKeyOpenaiValid === 'boolean') {
+                if(apiKeyObject.apiKeyOpenaiValid) {
+                    apiKey.apiKeyOpenaiValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyOpenai === 'string') {
+                apiKey.apiKeyOpenai = apiKeyObject.apiKeyOpenai;
             }
 
             // api key localai

@@ -15,11 +15,11 @@ const fetchAudioUnified = async ({
     audioArrayBuffer: ArrayBuffer;
 
     llmAuthToken: string;
-    provider: 'groq' | 'localai' | 'runpod' | 'replicate';
+    provider: 'groq' | 'localai' | 'runpod' | 'replicate' | 'openai';
     userApiKeys?: any; // Optional for backward compatibility
 }): Promise<string> => {
     try {
-        if (provider !== 'groq' && provider !== 'localai' && provider !== 'runpod' && provider !== 'replicate') {
+        if (provider !== 'groq' && provider !== 'localai' && provider !== 'runpod' && provider !== 'replicate' && provider !== 'openai') {
             return '';
         }
 
@@ -87,7 +87,7 @@ const fetchAudioUnified = async ({
                 },
                 data: {
                     input: {
-                        "prompt":"",
+                        "prompt": "",
                         audio_base64: audioBuffer.toString('base64'),
                     }
                 },
@@ -126,6 +126,28 @@ const fetchAudioUnified = async ({
                 return response.data.output;
             }
             return '';
+        }
+
+        if (provider === 'openai') {
+            // OpenAI Whisper API for audio transcription
+            let data = new FormData();
+            data.append('model', 'whisper-1');
+            data.append('file', audioBuffer, 'a.wav');
+            data.append('response_format', 'verbose_json');
+
+            const config: AxiosRequestConfig = {
+                method: 'post',
+                maxBodyLength: Infinity,
+                url: 'https://api.openai.com/v1/audio/transcriptions',
+                headers: {
+                    'Authorization': `Bearer ${llmAuthToken}`,
+                    'Content-Type': 'multipart/form-data'
+                },
+                data: data,
+            };
+
+            const response: AxiosResponse = await axios.request(config);
+            return response.data.text;
         }
 
         return '';
@@ -173,9 +195,10 @@ const getTextFromAudioByUrlAndUsername = async ({
 
         // Check if at least one API key is valid for audio transcription
         const hasValidApiKey = userApiKey.apiKeyGroqValid ||
-                               userApiKey.apiKeyLocalaiValid ||
-                               userApiKey.apiKeyRunpodValid ||
-                               userApiKey.apiKeyReplicateValid;
+            userApiKey.apiKeyLocalaiValid ||
+            userApiKey.apiKeyRunpodValid ||
+            userApiKey.apiKeyReplicateValid ||
+            userApiKey.apiKeyOpenaiValid;
 
         if (!hasValidApiKey) {
             return {
@@ -219,7 +242,7 @@ const getTextFromAudioByUrlAndUsername = async ({
         const audioBufferT = bufferToArrayBuffer(buffer);
 
         let contentAudioToText = '';
-        let provider = '' as 'groq' | 'localai' | 'runpod' | 'replicate';
+        let provider = '' as 'groq' | 'localai' | 'runpod' | 'replicate' | 'openai';
         let llmAuthToken = '' as string;
         let llmBaseUrl = '' as string;
 
@@ -236,6 +259,9 @@ const getTextFromAudioByUrlAndUsername = async ({
         } else if (userApiKeyObj.apiKeyReplicateValid === true) {
             provider = 'replicate';
             llmAuthToken = userApiKeyObj.apiKeyReplicate;
+        } else if (userApiKeyObj.apiKeyOpenaiValid === true) {
+            provider = 'openai';
+            llmAuthToken = userApiKeyObj.apiKeyOpenai;
         }
 
         if (provider) {
