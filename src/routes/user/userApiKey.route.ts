@@ -653,6 +653,81 @@ router.post(
     }
 );
 
+// Update User API OpenAI
+router.post(
+    '/updateUserApiOpenai',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyOpenai } = req.body;
+
+            let apiKeyOpenaiValid = false;
+
+            // Validate OpenAI API key
+            if (apiKeyOpenai !== '') {
+                try {
+                    const config: AxiosRequestConfig = {
+                        method: 'post',
+                        url: 'https://api.openai.com/v1/chat/completions',
+                        headers: {
+                            'Authorization': `Bearer ${apiKeyOpenai}`,
+                            'Content-Type': 'application/json'
+                        },
+                        data: {
+                            model: 'gpt-3.5-turbo',
+                            messages: [
+                                {
+                                    role: 'user',
+                                    content: 'Hello'
+                                }
+                            ],
+                            max_tokens: 10
+                        },
+                        timeout: 10000, // 10 second timeout
+                    };
+
+                    const response: AxiosResponse = await axios.request(config);
+                    if (response.status === 200 && response.data.choices && response.data.choices.length > 0) {
+                        apiKeyOpenaiValid = true;
+                    }
+                } catch (error) {
+                    console.error('OpenAI API key validation failed:', error);
+                    apiKeyOpenaiValid = false;
+                }
+            }
+
+            if (!apiKeyOpenaiValid) {
+                return res.status(400).json({ message: 'Invalid API Key' });
+            }
+
+            const updatedUser = await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyOpenai: apiKeyOpenai,
+                    apiKeyOpenaiValid: apiKeyOpenaiValid,
+                },
+                {
+                    new: true
+                }
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 // Update User API LocalAI
 router.post(
     '/updateUserApiLocalai',
