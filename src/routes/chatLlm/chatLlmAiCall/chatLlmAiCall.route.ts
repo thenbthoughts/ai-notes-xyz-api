@@ -1,75 +1,84 @@
 import { Router, Request, Response } from 'express';
 
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
-import { ModelOpenaiCompatibleModel } from '../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
-import { getApiKeyByObject } from '../../../utils/llm/llmCommonFunc';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 import { fetchLlmUnified, Message } from '../../../utils/llmPendingTask/utils/fetchLlmUnified';
+import { getLlmConfig } from '../chatLlmCrud/answerMachineV2/helperFunction/answerMachineGetLlmConfig';
 
 const router = Router();
 
-type DecisionTextModelProvider = 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+/** Parse JSON from LLM response and return decision payload { shouldSend, increaseTimer } or null. */
+function getJsonFromResponse({
+    content,
+}: {
+    content: string | undefined;
+}): { shouldSend: boolean; increaseTimer: number } | null {
+    let returnObj = {
+        shouldSend: true,
+        increaseTimer: 0,
+    }
 
-const parseDecisionPayload = (value: unknown): {
-    shouldSend: boolean;
-    increaseTimer: number;
-} | null => {
-    if (!value || typeof value !== 'object') return null;
-
-    const incoming = value as Record<string, unknown>;
-    const parsedShouldSend = incoming?.shouldSend;
-    const parsedIncreaseTimer = incoming?.increaseTimer;
-
-    if (typeof parsedShouldSend !== 'boolean') return null;
-
-    const increaseTimerNum = typeof parsedIncreaseTimer === 'number'
-        ? Math.max(0, Math.floor(parsedIncreaseTimer))
-        : 0;
-
-    return {
-        shouldSend: parsedShouldSend,
-        increaseTimer: increaseTimerNum,
-    };
-};
-
-const parseJsonFromText = (raw: string): unknown | null => {
-    if (!raw || typeof raw !== 'string') return null;
-    const trimmed = raw.trim();
-
+    const raw = content?.trim() ?? '';
+    if (!raw) return returnObj;
+    let jsonPayload: unknown;
     try {
-        return JSON.parse(trimmed);
+        jsonPayload = JSON.parse(raw);
     } catch {
-        const firstBrace = trimmed.indexOf('{');
-        const lastBrace = trimmed.lastIndexOf('}');
+        const firstBrace = raw.indexOf('{');
+        const lastBrace = raw.lastIndexOf('}');
         if (firstBrace >= 0 && lastBrace > firstBrace) {
             try {
-                return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
-            } catch {
-                return null;
+                jsonPayload = JSON.parse(raw.slice(firstBrace, lastBrace + 1));
+            } catch (error) {
+                console.error('Failed to parse JSON from response', error);
             }
+        } else {
+            console.error('Failed to parse JSON from response', raw);
         }
-        return null;
-    }
-};
-
-const normalizeDecisionTimerMs = (seconds: number, fallbackMs = 2000): number => {
-    const safeSeconds = Number.isFinite(seconds) ? Math.floor(seconds) : 0;
-    if (!safeSeconds || safeSeconds <= 0) {
-        return fallbackMs;
     }
 
-    return Math.max(1_000, safeSeconds * 1000);
-};
+    if (!jsonPayload || typeof jsonPayload !== 'object') {
+        console.error('Failed to parse JSON from response: Invalid JSON format', raw);
+        return returnObj;
+    }
 
-// Analyze transcript and decide whether to send now.
+    const incoming = jsonPayload as Record<string, unknown>;
+    const parsedShouldSend = incoming?.shouldSend;
+    const parsedIncreaseTimer = incoming?.increaseTimer;
+    
+    // should send
+    if (typeof parsedShouldSend === 'boolean') {
+        returnObj.shouldSend = parsedShouldSend;
+    }
+
+    // increase timer: 0–60 when shouldSend is false; must be 0 when shouldSend is true
+    const increaseTimerNum = typeof parsedIncreaseTimer === 'number' ? Math.floor(parsedIncreaseTimer) : 0;
+    const safeSeconds = Number.isFinite(increaseTimerNum) ? increaseTimerNum : 0;
+    returnObj.increaseTimer = returnObj.shouldSend ? 0 : Math.max(0, Math.min(60, safeSeconds));
+
+    return returnObj;
+}
+
+const DECISION_SYSTEM_PROMPT = `
+You are a classification service for a voice-call assistant.
+Return a strict JSON object with two fields:
+- shouldSend: boolean (true when assistant should generate a response now)
+- increaseTimer: number (seconds to extend waiting before next auto-send, 0 means no extension)
+
+Rules:
+- Set shouldSend true if the transcript is a clear user request/question or complete statement that should be answered now.
+- Set shouldSend false for short pauses, stutters, filler words, unclear fragments, or content that looks incomplete.
+- If the user says they want to wait at the end of the transcript (e.g. "wait", "hold on", "give me a moment", "one sec", "wait a second", "hold on a sec"), set shouldSend false and set increaseTimer to a positive number of seconds (e.g. 10–15) so the assistant waits longer before auto-sending.
+- increaseTimer should be an integer number of seconds (0–60). When shouldSend is true, use increaseTimer 0.
+`.trim();
+
 router.post(
     '/decide-send',
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
             const auth_username = res.locals.auth_username;
-            const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
             const transcript = typeof req.body?.transcript === 'string' ? req.body.transcript.trim() : '';
             if (!transcript) {
@@ -89,113 +98,39 @@ router.post(
                 return res.status(400).json({ message: 'Thread not found' });
             }
 
-            let provider: DecisionTextModelProvider = 'openrouter';
-            let modelName = thread.aiModelName || 'openai/gpt-oss-20b';
-            let apiEndpoint = '';
-            let apiKey = '';
-            let headersExtra: Record<string, string> | undefined;
-
-            const threadProvider = thread.aiModelProvider as DecisionTextModelProvider | '';
-            if (threadProvider === 'openrouter' && apiKeys.apiKeyOpenrouterValid) {
-                provider = 'openrouter';
-                apiKey = apiKeys.apiKeyOpenrouter;
-            } else if (threadProvider === 'groq' && apiKeys.apiKeyGroqValid) {
-                provider = 'groq';
-                apiKey = apiKeys.apiKeyGroq;
-            } else if (threadProvider === 'ollama' && apiKeys.apiKeyOllamaValid) {
-                provider = 'ollama';
-                apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
-            } else if (threadProvider === 'openai-compatible' && thread.aiModelOpenAiCompatibleConfigId) {
-                provider = 'openai-compatible';
-                const compatModel = await ModelOpenaiCompatibleModel.findOne({
-                    _id: thread.aiModelOpenAiCompatibleConfigId,
-                    username: auth_username,
-                });
-                if (!compatModel) {
-                    return res.status(400).json({ message: 'OpenAI compatible model config not found' });
-                }
-                apiKey = compatModel.apiKey;
-                modelName = compatModel.modelName || modelName;
-                apiEndpoint = compatModel.baseUrl || '';
-                if (compatModel.customHeaders?.trim()) {
-                    try {
-                        const parsedHeaders = JSON.parse(compatModel.customHeaders);
-                        if (typeof parsedHeaders === 'object' && parsedHeaders !== null) {
-                            headersExtra = parsedHeaders as Record<string, string>;
-                        }
-                    } catch (error) {
-                        console.error('Failed to parse customHeaders for openai-compatible model:', error);
-                    }
-                }
-            } else if (apiKeys.apiKeyOpenrouterValid) {
-                provider = 'openrouter';
-                apiKey = apiKeys.apiKeyOpenrouter;
-            } else if (apiKeys.apiKeyGroqValid) {
-                provider = 'groq';
-                apiKey = apiKeys.apiKeyGroq;
-            } else if (apiKeys.apiKeyOllamaValid) {
-                provider = 'ollama';
-                apiEndpoint = apiKeys.apiKeyOllamaEndpoint;
-            }
-
-            if (provider !== 'ollama' && !apiKey) {
+            const llmConfig = await getLlmConfig({ threadId: thread._id });
+            if (!llmConfig) {
                 return res.status(400).json({ message: 'No valid LLM credentials found for decision endpoint' });
             }
-            if (provider === 'ollama' && !apiEndpoint) {
-                return res.status(400).json({ message: 'No valid Ollama endpoint found for decision endpoint' });
-            }
-            if (provider === 'openai-compatible' && !apiKey) {
-                return res.status(400).json({ message: 'OpenAI compatible API key missing' });
-            }
-
-            const openAiCompatibleEndpoint = apiEndpoint
-                ? apiEndpoint.replace(/\/$/, '') + '/chat/completions'
-                : '';
-
-            const decisionSystemPrompt = `
-You are a classification service for a voice-call assistant.
-Return a strict JSON object with two fields:
-- shouldSend: boolean (true when assistant should generate a response now)
-- increaseTimer: number (seconds to extend waiting before next auto-send, 0 means no extension)
-
-Rules:
-- Set shouldSend true if the transcript is a clear user request/question or complete statement that should be answered now.
-- Set shouldSend false for short pauses, stutters, filler words, unclear fragments, or content that looks incomplete.
-- increaseTimer should be an integer number of seconds.
-            `.trim();
 
             const llmResult = await fetchLlmUnified({
-                provider,
-                apiKey,
-                apiEndpoint: provider === 'openai-compatible' ? openAiCompatibleEndpoint : '',
-                model: modelName,
+                provider: llmConfig.provider,
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                model: llmConfig.model,
                 temperature: 0.1,
                 maxTokens: 120,
                 messages: [
-                    { role: 'system', content: decisionSystemPrompt } as Message,
+                    { role: 'system', content: DECISION_SYSTEM_PROMPT } as Message,
                     { role: 'user', content: `Transcript: """${transcript}"""` } as Message,
                 ],
-                headersExtra,
+                headersExtra: llmConfig.customHeaders,
             });
 
             if (llmResult.success === false) {
                 return res.status(500).json({ message: 'LLM decision request failed', error: llmResult.error });
             }
 
-            const jsonPayload = parseJsonFromText(llmResult.content);
-            const parsed = parseDecisionPayload(jsonPayload);
-
-            if (!parsed) {
+            const payload = getJsonFromResponse({
+                content: llmResult.content,
+            });
+            if (!payload) {
                 return res.status(500).json({
                     message: 'Failed to parse decision payload',
                     raw: llmResult.content,
                 });
             }
-
-            return res.json({
-                shouldSend: parsed.shouldSend,
-                increaseTimer: normalizeDecisionTimerMs(parsed.increaseTimer, 2000) / 1000,
-            });
+            return res.json(payload);
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
