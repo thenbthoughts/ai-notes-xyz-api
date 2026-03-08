@@ -20,10 +20,12 @@ import routeUserMemory from './user/userMemory.route';
 import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
 import routesChatLlmAddChat from './chatLlm/chatLlmCrud/chatLlmAdd.route';
 import routesChatLlmAiGeneratedNextQuestion from './chatLlm/chatLlmCrud/chatLlmAiGeneratedNextQuestion.route';
+import routesChatLlmAiCall from './chatLlm/chatLlmAiCall/chatLlmAiCall.route';
 import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCrud.route';
 import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThreadsContextCrud.route';
 import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAutoNextMessage.route';
 import routesChatLlmPolling from './chatLlm/chatLlmPolling/answerMachinePolling.route';
+import routesChatLlmTts from './chatLlm/chatLlmCrud/chatLlmTts.route';
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
@@ -105,10 +107,12 @@ router.use('/setting/user/memory', routeUserMemory);
 router.use('/chat-llm/crud', routesChatLlmCrud);
 router.use('/chat-llm/chat-add', routesChatLlmAddChat);
 router.use('/chat-llm/ai-generated-next-questions', routesChatLlmAiGeneratedNextQuestion);
+router.use('/chat-llm/ai-call', routesChatLlmAiCall);
 router.use('/chat-llm/threads-crud', routesChatLlmThreadsCrud);
 router.use('/chat-llm/threads-context-crud', routesChatLlmThreadsContextCrud);
 router.use('/chat-llm/add-auto-next-message', routesChatLlmAddAutoNextMessage);
 router.use('/chat-llm/polling', routesChatLlmPolling);
+router.use('/chat-llm/tts', routesChatLlmTts);
 
 // routes -> task
 router.use('/task/crud', routesTaskCrud);
