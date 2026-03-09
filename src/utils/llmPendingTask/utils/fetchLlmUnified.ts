@@ -386,14 +386,6 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
 }
 
 /**
- * Convenience helper returning only assistant content string.
- */
-export async function fetchLlmText(params: FetchLlmParams): Promise<string> {
-  const result = await fetchLlmUnified(params);
-  return result.content;
-}
-
-/**
  * Streaming LLM chat completion for Groq and OpenRouter providers
  */
 export async function fetchLlmUnifiedStream(
