@@ -720,4 +720,51 @@ router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, 
     }
 });
 
+// Get Last Used LLM Model
+router.get('/lastUsedLlmModel', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const lastUsedModel = await ModelChatLlmThread.aggregate([
+            {
+                $match: {
+                    username: res.locals.auth_username,
+                }
+            },
+            {
+                $sort: {
+                    updatedAtUtc: -1
+                }
+            },
+            {
+                $limit: 1
+            },
+            {
+                $project: {
+                    aiModelProvider: 1,
+                    aiModelName: 1,
+                    aiModelOpenAiCompatibleConfigId: 1,
+                }
+            }
+        ]) as {
+            aiModelProvider: string;
+            aiModelName: string;
+            aiModelOpenAiCompatibleConfigId?: string;
+        }[];
+
+        if (lastUsedModel.length > 0) {
+            return res.json({
+                message: 'Last used LLM model retrieved successfully',
+                model: lastUsedModel[0]
+            });
+        } else {
+            return res.json({
+                message: 'No previous model usage found',
+                model: null
+            });
+        }
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
 export default router;
