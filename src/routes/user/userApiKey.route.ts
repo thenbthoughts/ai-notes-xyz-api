@@ -1038,6 +1038,122 @@ router.post(
     }
 );
 
+// Clear User API Key
+router.post(
+    '/clearUserApiKey',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const { apiKeyType } = req.body;
+
+            if (typeof apiKeyType !== 'string') {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid API key type',
+                });
+            }
+
+            const validApiKeyTypes = [
+                'groq', 'openrouter', 's3', 'ollama', 'qdrant',
+                'replicate', 'runpod', 'openai', 'localai', 'smtp'
+            ];
+
+            if (!validApiKeyTypes.includes(apiKeyType)) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid API key type',
+                });
+            }
+
+            // Define clear operations for each API key type
+            const clearOperations: Record<string, any> = {
+                groq: {
+                    apiKeyGroq: '',
+                    apiKeyGroqValid: false,
+                },
+                openrouter: {
+                    apiKeyOpenrouter: '',
+                    apiKeyOpenrouterValid: false,
+                },
+                s3: {
+                    apiKeyS3Valid: false,
+                    apiKeyS3AccessKeyId: '',
+                    apiKeyS3BucketName: '',
+                    apiKeyS3Endpoint: '',
+                    apiKeyS3Region: '',
+                    apiKeyS3SecretAccessKey: '',
+                },
+                ollama: {
+                    apiKeyOllamaValid: false,
+                    apiKeyOllamaEndpoint: '',
+                },
+                qdrant: {
+                    apiKeyQdrantValid: false,
+                    apiKeyQdrantEndpoint: '',
+                    apiKeyQdrantPassword: '',
+                },
+                replicate: {
+                    apiKeyReplicate: '',
+                    apiKeyReplicateValid: false,
+                },
+                runpod: {
+                    apiKeyRunpod: '',
+                    apiKeyRunpodValid: false,
+                },
+                openai: {
+                    apiKeyOpenai: '',
+                    apiKeyOpenaiValid: false,
+                },
+                localai: {
+                    apiKeyLocalaiValid: false,
+                    apiKeyLocalaiEndpoint: '',
+                    apiKeyLocalai: '',
+                },
+                smtp: {
+                    smtpValid: false,
+                    smtpHost: '',
+                    smtpPort: '',
+                    smtpUser: '',
+                    smtpPassword: '',
+                    smtpFrom: '',
+                },
+            };
+
+            const updateFields = clearOperations[apiKeyType];
+
+            if (!updateFields) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Unsupported API key type',
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                updateFields,
+                {
+                    new: true
+                }
+            );
+
+            return res.json({
+                success: 'API Key cleared successfully',
+                error: '',
+            });
+        } catch (error) {
+            console.error('Error clearing API key:', error);
+            return res.status(500).json({
+                success: '',
+                error: 'Server error while clearing API key',
+            });
+        }
+    }
+);
+
 // Update User Client Frontend URL
 router.post(
     '/updateUserApiClientFrontendUrl',
