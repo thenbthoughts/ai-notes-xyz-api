@@ -12,7 +12,7 @@ import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { IChatLlmThread } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
 
 interface LlmConfig {
-    provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    provider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     apiKey: string;
     apiEndpoint: string;
     model: string;
@@ -46,7 +46,7 @@ const getLlmConfigForThread = async ({
         let llmAuthToken = '';
         let llmEndpoint = '';
         let customHeaders: Record<string, string> | undefined = undefined;
-        let selectedProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible' | null = null;
+        let selectedProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible' | null = null;
         let modelName = '';
 
         // Select provider in priority order: groq > openrouter > ollama > openai-compatible
@@ -63,6 +63,11 @@ const getLlmConfigForThread = async ({
             llmAuthToken = '';
             llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
             modelName = 'llama3.2'; // Default Ollama model
+        } else if (userApiKey.apiKeyLocalaiValid && userApiKey.apiKeyLocalaiEndpoint) {
+            selectedProvider = 'localai';
+            llmAuthToken = userApiKey.apiKeyLocalai || '';
+            llmEndpoint = userApiKey.apiKeyLocalaiEndpoint;
+            modelName = 'gpt-4o-mini'; // Default LocalAI model
         } else {
             // Try openai-compatible as fallback - find first available config for user
             const config = await ModelOpenaiCompatibleModel.findOne({

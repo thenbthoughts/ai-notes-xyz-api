@@ -254,7 +254,7 @@ Create a concise summary that captures their current activities, priorities, and
 
         // Call LLM to generate the brief summary
         const result = await fetchLlmUnified({
-            provider: llmConfig.provider as 'groq' | 'openrouter' | 'ollama' | 'openai-compatible',
+            provider: llmConfig.provider as 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible',
             apiKey: llmConfig.apiKey,
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.modelName,

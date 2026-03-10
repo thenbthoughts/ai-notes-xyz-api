@@ -33,7 +33,7 @@ interface IUser extends Document {
 
     // enabled ai features
     featureAiActionsEnabled: boolean;
-    featureAiActionsModelProvider: '' | 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    featureAiActionsModelProvider: '' | 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     featureAiActionsModelName: string;
 
     featureAiActionsChatThread: boolean;

@@ -32,7 +32,7 @@ const funcDoesModalSupportImage = async ({
     modelName,
     username,
 }: {
-    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     modelName: string;
     username: string;
 }) => {
@@ -134,7 +134,7 @@ const getConversationList = async ({
 }: {
     username: string,
     threadId: mongoose.Types.ObjectId,
-    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible',
+    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible',
     modelName: string,
     threadInfo: IChatLlmThread,
 }) => {
@@ -779,7 +779,7 @@ const getNextMessageFromLast30Conversation = async ({
     userApiKey: tsUserApiKey;
 
     // model name
-    aiModelProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    aiModelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     aiModelName: string;
 
     // messageId
@@ -894,6 +894,9 @@ const getNextMessageFromLast30Conversation = async ({
         } else if (aiModelProvider === 'ollama' && userApiKey.apiKeyOllamaValid) {
             llmAuthToken = '';
             llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
+        } else if (aiModelProvider === 'localai' && userApiKey.apiKeyLocalaiValid) {
+            llmAuthToken = userApiKey.apiKeyLocalai || '';
+            llmEndpoint = userApiKey.apiKeyLocalaiEndpoint;
         } else if (aiModelProvider === 'openai-compatible') {
             // Use aiModelOpenAiCompatibleConfigId from thread
             if (threadInfo.aiModelOpenAiCompatibleConfigId) {
@@ -948,7 +951,7 @@ const getNextMessageFromLast30Conversation = async ({
     console.log('llmEndpoint: ', llmEndpoint);
 
     // fetch llm using unified approach
-    if (llmAuthToken.length >= 1 || aiModelProvider === 'ollama') {
+    if (llmAuthToken.length >= 1 || aiModelProvider === 'ollama' || aiModelProvider === 'localai') {
         console.log('llmAuthToken: ', llmAuthToken);
         // If messageId provided, use streaming and update DB every second
         console.log('messageId: ', messageId);

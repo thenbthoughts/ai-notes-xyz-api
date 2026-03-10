@@ -76,7 +76,7 @@ const  generateTaskAiTagsById = async ({
 
         // Use fetchLlmUnified with the config
         const llmResult = await fetchLlmUnified({
-            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
             apiKey: llmConfig.apiKey,
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.modelName,

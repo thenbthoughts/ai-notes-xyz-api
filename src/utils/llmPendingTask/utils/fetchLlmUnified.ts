@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import openrouterMarketing from '../../../config/openrouterMarketing';
 import { ollamaDownloadModel } from '../../../config/ollamaConfig';
 
-export type LlmProvider = 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+export type LlmProvider = 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible';
 
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool' | 'function';
 
@@ -85,6 +85,18 @@ export interface FetchLlmParams {
   groqExtras?: Record<string, unknown>;
   ollamaExtras?: {
     options?: Record<string, unknown>;
+  };
+  localaiExtras?: {
+    // LocalAI supports additional parameters like backend, grammar, etc.
+    backend?: string;
+    grammar?: string;
+    seed?: number;
+    ignore_eos?: boolean;
+    repeat_penalty?: number;
+    repeat_last_n?: number;
+    top_k?: number;
+    typical_p?: number;
+    // Add more as needed based on LocalAI API
   };
   openRouterApi?: {
     provider?: {
@@ -171,6 +183,19 @@ function buildOpenAiPayload(params: FetchLlmParams) {
         }
       }
     }
+  }
+
+  // LocalAI extras pass-through
+  if (params.provider === 'localai' && params.localaiExtras) {
+    const { backend, grammar, seed, ignore_eos, repeat_penalty, repeat_last_n, top_k, typical_p } = params.localaiExtras;
+    if (backend) (data as any).backend = backend;
+    if (grammar) (data as any).grammar = grammar;
+    if (typeof seed === 'number') (data as any).seed = seed;
+    if (typeof ignore_eos === 'boolean') (data as any).ignore_eos = ignore_eos;
+    if (typeof repeat_penalty === 'number') (data as any).repeat_penalty = repeat_penalty;
+    if (typeof repeat_last_n === 'number') (data as any).repeat_last_n = repeat_last_n;
+    if (typeof top_k === 'number') (data as any).top_k = top_k;
+    if (typeof typical_p === 'number') (data as any).typical_p = typical_p;
   }
 
   return data;
@@ -283,6 +308,76 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
         reasoningTokens: 0, // Ollama doesn't typically provide reasoning tokens
         totalTokens,
         costInUsd: 0, // Cost calculation can be done elsewhere if needed
+      };
+
+      return {
+        success: content.length > 0 || !!toolCalls?.length,
+        content,
+        raw: response.data,
+        error: '',
+        toolCalls,
+        usageStats
+      };
+    }
+
+    // provider localai
+    if (params.provider === 'localai') {
+      // apiEndpoint is required for LocalAI (e.g., http://localhost:8080)
+      if (!params.apiEndpoint) {
+        return {
+          success: false,
+          content: '',
+          raw: null,
+          error: 'LocalAI endpoint is required',
+          usageStats: { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0, costInUsd: 0 }
+        };
+      }
+
+      const url = `${params.apiEndpoint.replace(/\/$/, '')}/v1/chat/completions`;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
+
+      if (params.headersExtra) {
+        Object.assign(headers, params.headersExtra);
+      }
+
+      const data = buildOpenAiPayload(params);
+      const config: AxiosRequestConfig = {
+        method: 'post',
+        url: url,
+        headers,
+        data: JSON.stringify(data),
+      };
+
+      const response: AxiosResponse = await axios.request(config);
+      const choice: any = (response as any)?.data?.choices?.[0];
+
+      // LocalAI supports both message.content and choice.text
+      const content: string = choice?.message?.content ?? choice?.text ?? '';
+
+      // Handle LocalAI tool calls format (may be different from OpenAI)
+      const toolCalls: ToolCall[] | undefined = choice?.message?.tool_calls;
+
+      // Extract usage statistics from LocalAI response format
+      const usage = response?.data?.usage;
+      // LocalAI uses: input_tokens, output_tokens, completion_tokens, prompt_tokens
+      const promptTokens = usage?.prompt_tokens || usage?.input_tokens || 0;
+      const completionTokens = usage?.completion_tokens || usage?.output_tokens || 0;
+      const reasoningTokens = 0; // LocalAI doesn't seem to separate reasoning tokens
+      const totalTokens = usage?.total_tokens || (promptTokens + completionTokens);
+      const costInUsd = 0; // LocalAI doesn't provide cost information
+
+      const usageStats = {
+        promptTokens,
+        completionTokens,
+        reasoningTokens,
+        totalTokens,
+        costInUsd,
       };
 
       return {
@@ -441,6 +536,12 @@ export async function fetchLlmUnifiedStream(
       if (params.apiKey) {
         headers['Authorization'] = `Bearer ${params.apiKey}`;
       }
+    } else if (params.provider === 'localai') {
+      // For LocalAI, use apiEndpoint as base URL and append /v1/chat/completions
+      finalApiEndpoint = `${params.apiEndpoint.replace(/\/$/, '')}/v1/chat/completions`;
+      if (params.apiKey) {
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+      }
     } else if (params.provider === 'openai-compatible') {
       // For OpenAI-compatible providers, use apiEndpoint as base URL
       finalApiEndpoint = params.apiEndpoint;
@@ -452,7 +553,7 @@ export async function fetchLlmUnifiedStream(
     } else {
       return {
         success: false,
-        error: 'Streaming only supported for groq, openrouter, and openai providers',
+        error: 'Streaming only supported for groq, openrouter, localai, and openai-compatible providers',
         fullContent: '',
         reasoningContent: '',
         promptTokens: 0,

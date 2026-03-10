@@ -215,7 +215,7 @@ const generateFaqsWithLlm = async ({
     content: string;
     sourceType: string;
     llmConfig: {
-        provider: 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+        provider: 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible';
         apiKey: string;
         apiEndpoint?: string;
         modelName: string;

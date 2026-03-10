@@ -55,7 +55,7 @@ const selectMemoriesToKeepUsingLLM = async ({
     ];
 
     const llmResult = await fetchLlmUnified({
-        provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+        provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
         apiKey: llmConfig.apiKey,
         apiEndpoint: llmConfig.apiEndpoint,
         model: llmConfig.modelName,
@@ -211,7 +211,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
         ];
 
         const llmResult = await fetchLlmUnified({
-            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
             apiKey: llmConfig.apiKey,
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.modelName,

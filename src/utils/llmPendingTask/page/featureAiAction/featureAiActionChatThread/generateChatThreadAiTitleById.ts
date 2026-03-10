@@ -67,7 +67,7 @@ const  generateChatThreadAiTitleById = async ({
         });
 
         const summaryResult = await fetchLlmUnified({
-            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
             apiKey: llmConfig.apiKey,
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.modelName,
@@ -85,7 +85,7 @@ const  generateChatThreadAiTitleById = async ({
             titleSystemPrompt += `The title should be brief, relevant, and informative. Respond only with the title text, without any additional formatting or explanation. `;
 
             const titleResult = await fetchLlmUnified({
-                provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+                provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
                 apiKey: llmConfig.apiKey,
                 apiEndpoint: llmConfig.apiEndpoint,
                 model: llmConfig.modelName,

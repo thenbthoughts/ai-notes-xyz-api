@@ -4,7 +4,7 @@ import { ModelOpenaiCompatibleModel } from '../../../schema/schemaUser/SchemaOpe
 
 interface DefaultModelResult {
     featureAiActionsEnabled: boolean;
-    provider: '' | 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+    provider: '' | 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible';
     apiEndpoint: string;
     modelName: string;
     apiKey: string;
@@ -44,6 +44,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                 user.featureAiActionsModelProvider === 'openrouter' ||
                 user.featureAiActionsModelProvider === 'groq' ||
                 user.featureAiActionsModelProvider === 'ollama' ||
+                user.featureAiActionsModelProvider === 'localai' ||
                 user.featureAiActionsModelProvider === 'openai-compatible'
             ) {
                 let apiKey = '';
@@ -57,6 +58,9 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
                         apiKey = userApiKeys.apiKeyOpenrouter;
                     } else if (user.featureAiActionsModelProvider === 'ollama' && userApiKeys.apiKeyOllamaValid && userApiKeys.apiKeyOllamaEndpoint) {
                         apiEndpoint = userApiKeys.apiKeyOllamaEndpoint;
+                    } else if (user.featureAiActionsModelProvider === 'localai' && userApiKeys.apiKeyLocalaiValid && userApiKeys.apiKeyLocalaiEndpoint) {
+                        apiKey = userApiKeys.apiKeyLocalai || '';
+                        apiEndpoint = userApiKeys.apiKeyLocalaiEndpoint;
                     } else if (user.featureAiActionsModelProvider === 'openai-compatible') {
                         // For openai-compatible, we need to get the model configuration
                         const openaiModel = await ModelOpenaiCompatibleModel.findById(featureAiActionsModelName);
