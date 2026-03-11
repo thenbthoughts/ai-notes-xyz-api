@@ -5,7 +5,7 @@ import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaCh
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 
 export interface LlmConfig {
-    provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+    provider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     apiKey: string;
     apiEndpoint: string;
     model: string;
@@ -36,12 +36,12 @@ export const getLlmConfig = async ({
         let llmAuthToken = '';
         let llmEndpoint = '';
         let customHeaders: Record<string, string> | undefined = undefined;
-        let selectedProvider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible' | null = null;
+        let selectedProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible' | null = null;
         let modelName = '';
 
         // Use thread's model settings if available, otherwise use default priority
         if (thread.aiModelProvider && thread.aiModelName) {
-            selectedProvider = thread.aiModelProvider as 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
+            selectedProvider = thread.aiModelProvider as 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
             modelName = thread.aiModelName;
 
             if (selectedProvider === 'groq' && userApiKey.apiKeyGroqValid && userApiKey.apiKeyGroq) {
@@ -50,6 +50,9 @@ export const getLlmConfig = async ({
                 llmAuthToken = userApiKey.apiKeyOpenrouter;
             } else if (selectedProvider === 'ollama' && userApiKey.apiKeyOllamaValid && userApiKey.apiKeyOllamaEndpoint) {
                 llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
+            } else if (selectedProvider === 'localai' && userApiKey.apiKeyLocalaiValid && userApiKey.apiKeyLocalaiEndpoint) {
+                llmAuthToken = userApiKey.apiKeyLocalai || '';
+                llmEndpoint = userApiKey.apiKeyLocalaiEndpoint;
             } else if (selectedProvider === 'openai-compatible' && thread.aiModelOpenAiCompatibleConfigId) {
                 const config = await ModelOpenaiCompatibleModel.findById(thread.aiModelOpenAiCompatibleConfigId);
                 if (config && config.apiKey && config.baseUrl) {
@@ -85,6 +88,11 @@ export const getLlmConfig = async ({
                 selectedProvider = 'ollama';
                 llmEndpoint = userApiKey.apiKeyOllamaEndpoint;
                 modelName = 'llama3.2';
+            } else if (userApiKey.apiKeyLocalaiValid && userApiKey.apiKeyLocalaiEndpoint) {
+                selectedProvider = 'localai';
+                llmAuthToken = userApiKey.apiKeyLocalai || '';
+                llmEndpoint = userApiKey.apiKeyLocalaiEndpoint;
+                modelName = 'gemma-3-1b-it'; // Default model for LocalAI
             } else {
                 const config = await ModelOpenaiCompatibleModel.findOne({
                     username: username,

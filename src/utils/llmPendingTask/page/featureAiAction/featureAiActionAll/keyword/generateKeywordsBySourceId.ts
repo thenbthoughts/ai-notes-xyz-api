@@ -54,7 +54,7 @@ const fetchLlmKeywords = async ({
 }: {
     argContent: string,
     llmConfig: {
-        provider: 'openrouter' | 'groq' | 'ollama' | 'openai-compatible';
+        provider: 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible';
         apiKey: string;
         apiEndpoint?: string;
         modelName: string;

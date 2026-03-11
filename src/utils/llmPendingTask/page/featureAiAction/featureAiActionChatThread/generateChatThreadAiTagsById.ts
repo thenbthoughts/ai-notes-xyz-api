@@ -67,7 +67,7 @@ const  generateChatThreadAiTagsById = async ({
         });
 
         const summaryResult = await fetchLlmUnified({
-            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
             apiKey: llmConfig.apiKey,
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.modelName,
@@ -82,7 +82,7 @@ const  generateChatThreadAiTagsById = async ({
             const tagsSystemPrompt = "You are a JSON-based AI assistant specialized in extracting key topics and terms from user notes. Your task is to identify and generate a list of significant keywords based on the content provided by the user. These keywords should represent the main ideas, themes, or topics covered in the user's input. Output the result in JSON format as follows:\n\n{\n  \"keywords\": [\"keyword 1\", \"keyword 2\", \"keyword 3\", ...]\n}\n\nFocus on capturing nouns, significant verbs, and unique terms relevant to the content.\nAvoid generic words (e.g., 'the,' 'is,' 'and') and words with no specific relevance.\nEnsure that the keywords are concise and meaningful for quick reference.\n\nRespond only with the JSON structure.";
 
             const tagsResult = await fetchLlmUnified({
-                provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'openai-compatible',
+                provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
                 apiKey: llmConfig.apiKey,
                 apiEndpoint: llmConfig.apiEndpoint,
                 model: llmConfig.modelName,

@@ -31,6 +31,7 @@ import routesChatLlmTts from './chatLlm/chatLlmCrud/chatLlmTts.route';
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
 import routesDynamicDataModelGroq from './dynamicData/modelGroq.route';
 import routesDynamicDataModelOllama from './dynamicData/modelOllama.route';
+import routesDynamicDataModelLocalai from './dynamicData/modelLocalai.route';
 
 // page -> task
 import routesTaskCrud from './task/taskCrud.route';
@@ -149,6 +150,7 @@ router.use('/llm/crud', routesLlmCrud);
 router.use('/dynamic-data/model-openrouter', routesDynamicDataModelOpenrouter);
 router.use('/dynamic-data/model-groq', routesDynamicDataModelGroq);
 router.use('/dynamic-data/model-ollama', routesDynamicDataModelOllama);
+router.use('/dynamic-data/model-localai', routesDynamicDataModelLocalai);
 
 
 // dashboard

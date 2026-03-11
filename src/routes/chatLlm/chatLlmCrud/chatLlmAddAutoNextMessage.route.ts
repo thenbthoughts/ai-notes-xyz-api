@@ -68,7 +68,7 @@ router.post(
                 targetRecordId: threadId,
             });
 
-            let aiModelProvider = threadInfo.aiModelProvider as 'groq' | 'openrouter';
+            let aiModelProvider = threadInfo.aiModelProvider as 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
             let aiModelName = threadInfo.aiModelName;
             let llmAuthToken = '';
             let llmEndpoint = '';
@@ -101,6 +101,7 @@ router.post(
                 aiModelProvider === 'groq' ||
                 aiModelProvider === 'openrouter' ||
                 aiModelProvider === 'ollama' ||
+                aiModelProvider === 'localai' ||
                 aiModelProvider === 'openai-compatible'
             ) {
                 await getNextMessageFromLast30Conversation({

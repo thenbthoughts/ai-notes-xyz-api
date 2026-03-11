@@ -79,7 +79,7 @@ const userSchema = new Schema<IUser>({
     },
     featureAiActionsModelProvider: {
         type: String,
-        enum: ['', 'groq', 'openrouter', 'ollama', 'openai-compatible'],
+        enum: ['', 'groq', 'openrouter', 'ollama', 'localai', 'openai-compatible'],
         default: '',
     },
     featureAiActionsModelName: {
