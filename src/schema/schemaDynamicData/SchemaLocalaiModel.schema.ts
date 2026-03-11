@@ -16,6 +16,12 @@ const aiModelListLocalaiSchema = new Schema<tsSchemaAiModelListLocalai>({
         type: String,
         default: '',
     },
+    modelType: {
+        type: String,
+        default: '',
+        enum: ['', 'llm', 'stt', 'tts', 'embedding', 'image-generation'],
+        // llm | stt | tts | embedding | image-generation | '' (empty = not specified)
+    },
 
     // input modalities
     isInputModalityText: {
@@ -34,6 +40,33 @@ const aiModelListLocalaiSchema = new Schema<tsSchemaAiModelListLocalai>({
         enum: ['true', 'false', 'pending'],
     },
     isInputModalityVideo: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+
+    // output modalities
+    isOutputModalityText: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityImage: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityAudio: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityVideo: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityEmbedding: {
         type: String,
         default: 'false',
         enum: ['true', 'false', 'pending'],

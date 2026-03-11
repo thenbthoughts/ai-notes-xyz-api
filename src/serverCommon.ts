@@ -23,7 +23,7 @@ app.use(cors({
         envKeys.API_URL,
         `https://${envKeys.API_URL}`,
     ],
-    methods: 'GET,POST,PUT,DELETE',
+    methods: 'GET,POST,PUT,DELETE,PATCH',
     allowedHeaders: ['Content-Type', 'Set-Cookie'],
     credentials: true,
 }));
