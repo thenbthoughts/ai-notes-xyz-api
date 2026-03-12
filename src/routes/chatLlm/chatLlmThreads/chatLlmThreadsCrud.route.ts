@@ -232,6 +232,10 @@ router.post(
                 aiModelName,
                 aiModelProvider,
                 aiModelOpenAiCompatibleConfigId,
+                sttModelName,
+                sttModelProvider,
+                ttsModelName,
+                ttsModelProvider,
 
                 // classification
                 isFavourite,
@@ -256,6 +260,10 @@ router.post(
                 aiModelName: '',
                 aiModelProvider: '',
                 aiModelOpenAiCompatibleConfigId: null as mongoose.Types.ObjectId | null,
+                sttModelName: '',
+                sttModelProvider: '',
+                ttsModelName: '',
+                ttsModelProvider: '',
 
                 // classification
                 isFavourite: false,
@@ -293,6 +301,19 @@ router.post(
 
             if (typeof aiModelOpenAiCompatibleConfigId === 'string' && aiModelOpenAiCompatibleConfigId.length === 24) {
                 addData.aiModelOpenAiCompatibleConfigId = getMongodbObjectOrNull(aiModelOpenAiCompatibleConfigId);
+            };
+
+            if (typeof sttModelName === 'string') {
+                addData.sttModelName = sttModelName;
+            };
+            if (typeof sttModelProvider === 'string') {
+                addData.sttModelProvider = sttModelProvider;
+            };
+            if (typeof ttsModelName === 'string') {
+                addData.ttsModelName = ttsModelName;
+            };
+            if (typeof ttsModelProvider === 'string') {
+                addData.ttsModelProvider = ttsModelProvider;
             };
 
             if (typeof isFavourite === 'boolean') {
@@ -421,6 +442,10 @@ router.post(
                 aiModelName,
                 aiModelProvider,
                 aiModelOpenAiCompatibleConfigId,
+                sttModelName,
+                sttModelProvider,
+                ttsModelName,
+                ttsModelProvider,
 
                 systemPrompt,
 
@@ -472,6 +497,19 @@ router.post(
 
             if (typeof aiModelOpenAiCompatibleConfigId === 'string' && aiModelOpenAiCompatibleConfigId.length === 24) {
                 updateData.aiModelOpenAiCompatibleConfigId = getMongodbObjectOrNull(aiModelOpenAiCompatibleConfigId);
+            };
+
+            if (typeof sttModelName === 'string') {
+                updateData.sttModelName = sttModelName;
+            };
+            if (typeof sttModelProvider === 'string') {
+                updateData.sttModelProvider = sttModelProvider;
+            };
+            if (typeof ttsModelName === 'string') {
+                updateData.ttsModelName = ttsModelName;
+            };
+            if (typeof ttsModelProvider === 'string') {
+                updateData.ttsModelProvider = ttsModelProvider;
             };
 
             if (typeof systemPrompt === 'string') {
