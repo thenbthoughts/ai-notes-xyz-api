@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, isAxiosError } from 'axios';
 
-export type TtsProvider = 'openai' | 'groq';
+export type TtsProvider = 'openai' | 'groq' | 'localai';
 
 export interface FetchTtsParams {
     text: string;
@@ -16,6 +16,14 @@ export interface FetchTtsParams {
      * Groq supports: mp3, wav
      */
     format?: string;
+    /**
+     * For LocalAI: endpoint URL (e.g. http://localhost:8080)
+     */
+    endpoint?: string;
+    /**
+     * For LocalAI: model name (e.g. tts, vibevoice, pocket-tts)
+     */
+    model?: string;
 }
 
 export interface FetchTtsResult {
@@ -31,7 +39,7 @@ export interface FetchTtsResult {
  * Returns a raw audio Buffer + content-type string ready to stream to clients.
  */
 const fetchTtsUnified = async (params: FetchTtsParams): Promise<FetchTtsResult> => {
-    const { text, provider, apiKey, voice, format } = params;
+    const { text, provider, apiKey, voice, format, endpoint, model } = params;
 
     try {
         if (provider === 'openai') {
@@ -75,7 +83,8 @@ const fetchTtsUnified = async (params: FetchTtsParams): Promise<FetchTtsResult> 
         }
 
         if (provider === 'groq') {
-            const selectedVoice = voice || 'Fritz-PlayAI';
+            // autumn diana hannah austin daniel troy
+            const selectedVoice = voice || 'diana';
             const selectedFormat = format || 'wav';
 
             const config: AxiosRequestConfig = {
@@ -86,7 +95,7 @@ const fetchTtsUnified = async (params: FetchTtsParams): Promise<FetchTtsResult> 
                     'Content-Type': 'application/json',
                 },
                 data: {
-                    model: 'playai-tts',
+                    model: 'canopylabs/orpheus-v1-english',
                     input: text,
                     voice: selectedVoice,
                     response_format: selectedFormat,
@@ -101,6 +110,56 @@ const fetchTtsUnified = async (params: FetchTtsParams): Promise<FetchTtsResult> 
                 success: true,
                 audioBuffer,
                 contentType: selectedFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav',
+                error: '',
+            };
+        }
+
+        if (provider === 'localai') {
+            if (!endpoint || !endpoint.trim()) {
+                return {
+                    success: false,
+                    audioBuffer: null,
+                    contentType: '',
+                    error: 'LocalAI endpoint is required',
+                };
+            }
+
+            const baseUrl = endpoint.replace(/\/$/, '');
+            const selectedModel = model || 'tts';
+            const selectedFormat = format || 'wav';
+
+            const config: AxiosRequestConfig = {
+                method: 'post',
+                url: `${baseUrl}/v1/audio/speech`,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(apiKey && apiKey.trim() ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+                },
+                data: {
+                    model: selectedModel,
+                    input: text,
+                    voice: voice !== '' ? voice : undefined,
+                    response_format: selectedFormat,
+                },
+                responseType: 'arraybuffer',
+            };
+
+            const response = await axios.request(config);
+            const audioBuffer = Buffer.from(response.data);
+
+            const contentTypeMap: Record<string, string> = {
+                mp3: 'audio/mpeg',
+                opus: 'audio/ogg',
+                aac: 'audio/aac',
+                flac: 'audio/flac',
+                wav: 'audio/wav',
+                pcm: 'audio/pcm',
+            };
+
+            return {
+                success: true,
+                audioBuffer,
+                contentType: contentTypeMap[selectedFormat] || 'audio/wav',
                 error: '',
             };
         }

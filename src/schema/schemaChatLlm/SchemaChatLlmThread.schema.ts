@@ -59,6 +59,14 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: null,
     },
 
+    // STT (Speech-to-Text)
+    sttModelName: { type: String, default: '' },
+    sttModelProvider: { type: String, default: '' },
+
+    // TTS (Text-to-Speech)
+    ttsModelName: { type: String, default: '' },
+    ttsModelProvider: { type: String, default: '' },
+
     // ai
     tagsAi: { type: [String], default: [] },
     aiSummary: {

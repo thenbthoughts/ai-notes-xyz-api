@@ -24,6 +24,14 @@ export interface IChatLlmThread extends Document {
     aiModelProvider: string;
     aiModelOpenAiCompatibleConfigId: mongoose.Schema.Types.ObjectId | null;
 
+    // STT (Speech-to-Text)
+    sttModelProvider: string;
+    sttModelName: string;
+
+    // TTS (Text-to-Speech)
+    ttsModelProvider: string;
+    ttsModelName: string;
+
     // model info
     aiSummary: string;
     aiTasks: object[];
