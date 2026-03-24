@@ -138,17 +138,42 @@ export interface FetchLlmResult {
 }
 
 /**
+ * GPT-5 and newer OpenAI reasoning models reject `max_tokens` on Chat Completions;
+ * they require `max_completion_tokens` instead.
+ */
+function openAiChatModelUsesMaxCompletionTokens(model: string): boolean {
+  const id = model.trim().toLowerCase();
+  const base = id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
+  if (base.startsWith('gpt-5')) return true;
+  if (base.startsWith('o1') || base.startsWith('o3') || base.startsWith('o4')) return true;
+  return false;
+}
+
+function applyOpenAiTokenLimit(
+  data: Record<string, unknown>,
+  model: string,
+  maxTokens: number
+): void {
+  if (openAiChatModelUsesMaxCompletionTokens(model)) {
+    data.max_completion_tokens = maxTokens;
+  } else {
+    data.max_tokens = maxTokens;
+  }
+}
+
+/**
  * Normalize OpenAI-style chat completions payload
  */
 function buildOpenAiPayload(params: FetchLlmParams) {
+  const maxTokens = params.maxTokens ?? 2048;
   const data: Record<string, unknown> = {
     messages: params.messages,
     model: params.model,
     temperature: params.temperature ?? 1,
-    max_tokens: params.maxTokens ?? 2048,
     top_p: params.topP ?? 1,
     stream: false,
   };
+  applyOpenAiTokenLimit(data, params.model, maxTokens);
 
   if (params.responseFormat === 'json_object') {
     data.response_format = { type: 'json_object' };
@@ -568,14 +593,15 @@ export async function fetchLlmUnifiedStream(
       Object.assign(headers, params.headersExtra);
     }
 
+    const maxTokens = params.maxTokens ?? 2048;
     const data: Record<string, unknown> = {
       messages: params.messages,
       model: params.model,
       temperature: params.temperature ?? 1,
-      max_tokens: params.maxTokens ?? 2048,
       top_p: params.topP ?? 1,
       stream: true,
     };
+    applyOpenAiTokenLimit(data, params.model, maxTokens);
 
     const config: AxiosRequestConfig = {
       method: 'post',
