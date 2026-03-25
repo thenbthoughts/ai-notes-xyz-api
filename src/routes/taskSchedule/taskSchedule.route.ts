@@ -430,6 +430,7 @@ router.post(
 
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
+            const stateCount = [] as PipelineStage[];
 
             // stateDocument -> match
             const tempStageMatch = {
@@ -515,6 +516,12 @@ router.post(
                 }
             };
             stateDocument.push(tempStage);
+            stateCount.push(tempStage);
+
+            tempStage = {
+                $count: 'count',
+            };
+            stateCount.push(tempStage);
 
             // Sort by creation date (newest first)
             tempStage = {
@@ -524,18 +531,25 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-            // Limit results (default 50, max 200)
-            let limit = 50;
-            if (req.body?.limit) {
-                if (typeof req.body?.limit === 'number') {
-                    if (req.body?.limit > 0 && req.body?.limit <= 200) {
-                        limit = req.body?.limit;
-                    }
-                }
+            let page = 1;
+            if (typeof req.body?.page === 'number' && req.body.page >= 1) {
+                page = Math.floor(req.body.page);
+            }
+
+            let perPage = 20;
+            if (typeof req.body?.perPage === 'number' && req.body.perPage >= 1) {
+                perPage = Math.min(200, Math.floor(req.body.perPage));
+            } else if (typeof req.body?.limit === 'number' && req.body.limit > 0 && req.body.limit <= 200) {
+                perPage = Math.floor(req.body.limit);
             }
 
             tempStage = {
-                $limit: limit
+                $skip: (page - 1) * perPage,
+            };
+            stateDocument.push(tempStage);
+
+            tempStage = {
+                $limit: perPage,
             };
             stateDocument.push(tempStage);
 
@@ -561,12 +575,19 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-            // Execute aggregation
-            const resultTaskSchedules = await ModelTaskSchedule.aggregate(stateDocument);
+            const [resultTaskSchedules, resultCount] = await Promise.all([
+                ModelTaskSchedule.aggregate(stateDocument),
+                ModelTaskSchedule.aggregate(stateCount),
+            ]);
+
+            let totalCount = 0;
+            if (resultCount.length === 1 && typeof resultCount[0].count === 'number') {
+                totalCount = resultCount[0].count;
+            }
 
             return res.json({
                 message: 'Task schedules retrieved successfully',
-                count: resultTaskSchedules.length,
+                count: totalCount,
                 docs: resultTaskSchedules,
             });
         } catch (error) {
