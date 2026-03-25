@@ -17,6 +17,16 @@ import { ModelTaskScheduleSendMyselfEmail } from '../../schema/schemaTaskSchedul
 // Router
 const router = Router();
 
+/** Known task types for validation, filters, and count-by-type API. */
+const TASK_SCHEDULE_VALID_TASK_TYPES = [
+    'taskAdd',
+    'notesAdd',
+    'customRestApiCall',
+    'generatedDailySummaryByAi',
+    'suggestDailyTasksByAi',
+    'sendMyselfEmail',
+] as const;
+
 const getMongodbObjectOrNull = (id: string | null) => {
     if (!id) {
         return null;
@@ -43,15 +53,7 @@ const isValidCronExpression = (cronExpression: string): boolean => {
 
 // Validate task type
 const isValidTaskType = (taskType: string): boolean => {
-    const validTaskTypes = [
-        'taskAdd',
-        'notesAdd',
-        'customRestApiCall',
-        'generatedDailySummaryByAi',
-        'suggestDailyTasksByAi',
-        'sendMyselfEmail',
-    ];
-    return validTaskTypes.includes(taskType);
+    return (TASK_SCHEDULE_VALID_TASK_TYPES as readonly string[]).includes(taskType);
 }
 
 // revalidate task schedule execution time by id
@@ -589,6 +591,55 @@ router.post(
                 message: 'Task schedules retrieved successfully',
                 count: totalCount,
                 docs: resultTaskSchedules,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// taskScheduleTaskTypeCounts — document count per task type for current user
+router.post(
+    '/taskScheduleTaskTypeCounts',
+    middlewareUserAuth,
+    async (_req: Request, res: Response) => {
+        try {
+            const auth_username = res.locals.auth_username;
+
+            const grouped = await ModelTaskSchedule.aggregate([
+                {
+                    $match: {
+                        username: auth_username,
+                    },
+                },
+                {
+                    $group: {
+                        _id: '$taskType',
+                        count: { $sum: 1 },
+                    },
+                },
+            ]) as { _id: string | null; count: number }[];
+
+            const countByType: Record<string, number> = {};
+
+            // total count
+            let total = 0;
+            for (const row of grouped) {
+                countByType[row._id ?? ''] = row.count;
+                total += row.count;
+            }
+
+            // by task type
+            const byTaskType = TASK_SCHEDULE_VALID_TASK_TYPES.map((taskType) => ({
+                taskType,
+                count: countByType[taskType] ?? 0,
+            }));
+
+            return res.json({
+                message: 'Task type counts retrieved successfully',
+                total,
+                byTaskType,
             });
         } catch (error) {
             console.error(error);
