@@ -17,6 +17,16 @@ import { ModelTaskScheduleSendMyselfEmail } from '../../schema/schemaTaskSchedul
 // Router
 const router = Router();
 
+/** Known task types for validation, filters, and count-by-type API. */
+const TASK_SCHEDULE_VALID_TASK_TYPES = [
+    'taskAdd',
+    'notesAdd',
+    'customRestApiCall',
+    'generatedDailySummaryByAi',
+    'suggestDailyTasksByAi',
+    'sendMyselfEmail',
+] as const;
+
 const getMongodbObjectOrNull = (id: string | null) => {
     if (!id) {
         return null;
@@ -43,15 +53,7 @@ const isValidCronExpression = (cronExpression: string): boolean => {
 
 // Validate task type
 const isValidTaskType = (taskType: string): boolean => {
-    const validTaskTypes = [
-        'taskAdd',
-        'notesAdd',
-        'customRestApiCall',
-        'generatedDailySummaryByAi',
-        'suggestDailyTasksByAi',
-        'sendMyselfEmail',
-    ];
-    return validTaskTypes.includes(taskType);
+    return (TASK_SCHEDULE_VALID_TASK_TYPES as readonly string[]).includes(taskType);
 }
 
 // revalidate task schedule execution time by id
@@ -430,6 +432,7 @@ router.post(
 
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
+            const stateCount = [] as PipelineStage[];
 
             // stateDocument -> match
             const tempStageMatch = {
@@ -515,6 +518,12 @@ router.post(
                 }
             };
             stateDocument.push(tempStage);
+            stateCount.push(tempStage);
+
+            tempStage = {
+                $count: 'count',
+            };
+            stateCount.push(tempStage);
 
             // Sort by creation date (newest first)
             tempStage = {
@@ -524,18 +533,25 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-            // Limit results (default 50, max 200)
-            let limit = 50;
-            if (req.body?.limit) {
-                if (typeof req.body?.limit === 'number') {
-                    if (req.body?.limit > 0 && req.body?.limit <= 200) {
-                        limit = req.body?.limit;
-                    }
-                }
+            let page = 1;
+            if (typeof req.body?.page === 'number' && req.body.page >= 1) {
+                page = Math.floor(req.body.page);
+            }
+
+            let perPage = 20;
+            if (typeof req.body?.perPage === 'number' && req.body.perPage >= 1) {
+                perPage = Math.min(200, Math.floor(req.body.perPage));
+            } else if (typeof req.body?.limit === 'number' && req.body.limit > 0 && req.body.limit <= 200) {
+                perPage = Math.floor(req.body.limit);
             }
 
             tempStage = {
-                $limit: limit
+                $skip: (page - 1) * perPage,
+            };
+            stateDocument.push(tempStage);
+
+            tempStage = {
+                $limit: perPage,
             };
             stateDocument.push(tempStage);
 
@@ -561,13 +577,69 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-            // Execute aggregation
-            const resultTaskSchedules = await ModelTaskSchedule.aggregate(stateDocument);
+            const [resultTaskSchedules, resultCount] = await Promise.all([
+                ModelTaskSchedule.aggregate(stateDocument),
+                ModelTaskSchedule.aggregate(stateCount),
+            ]);
+
+            let totalCount = 0;
+            if (resultCount.length === 1 && typeof resultCount[0].count === 'number') {
+                totalCount = resultCount[0].count;
+            }
 
             return res.json({
                 message: 'Task schedules retrieved successfully',
-                count: resultTaskSchedules.length,
+                count: totalCount,
                 docs: resultTaskSchedules,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// taskScheduleTaskTypeCounts — document count per task type for current user
+router.post(
+    '/taskScheduleTaskTypeCounts',
+    middlewareUserAuth,
+    async (_req: Request, res: Response) => {
+        try {
+            const auth_username = res.locals.auth_username;
+
+            const grouped = await ModelTaskSchedule.aggregate([
+                {
+                    $match: {
+                        username: auth_username,
+                    },
+                },
+                {
+                    $group: {
+                        _id: '$taskType',
+                        count: { $sum: 1 },
+                    },
+                },
+            ]) as { _id: string | null; count: number }[];
+
+            const countByType: Record<string, number> = {};
+
+            // total count
+            let total = 0;
+            for (const row of grouped) {
+                countByType[row._id ?? ''] = row.count;
+                total += row.count;
+            }
+
+            // by task type
+            const byTaskType = TASK_SCHEDULE_VALID_TASK_TYPES.map((taskType) => ({
+                taskType,
+                count: countByType[taskType] ?? 0,
+            }));
+
+            return res.json({
+                message: 'Task type counts retrieved successfully',
+                total,
+                byTaskType,
             });
         } catch (error) {
             console.error(error);
