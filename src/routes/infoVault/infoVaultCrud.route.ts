@@ -96,7 +96,7 @@ router.post('/infoVaultGet', middlewareUserAuth, async (req: Request, res: Respo
 
         // stage -> match -> relationshipType
         if (typeof req.body?.relationshipType === 'string') {
-            if (['personal', 'professional', 'family', 'other'].includes(req.body.relationshipType)) {
+            if (['myself', 'personal', 'professional', 'family', 'other'].includes(req.body.relationshipType)) {
                 tempStage = {
                     $match: {
                         relationshipType: req.body.relationshipType,

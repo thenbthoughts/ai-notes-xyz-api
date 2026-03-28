@@ -1,4 +1,4 @@
-import mongoose, { PipelineStage } from 'mongoose';
+import { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
@@ -6,6 +6,32 @@ import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 
 // Router
 const router = Router();
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildMapsSearchMatch = (raw: string): PipelineStage.Match | null => {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) {
+        return null;
+    }
+    const pattern = escapeRegex(trimmed);
+    return {
+        $match: {
+            $or: [
+                { 'lifeEvents.name': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.notes': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.nickname': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.company': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultType': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultAddress.label': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultAddress.address': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultAddress.city': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultAddress.state': { $regex: pattern, $options: 'i' } },
+                { 'lifeEvents.infoVaultAddress.countryRegion': { $regex: pattern, $options: 'i' } },
+            ],
+        },
+    };
+};
 
 const getMapsLocationInfoVault = ({
     username,
@@ -41,6 +67,21 @@ const getMapsLocationInfoVault = ({
         $unwind: {
             path: '$infoVaultAddressObj'
         }
+    };
+    stateDocument.push(tempStage);
+
+    // Skip rows with no usable coordinates (schema defaults lat/lng to 0)
+    tempStage = {
+        $match: {
+            $nor: [
+                {
+                    $and: [
+                        { 'infoVaultAddressObj.latitude': { $in: [0, null] } },
+                        { 'infoVaultAddressObj.longitude': { $in: [0, null] } },
+                    ],
+                },
+            ],
+        },
     };
     stateDocument.push(tempStage);
 
@@ -137,6 +178,9 @@ router.post(
                 }
             }
 
+            const searchRaw =
+                typeof req.body?.search === 'string' ? req.body.search : '';
+
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
 
@@ -151,25 +195,48 @@ router.post(
             };
             stateDocument.push(tempStage);
 
-            // stateDocument -> skip
+            // Ignore any stray rows from the anchor collection that are not map results
             tempStage = {
-                $skip: (page - 1) * perPage,
+                $match: {
+                    fromCollection: 'infoVault',
+                },
             };
             stateDocument.push(tempStage);
 
-            // stateDocument -> limit
+            const searchStage = buildMapsSearchMatch(searchRaw);
+            if (searchStage) {
+                stateDocument.push(searchStage);
+            }
+
             tempStage = {
-                $limit: perPage,
+                $facet: {
+                    docs: [
+                        { $skip: (page - 1) * perPage },
+                        { $limit: perPage },
+                    ],
+                    countMeta: [{ $count: 'total' }],
+                },
             };
             stateDocument.push(tempStage);
 
-            // pipeline
-            const resultRecordEmptyTable = await ModelRecordEmptyTable.aggregate(stateDocument);
+            const aggregateResult = await ModelRecordEmptyTable.aggregate(stateDocument);
+            const facetRow = aggregateResult[0] as
+                | { docs?: unknown[]; countMeta?: { total?: number }[] }
+                | undefined;
+            const docs = Array.isArray(facetRow?.docs) ? facetRow.docs : [];
+
+            // set totalCount
+            let totalCount = 0;
+            if (typeof facetRow?.countMeta?.[0]?.total === 'number') {
+                totalCount = facetRow.countMeta[0].total;
+            } else {
+                totalCount = 0;
+            }
 
             return res.json({
                 message: 'Maps retrieved successfully',
-                count: resultRecordEmptyTable.length,
-                docs: resultRecordEmptyTable,
+                count: totalCount,
+                docs,
             });
         } catch (error) {
             console.error(error);

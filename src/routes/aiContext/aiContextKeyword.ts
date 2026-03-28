@@ -11,6 +11,63 @@ import generateKeywordsBySourceId from '../../utils/llmPendingTask/page/featureA
 
 const router = Router();
 
+const KEYWORD_SOURCE_TYPES = ['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault'] as const;
+
+// Add a single keyword manually (linked to a source, e.g. a note)
+router.post('/add', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const auth_username = res.locals.auth_username;
+        const sourceId = req.body?.sourceId as string;
+        const rawKeyword = req.body?.keyword as string;
+        const sourceTypeRaw = (req.body?.sourceType as string) || 'notes';
+
+        const keyword = typeof rawKeyword === 'string' ? rawKeyword.trim() : '';
+        if (!keyword || keyword.length > 256) {
+            return res.status(400).json({ message: 'Invalid keyword' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(sourceId)) {
+            return res.status(400).json({ message: 'Invalid source id' });
+        }
+
+        const metadataSourceType = KEYWORD_SOURCE_TYPES.includes(sourceTypeRaw as typeof KEYWORD_SOURCE_TYPES[number])
+            ? sourceTypeRaw
+            : 'notes';
+
+        const metadataSourceId = new mongoose.Types.ObjectId(sourceId);
+
+        const dup = await ModelLlmContextKeyword.findOne({
+            username: auth_username,
+            metadataSourceId,
+            keyword,
+        });
+        if (dup) {
+            return res.status(400).json({ message: 'Keyword already exists for this item' });
+        }
+
+        const doc = await ModelLlmContextKeyword.create({
+            username: auth_username,
+            keyword,
+            aiCategory: '',
+            aiSubCategory: '',
+            aiTopic: '',
+            aiSubTopic: '',
+            metadataSourceType,
+            metadataSourceId,
+            hasEmbedding: false,
+            vectorEmbeddingStr: '',
+        });
+
+        return res.json({
+            message: 'Keyword added',
+            doc,
+        });
+    } catch (error) {
+        console.error('Error adding keyword:', error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // List AI Context Keywords with aggregation
 router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
