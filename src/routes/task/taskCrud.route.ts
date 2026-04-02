@@ -14,8 +14,11 @@ import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaComme
 import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 import { deleteFilesByParentEntityId } from '../upload/uploadFileS3ForFeatures';
 import {
-    computeRemainderScheduledTimesFromInput,
-} from '../../utils/task/computeRemainderScheduledTimesInput';
+    computeReminderScheduledTimes,
+    computeReminderScheduledTimesForDueDate,
+} from '../../utils/task/computeReminderScheduledTimesTask';
+
+export { computeReminderScheduledTimes, computeReminderScheduledTimesForDueDate };
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import IUser from '../../types/typesSchema/typesUser/SchemaUser.types';
 
@@ -746,93 +749,6 @@ const taskEditTriggerAddComment = async ({
         });
     } catch (error) {
         console.error(error);
-    }
-}
-
-const computeReminderScheduledTimes = async ({
-    taskId,
-    cronTimeZone,
-}: {
-    taskId: mongoose.Types.ObjectId;
-    cronTimeZone: string;
-}) => {
-    try {
-        const task = await ModelTask.findOne({
-            _id: taskId,
-        }).lean() as tsTaskList;
-
-        if (!task) {
-            return false;
-        }
-
-        const dueReminder = computeRemainderScheduledTimesFromInput({
-            cronExpressions: (task.dueDateReminderCronExpressions as string[]) || [],
-            cronTimeZone: cronTimeZone,
-            absoluteTimesIso: (task.dueDateReminderAbsoluteTimesIso as string[]) || [],
-            presetLabels: (task.dueDateReminderPresetLabels as string[]) || [],
-            dueDate: task.dueDate ? new Date(task.dueDate as string | Date) : null,
-        });
-
-        const remainderReminder = computeRemainderScheduledTimesFromInput({
-            cronExpressions: (task.remainderCronExpressions as string[]) || [],
-            cronTimeZone: cronTimeZone, 
-            absoluteTimesIso: (task.remainderAbsoluteTimesIso as string[]) || [],
-            presetLabels: [],
-            dueDate: null,
-        });
-
-        // Update the task with newly computed scheduled times
-        await ModelTask.findOneAndUpdate(
-            { _id: taskId },
-            {
-                dueDateReminderScheduledTimes: dueReminder.remainderScheduledTimes,
-                remainderScheduledTimes: remainderReminder.remainderScheduledTimes,
-            }
-        );
-
-        return true;
-    } catch (error) {
-        console.error(error);
-        return false;
-    }
-}
-
-const computeReminderScheduledTimesForDueDate = async ({
-    taskId,
-    cronTimeZone,
-}: {
-    taskId: mongoose.Types.ObjectId;
-    cronTimeZone: string;
-}) => {
-    try {
-        const task = await ModelTask.findOne({
-            _id: taskId,
-        }).lean() as tsTaskList;
-
-        if (!task) {
-            return false;
-        }
-
-        // Recompute only due date reminders (for cases when only due date changes)
-        const dueReminder = computeRemainderScheduledTimesFromInput({
-            cronExpressions: (task.dueDateReminderCronExpressions as string[]) || [],
-            cronTimeZone: cronTimeZone,
-            absoluteTimesIso: (task.dueDateReminderAbsoluteTimesIso as string[]) || [],
-            presetLabels: (task.dueDateReminderPresetLabels as string[]) || [],
-            dueDate: task.dueDate ? new Date(task.dueDate as string | Date) : null,
-        });
-
-        await ModelTask.findOneAndUpdate(
-            { _id: taskId },
-            {
-                dueDateReminderScheduledTimes: dueReminder.remainderScheduledTimes,
-            }
-        );
-
-        return true;
-    } catch (error) {
-        console.error(error);
-        return false;
     }
 }
 

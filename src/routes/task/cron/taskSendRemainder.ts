@@ -4,6 +4,10 @@ import { funcSendMail } from '../../../utils/files/funcSendMail';
 import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import { ModelUserApiKey } from '../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { computeRemainderScheduledTimesFromInput } from '../../../utils/task/computeRemainderScheduledTimesInput';
+import {
+    computeReminderScheduledTimes,
+    computeReminderScheduledTimesForDueDate,
+} from '../../../utils/task/computeReminderScheduledTimesTask';
 import { CronExpressionParser } from 'cron-parser';
 
 const CRON_FIRE_WINDOW_MS = 5 * 60 * 1000;
@@ -210,6 +214,15 @@ const processTaskAbsoluteTimes = async ({
                     }
                 );
             }
+
+            await computeReminderScheduledTimes({
+                taskId: _id,
+                cronTimeZone: userTimeZone,
+            });
+            await computeReminderScheduledTimesForDueDate({
+                taskId: _id,
+                cronTimeZone: userTimeZone,
+            });
         }
 
         return sent;
@@ -294,6 +307,17 @@ const processTaskCronReminders = async ({
             userInfo: userInfo as { username: string; email: string },
             apiKeys: apiKeys as { clientFrontendUrl: string },
         });
+
+        if (sent) {
+            await computeReminderScheduledTimes({
+                taskId: _id,
+                cronTimeZone: userTimeZone,
+            });
+            await computeReminderScheduledTimesForDueDate({
+                taskId: _id,
+                cronTimeZone: userTimeZone,
+            });
+        }
 
         return sent;
     } catch (error) {
