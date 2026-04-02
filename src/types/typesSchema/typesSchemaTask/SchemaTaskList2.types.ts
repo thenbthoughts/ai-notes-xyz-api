@@ -23,10 +23,21 @@ export interface tsTaskList extends Document {
     // task homepage pinned
     isTaskPinned: boolean;
 
-    // reminder
-    reminderPresetTimeLabel: string,
-    reminderPresetTimes: Date[],
-    reminderPresetTimesCompleted: Date[],
+    // reminder — relative to due date (preset keys)
+    dueDateReminderPresetLabels: string[];
+    /** Exact send times (ISO) configured under due-date reminders */
+    dueDateReminderAbsoluteTimesIso: string[];
+    /** Cron expressions configured under due-date reminders */
+    dueDateReminderCronExpressions: string[];
+    /** Pending / completed one-shot sends for due-date reminders */
+    dueDateReminderScheduledTimes: Date[];
+    dueDateReminderScheduledTimesCompleted: Date[];
+
+    // remainder — email reminders (exact times, cron, scheduled send instants)
+    remainderAbsoluteTimesIso: string[];
+    remainderCronExpressions: string[];
+    remainderScheduledTimes: Date[];
+    remainderScheduledTimesCompleted: Date[];
 
     // auth
     username: string;

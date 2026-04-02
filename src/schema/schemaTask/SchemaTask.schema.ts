@@ -67,18 +67,53 @@ const taskSchema = new Schema<tsTaskList>({
         default: false,
     },
 
+    // due date reminder
+    dueDateReminderPresetLabels: {
+        type: [String],
+        default: [],
+        // here we will store the preset labels for the reminders
+    },
+    dueDateReminderAbsoluteTimesIso: {
+        type: [String],
+        default: [],
+        // here we will store the absolute times for the reminders
+    },
+    dueDateReminderCronExpressions: {
+        type: [String],
+        default: [],
+        // here we will store the cron expressions for the reminders
+    },
+    dueDateReminderScheduledTimes: {
+        type: [Date],
+        default: [],
+        // here we will store the times when the reminder was scheduled to be sent
+    },
+    dueDateReminderScheduledTimesCompleted: {
+        type: [Date],
+        default: [],
+        // here we will store the times when the reminder was sent
+    },
+
     // reminder
-    reminderPresetTimeLabel: {
-        type: String,
-        default: '',
+    remainderAbsoluteTimesIso: {
+        type: [String],
+        default: [],
+        // here we will store the absolute times for the reminders
     },
-    reminderPresetTimes: {
+    remainderCronExpressions: {
+        type: [String],
+        default: [],
+        // here we will store the cron expressions for the reminders
+    },
+    remainderScheduledTimes: {
         type: [Date],
         default: [],
+        // here we will store the times when the reminder was scheduled to be sent
     },
-    reminderPresetTimesCompleted: {
+    remainderScheduledTimesCompleted: {
         type: [Date],
         default: [],
+        // here we will store the times when the reminder was sent
     },
 
     // auto
