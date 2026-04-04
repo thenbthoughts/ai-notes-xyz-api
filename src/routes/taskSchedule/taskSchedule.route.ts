@@ -1,7 +1,5 @@
 import mongoose, { PipelineStage } from 'mongoose';
 import { Router, Request, Response } from 'express';
-import { CronExpressionParser } from 'cron-parser';
-
 import { ModelTaskSchedule } from '../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { normalizeDateTimeIpAddress } from '../../utils/llm/normalizeDateTimeIpAddress';
@@ -13,6 +11,7 @@ import { ModelTaskScheduleAddTask } from '../../schema/schemaTaskSchedule/Schema
 import { tsTaskListScheduleAddTask } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';
 import { tsTaskListScheduleSendMyselfEmail } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleSendMyselfEmail.types';
 import { ModelTaskScheduleSendMyselfEmail } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleSendMyselfEmail.schema';
+import { computeRemainderScheduledTimesFromInput } from '../../utils/task/computeRemainderScheduledTimesInput';
 
 // Router
 const router = Router();
@@ -107,26 +106,17 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
         let scheduleExecutionTimeArr: Date[] = [];
         const itemTaskSchedule = resultTaskSchedule[0];
 
-        // step 1: cron expressions
+        // step 1: cron expressions (shared helper with task reminder cron expansion)
         if (itemTaskSchedule.cronExpressionArr && itemTaskSchedule.cronExpressionArr.length > 0) {
-            for (const cronExpression of itemTaskSchedule.cronExpressionArr) {
-                try {
-                    const interval = CronExpressionParser.parse(cronExpression, {
-                        currentDate: new Date(),
-                        tz: itemTaskSchedule.timezoneName
-                    });
-
-                    // Get next 101 occurrences for this cron expression
-                    for (let i = 0; i < 101; i++) {
-                        const nextDate = interval.next().toDate();
-
-                        // add date to scheduleExecutionTimeArr
-                        scheduleExecutionTimeArr.push(nextDate);
-                    }
-                } catch (err: any) {
-                    console.error(`Error parsing cron expression ${cronExpression}:`, err.message);
-                }
-            }
+            scheduleExecutionTimeArr.push(
+                ...computeRemainderScheduledTimesFromInput({
+                    cronExpressions: itemTaskSchedule.cronExpressionArr,
+                    cronTimeZone: itemTaskSchedule.timezoneName,
+                    absoluteTimesIso: [],
+                    presetLabels: [],
+                    dueDate: null,
+                }).remainderScheduledTimes,
+            );
         }
 
         // step 2: scheduleTimeArr

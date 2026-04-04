@@ -13,6 +13,14 @@ import { tsTaskStatusList } from '../../types/typesSchema/typesSchemaTask/Schema
 import { ModelCommentCommon } from '../../schema/schemaCommentCommon/SchemaCommentCommon.schema';
 import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
 import { deleteFilesByParentEntityId } from '../upload/uploadFileS3ForFeatures';
+import {
+    computeReminderScheduledTimes,
+    computeReminderScheduledTimesForDueDate,
+} from '../../utils/task/computeReminderScheduledTimesTask';
+
+export { computeReminderScheduledTimes, computeReminderScheduledTimesForDueDate };
+import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
+import IUser from '../../types/typesSchema/typesUser/SchemaUser.types';
 
 // Router
 const router = Router();
@@ -773,10 +781,14 @@ router.post(
                 // task homepage pinned
                 isTaskPinned,
 
-                // remainder
-                reminderPresetTimeLabel,
                 reminderCustomTimes,
             } = req.body;
+
+            const dueDateReminderPresetLabels = req.body.dueDateReminderPresetLabels;
+            const dueDateReminderAbsoluteTimesIso = req.body.dueDateReminderAbsoluteTimesIso;
+            const dueDateReminderCronExpressions = req.body.dueDateReminderCronExpressions;
+            const remainderAbsoluteTimesIso = req.body.remainderAbsoluteTimesIso;
+            const remainderCronExpressions = req.body.remainderCronExpressions;
 
             let final_taskWorkspaceIdObj = null as mongoose.Types.ObjectId | null;
 
@@ -832,11 +844,11 @@ router.post(
                 );
             }
 
-            // get task
+            // get task (lean)
             const task = await ModelTask.findOne({
                 _id: getMongodbObjectOrNull(id),
                 username: auth_username,
-            });
+            }).lean();
 
             if (!task) {
                 return res.status(404).json({ message: 'Task not found' });
@@ -845,52 +857,12 @@ router.post(
             // task edit trigger add comment
             await taskEditTriggerAddComment({
                 taskId: id,
-                taskStatusIdOld: task.taskStatusId?.toString() || '',
+                taskStatusIdOld: (task.taskStatusId as { toString?: () => string })?.toString?.() || '',
                 taskStatusIdNew: final_taskStatusId?.toString() || '',
                 auth_username: auth_username,
 
                 actionDatetimeObj: actionDatetimeObj,
             });
-
-            // remainder
-            if (reminderPresetTimeLabel && dueDate) {
-                // Simple calculation of reminder times based on dueDate and preset labels (lowercase, minus)
-                const labelToMsArr: { labelName: string, subTime: number }[] = [
-                    { labelName: "before-60-day", subTime: 60 * 24 * 60 * 60 * 1000 },
-                    { labelName: "before-30-day", subTime: 30 * 24 * 60 * 60 * 1000 },
-                    { labelName: "before-15-day", subTime: 15 * 24 * 60 * 60 * 1000 },
-                    { labelName: "before-5-day", subTime: 5 * 24 * 60 * 60 * 1000 },
-                    { labelName: "before-3-day", subTime: 3 * 24 * 60 * 60 * 1000 },
-                    { labelName: "before-1-day", subTime: 24 * 60 * 60 * 1000 },
-                    { labelName: "before-6-hours", subTime: 6 * 60 * 60 * 1000 },
-                    { labelName: "before-3-hours", subTime: 3 * 60 * 60 * 1000 },
-                    { labelName: "before-1-hours", subTime: 60 * 60 * 1000 },
-                    { labelName: "before-30-mins", subTime: 30 * 60 * 1000 },
-                    { labelName: "before-15-mins", subTime: 15 * 60 * 1000 },
-                    { labelName: "at-the-time-of-due-date", subTime: 0 },
-                ];
-
-                let presetTimes: Date[] = [];
-
-                if (reminderPresetTimeLabel && dueDate) {
-                    const normalizedLabel = typeof reminderPresetTimeLabel === "string" ? reminderPresetTimeLabel.toLowerCase() : "";
-                    const found = labelToMsArr.find(item => item.labelName === normalizedLabel);
-                    if (found) {
-                        const relatedLabels = labelToMsArr.filter(item => {
-                            if (
-                                Math.min(item.subTime, found.subTime) === item.subTime
-                            ) {
-                                return true;
-                            }
-                            return false;
-                        });
-                        presetTimes = relatedLabels.map(item => new Date(new Date(dueDate).getTime() - item.subTime));
-                    }
-                }
-
-                updateObj.reminderPresetTimeLabel = reminderPresetTimeLabel;
-                updateObj.reminderPresetTimes = presetTimes;
-            }
 
             const updatedTask = await ModelTask.findOneAndUpdate(
                 {
@@ -903,6 +875,13 @@ router.post(
                     taskStatus,
                     labels,
                     dueDate,
+
+                    // reminder input data
+                    dueDateReminderPresetLabels,
+                    dueDateReminderAbsoluteTimesIso,
+                    dueDateReminderCronExpressions,
+                    remainderAbsoluteTimesIso,
+                    remainderCronExpressions,
 
                     // status
                     isArchived,
@@ -943,7 +922,24 @@ router.post(
                 }],
             });
 
-            return res.json(updatedTask);
+            // get timezone name
+            const userObj = await ModelUser.findOne({
+                username: auth_username,
+            }).lean() as IUser;
+
+            // compute reminder scheduled times
+            await computeReminderScheduledTimes({
+                taskId: updatedTask._id as mongoose.Types.ObjectId,
+                cronTimeZone: userObj.timeZoneRegion,
+            });
+            await computeReminderScheduledTimesForDueDate({
+                taskId: updatedTask._id as mongoose.Types.ObjectId,
+                cronTimeZone: userObj.timeZoneRegion,
+            });
+
+            return res.json({
+                message: 'Task edited successfully',
+            });
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
