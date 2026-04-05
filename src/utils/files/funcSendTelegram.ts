@@ -2,12 +2,30 @@ import axios from 'axios';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelUserNotification } from '../../schema/schemaUser/SchemaUserNotification';
 
+/** Strip HTML for Telegram plain text; keeps line breaks from &lt;br&gt; and block closings. */
 function htmlToPlain(html: string): string {
-    return html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ');
+    s = s.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ');
+    s = s.replace(/<br\s*\/?>/gi, '\n');
+    s = s.replace(/<\/(p|div|h[1-6]|li|tr|blockquote)>/gi, '\n');
+    s = s.replace(/<hr\b[^>]*>/gi, '\n────────\n');
+    s = s.replace(/<[^>]+>/g, '');
+    s = s.replace(/&nbsp;/gi, ' ');
+    s = s.replace(/&amp;/gi, '&');
+    s = s.replace(/&lt;/gi, '<');
+    s = s.replace(/&gt;/gi, '>');
+    s = s.replace(/&#(\d+);/g, (_m, code: string) => {
+        const n = Number(code);
+        return Number.isFinite(n) ? String.fromCharCode(n) : '';
+    });
+    s = s.replace(/&#x([0-9a-f]+);/gi, (_m, hex: string) => {
+        const n = parseInt(hex, 16);
+        return Number.isFinite(n) ? String.fromCharCode(n) : '';
+    });
+    s = s.replace(/[ \t\f\v\u00a0]+/g, ' ');
+    s = s.replace(/ *\n */g, '\n');
+    s = s.replace(/\n{3,}/g, '\n\n');
+    return s.trim();
 }
 
 export const funcSendTelegram = async ({
