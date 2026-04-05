@@ -88,7 +88,8 @@ const sendMyselfEmail = async ({
             sendMyselfEmailInfo.sendTelegramEnabled === true;
 
         // step 3: llm ai
-        let aiResponse= ``;
+        let aiResponse = ``;
+        let aiPlainForTelegram = '';
         if (
             sendMyselfEmailInfo.aiEnabled &&
             sendMyselfEmailInfo.systemPrompt.length > 0 &&
@@ -121,6 +122,17 @@ const sendMyselfEmail = async ({
                 aiResponse += '<br>';
                 aiResponse += '<hr style="border: 1px solid #ccc; margin: 20px 0;">';
                 aiResponse += '<br>';
+
+                aiPlainForTelegram = [
+                    'System prompt:',
+                    sendMyselfEmailInfo.systemPrompt,
+                    '',
+                    'User prompt:',
+                    sendMyselfEmailInfo.userPrompt,
+                    '',
+                    'AI:',
+                    emailSubjectAiResponse,
+                ].join('\n');
             }
         }
 
@@ -197,7 +209,7 @@ const sendMyselfEmail = async ({
         }
 
         if (sendTelegramEnabled) {
-            let emailSubjectTelegram = `${sendMyselfEmailInfo.emailSubject}`;
+            const emailSubjectTelegram = `${sendMyselfEmailInfo.emailSubject}`;
 
             anyChannel = true;
             let threadOverride: number | null = null;
@@ -210,28 +222,40 @@ const sendMyselfEmail = async ({
                 chatOverride = sendMyselfEmailInfo.telegramChatId.trim();
             }
 
-            let textTelegram = '';
-            // Compose the Telegram message by simple string concatenation, no array or parts.
-            textTelegram = `📝 ${sendMyselfEmailInfo.emailSubject ?? ''}
-            
-${sendMyselfEmailInfo.emailContent ?? ''}
+            const timeLineTelegram = DateTime.now()
+                .setZone(taskInfo.timezoneName || 'UTC')
+                .toFormat('yyyy-MM-dd HH:mm:ss ZZZZ');
 
-${aiResponse ?? ''}
+            const textTelegramParts: string[] = [
+                `📝 ${sendMyselfEmailInfo.emailSubject ?? ''}`,
+                '',
+                typeof sendMyselfEmailInfo.emailContent === 'string'
+                    ? sendMyselfEmailInfo.emailContent
+                    : '',
+            ];
+            if (aiPlainForTelegram.length > 0) {
+                textTelegramParts.push('', '────────', '', aiPlainForTelegram);
+            }
+            textTelegramParts.push(
+                '',
+                `Current time: ${timeLineTelegram}`,
+                '',
+                'This is an automated message from AI Notes XYZ task scheduler.',
+                `View task schedule: ${clientFrontendUrl}/user/task-schedule`,
+                `Sent from: ${clientFrontendUrl}`
+            );
 
-This is an automated message sent to yourself via AI Notes XYZ task scheduler.
-View Task Schedule: ${clientFrontendUrl}/user/task-schedule
-Sent from: ${clientFrontendUrl}`.trim();
+            let textTelegram = textTelegramParts.join('\n').trim();
 
             if (textTelegram.length > 4000) {
                 textTelegram = textTelegram.slice(0, 3997) + '...';
             }
 
-
             const tgOk = await funcSendTelegram({
                 username: taskInfo.username,
                 subject: emailSubjectTelegram,
-                text: '',
-                html: emailContent,
+                text: textTelegram,
+                html: '',
                 overrideChatId: chatOverride,
                 overrideMessageThreadId: threadOverride,
             });
