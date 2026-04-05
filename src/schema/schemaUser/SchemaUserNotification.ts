@@ -22,6 +22,15 @@ const userNotificationSchema = new Schema<IUserNotification>({
         type: String,
         default: ''
     },
+    channel: {
+        type: String,
+        enum: ['email', 'telegram'],
+        default: 'email',
+    },
+    telegramChatId: {
+        type: String,
+        default: '',
+    },
 
     // createdAt
     createdAtUtc: {

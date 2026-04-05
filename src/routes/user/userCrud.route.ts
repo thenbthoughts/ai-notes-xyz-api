@@ -35,6 +35,7 @@ router.post(
                 apiKeyOpenaiValid: false,
                 apiKeyLocalaiValid: false,
                 smtpValid: false,
+                telegramValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -70,6 +71,7 @@ router.post(
                             apiKeyOpenaiValid: false,
                             apiKeyLocalaiValid: false,
                             smtpValid: false,
+                            telegramValid: false,
                         }
                     },
                     {
@@ -146,6 +148,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.smtpValid === 'boolean') {
                     resultApiKey.smtpValid = resultUserInfoApi.smtpValid;
+                }
+            }
+
+            // telegram
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.telegramValid === 'boolean') {
+                    resultApiKey.telegramValid = resultUserInfoApi.telegramValid;
                 }
             }
 

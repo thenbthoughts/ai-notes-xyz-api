@@ -61,6 +61,13 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     smtpPassword: { type: String, default: '' },
     smtpFrom: { type: String, default: '' },
 
+    // telegram (Bot API — reminders & notifications)
+    telegramValid: { type: Boolean, default: false },
+    telegramBotToken: { type: String, default: '' },
+    telegramChatId: { type: String, default: '' },
+    /** set for Telegram forum supergroups (topic / “channel” inside the group) */
+    telegramMessageThreadId: { type: Number, default: null },
+
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },
     userEmailVerifyEmail: { type: String, default: '' },

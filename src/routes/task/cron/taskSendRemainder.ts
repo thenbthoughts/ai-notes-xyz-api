@@ -1,6 +1,7 @@
 import mongoose, { FilterQuery } from 'mongoose';
 import { ModelTask } from '../../../schema/schemaTask/SchemaTask.schema';
 import { funcSendMail } from '../../../utils/files/funcSendMail';
+import { funcSendTelegram } from '../../../utils/files/funcSendTelegram';
 import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import { ModelUserApiKey } from '../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { computeRemainderScheduledTimesFromInput } from '../../../utils/task/computeRemainderScheduledTimesInput';
@@ -51,8 +52,66 @@ const buildEmailHtml = (
         `;
 };
 
-const sendTaskReminderEmail = async ({
+const buildTelegramReminderText = (
+    resultTask: {
+        title: string;
+        description?: string;
+        dueDate?: Date | null;
+        _id: unknown;
+    },
+    clientUrl: string
+) => {
+    const due = resultTask.dueDate
+        ? new Date(resultTask.dueDate).toUTCString()
+        : 'No due date';
+    const link = `${clientUrl.replace(/\/$/, '')}/user/task?edit-task-id=${resultTask._id}`;
+    return [
+        `Task reminder: ${resultTask.title}`,
+        '',
+        `Description: ${resultTask.description || 'No description'}`,
+        `Due: ${due}`,
+        `Open: ${link}`,
+        '',
+        'Please take the necessary action.',
+    ].join('\n');
+};
+
+type TUserReminderChannels = {
+    canEmail: boolean;
+    canTelegram: boolean;
+};
+
+function reminderChannels(
+    userInfo: { emailVerified?: boolean; email?: string } | null,
+    apiKeys: {
+        smtpValid?: boolean;
+        telegramValid?: boolean;
+        telegramBotToken?: string;
+        telegramChatId?: string;
+    } | null
+): TUserReminderChannels {
+    const canEmail =
+        userInfo !== null &&
+        userInfo.emailVerified === true &&
+        typeof userInfo.email === 'string' &&
+        userInfo.email.includes('@') &&
+        apiKeys !== null &&
+        apiKeys.smtpValid === true;
+
+    const canTelegram =
+        apiKeys !== null &&
+        apiKeys.telegramValid === true &&
+        typeof apiKeys.telegramBotToken === 'string' &&
+        apiKeys.telegramBotToken.trim().length >= 1 &&
+        typeof apiKeys.telegramChatId === 'string' &&
+        apiKeys.telegramChatId.trim().length >= 1;
+
+    return { canEmail, canTelegram };
+}
+
+const sendTaskReminderNotifications = async ({
     resultTask,
+    username,
     userInfo,
     apiKeys,
 }: {
@@ -62,31 +121,74 @@ const sendTaskReminderEmail = async ({
         dueDate?: Date | null;
         _id: unknown;
     };
-    userInfo: { username: string; email: string };
-    apiKeys: { clientFrontendUrl: string };
+    username: string;
+    userInfo: { username: string; email?: string; emailVerified?: boolean };
+    apiKeys: {
+        clientFrontendUrl: string;
+        smtpValid?: boolean;
+        telegramValid?: boolean;
+        telegramBotToken?: string;
+        telegramChatId?: string;
+    };
 }): Promise<boolean> => {
-    const emailSubject = `Task Reminder: ${resultTask.title}`;
-    const emailBody = buildEmailHtml(resultTask, apiKeys.clientFrontendUrl);
+    const { canEmail, canTelegram } = reminderChannels(userInfo, apiKeys);
 
-    const userEmail = userInfo.email;
-    if (!userEmail || !userEmail.includes('@')) {
-        console.warn(`No valid email found for user: ${userInfo.username}`);
+    if (!canEmail && !canTelegram) {
+        console.warn(`No email or Telegram notification channel for user: ${username}`);
         return false;
     }
-    try {
-        await funcSendMail({
-            username: userInfo.username,
-            smtpTo: userEmail,
-            subject: emailSubject,
-            text: '',
-            html: emailBody,
-        });
-        console.log(`Reminder email sent to ${userEmail} for task ${resultTask._id}`);
-        return true;
-    } catch (mailErr) {
-        console.error('Failed to send reminder email:', mailErr);
-        return false;
+
+    const emailSubject = `Task Reminder: ${resultTask.title}`;
+    const emailBody = buildEmailHtml(
+        resultTask,
+        apiKeys.clientFrontendUrl || ''
+    );
+    const telegramSubject = `Task Reminder: ${resultTask.title}`;
+    const telegramText = buildTelegramReminderText(
+        resultTask,
+        apiKeys.clientFrontendUrl || ''
+    );
+
+    let emailOk = false;
+    let telegramOk = false;
+
+    if (canEmail && userInfo.email) {
+        try {
+            emailOk = await funcSendMail({
+                username,
+                smtpTo: userInfo.email,
+                subject: emailSubject,
+                text: '',
+                html: emailBody,
+            });
+            if (emailOk) {
+                console.log(
+                    `Reminder email sent to ${userInfo.email} for task ${resultTask._id}`
+                );
+            }
+        } catch (mailErr) {
+            console.error('Failed to send reminder email:', mailErr);
+        }
     }
+
+    if (canTelegram) {
+        try {
+            telegramOk = await funcSendTelegram({
+                username,
+                subject: telegramSubject,
+                text: telegramText,
+            });
+            if (telegramOk) {
+                console.log(
+                    `Reminder Telegram sent for user ${username} task ${resultTask._id}`
+                );
+            }
+        } catch (tgErr) {
+            console.error('Failed to send reminder Telegram:', tgErr);
+        }
+    }
+
+    return emailOk || telegramOk;
 };
 
 const sortDatesAsc = (dates: Date[]): Date[] =>
@@ -104,22 +206,14 @@ const processTaskAbsoluteTimes = async ({
         }
         const resultTask = raw as Record<string, unknown>;
 
-        const cronTimeZone = resultTask.cronTimeZone;
-
         const userInfo = await ModelUser.findOne({
             username: resultTask.username as string,
-            emailVerified: true,
-            email: {
-                $ne: '',
-            },
         });
         if (!userInfo) {
             throw new Error('User not found');
         }
         let userTimeZone = 'UTC';
-        if (userInfo) {
-            userTimeZone = userInfo.timeZoneRegion;
-        }
+        userTimeZone = userInfo.timeZoneRegion;
 
         computeRemainderScheduledTimesFromInput({
             cronExpressions: (resultTask.dueDateReminderCronExpressions as string[]) || [],
@@ -135,15 +229,16 @@ const processTaskAbsoluteTimes = async ({
             return false;
         }
 
-        if (!userInfo) {
-            throw new Error('User not found');
-        }
-
         const apiKeys = await ModelUserApiKey.findOne({
             username: resultTask.username as string,
         });
         if (!apiKeys) {
             throw new Error('Api keys not found');
+        }
+
+        const { canEmail, canTelegram } = reminderChannels(userInfo, apiKeys);
+        if (!canEmail && !canTelegram) {
+            return false;
         }
 
         const currentTimeUtc = new Date();
@@ -175,10 +270,23 @@ const processTaskAbsoluteTimes = async ({
         const best = candidates[0];
         const firedAt = best.t;
 
-        const sent = await sendTaskReminderEmail({
-            resultTask: resultTask as Parameters<typeof sendTaskReminderEmail>[0]['resultTask'],
-            userInfo: userInfo as { username: string; email: string },
-            apiKeys: apiKeys as { clientFrontendUrl: string },
+        const sent = await sendTaskReminderNotifications({
+            resultTask: resultTask as Parameters<
+                typeof sendTaskReminderNotifications
+            >[0]['resultTask'],
+            username: resultTask.username as string,
+            userInfo: userInfo as {
+                username: string;
+                email?: string;
+                emailVerified?: boolean;
+            },
+            apiKeys: apiKeys as {
+                clientFrontendUrl: string;
+                smtpValid?: boolean;
+                telegramValid?: boolean;
+                telegramBotToken?: string;
+                telegramChatId?: string;
+            },
         });
 
         if (sent) {
@@ -246,16 +354,12 @@ const processTaskCronReminders = async ({
 
         const userInfo = await ModelUser.findOne({
             username: resultTask.username as string,
-            emailVerified: true,
-            email: { $ne: '' },
         });
         if (!userInfo) {
             return false;
         }
         let userTimeZone = 'UTC';
-        if (userInfo) {
-            userTimeZone = userInfo.timeZoneRegion;
-        }
+        userTimeZone = userInfo.timeZoneRegion;
 
         computeRemainderScheduledTimesFromInput({
             cronExpressions: (resultTask.remainderCronExpressions as string[]) || [],
@@ -275,14 +379,15 @@ const processTaskCronReminders = async ({
             return false;
         }
 
-        if (!userInfo) {
-            return false;
-        }
-
         const apiKeys = await ModelUserApiKey.findOne({
             username: resultTask.username as string,
         });
         if (!apiKeys) {
+            return false;
+        }
+
+        const { canEmail, canTelegram } = reminderChannels(userInfo, apiKeys);
+        if (!canEmail && !canTelegram) {
             return false;
         }
 
@@ -302,10 +407,23 @@ const processTaskCronReminders = async ({
             return false;
         }
 
-        const sent = await sendTaskReminderEmail({
-            resultTask: resultTask as Parameters<typeof sendTaskReminderEmail>[0]['resultTask'],
-            userInfo: userInfo as { username: string; email: string },
-            apiKeys: apiKeys as { clientFrontendUrl: string },
+        const sent = await sendTaskReminderNotifications({
+            resultTask: resultTask as Parameters<
+                typeof sendTaskReminderNotifications
+            >[0]['resultTask'],
+            username: resultTask.username as string,
+            userInfo: userInfo as {
+                username: string;
+                email?: string;
+                emailVerified?: boolean;
+            },
+            apiKeys: apiKeys as {
+                clientFrontendUrl: string;
+                smtpValid?: boolean;
+                telegramValid?: boolean;
+                telegramBotToken?: string;
+                telegramChatId?: string;
+            },
         });
 
         if (sent) {

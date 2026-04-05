@@ -65,6 +65,8 @@ export const funcSendMail = async ({
             subject: subject,
             text: text,
             html: html,
+            channel: 'email',
+            telegramChatId: '',
         });
         
         // if not valid credentials, return false
