@@ -26,6 +26,24 @@ const taskScheduleSendMyselfEmailSchema = new Schema<tsTaskListScheduleSendMysel
         type: String,
         default: '',
     },
+
+    // send email & telegram
+    sendMailEnabled: {
+        type: Boolean,
+        default: true,
+    },
+    sendTelegramEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    telegramChatId: {
+        type: String,
+        default: '',
+    },
+    telegramMessageThreadId: {
+        type: Number,
+        default: null,
+    },
     
     // ai fields -> aiConversationMail
     aiEnabled: {

@@ -10,6 +10,12 @@ export interface tsTaskListScheduleSendMyselfEmail extends Document {
     // email fields -> staticContent
     emailSubject: string;
     emailContent: string;
+
+    // delivery channels
+    sendMailEnabled: boolean;
+    sendTelegramEnabled: boolean;
+    telegramChatId: string;
+    telegramMessageThreadId: number | null;
     
     // ai fields -> aiConversationMail
     aiEnabled: boolean;

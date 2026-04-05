@@ -787,6 +787,40 @@ router.post(
             } else if (taskType === 'sendMyselfEmail') {
                 const sendMyselfEmailObj = arg_sendMyselfEmailObj as tsTaskListScheduleSendMyselfEmail;
                 if (sendMyselfEmailObj) {
+                    let sendMailEnabled = true;
+                    if (sendMyselfEmailObj.sendMailEnabled === false) {
+                        sendMailEnabled = false;
+                    }
+                    const sendTelegramEnabled =
+                        sendMyselfEmailObj.sendTelegramEnabled === true;
+                    if (!sendMailEnabled && !sendTelegramEnabled) {
+                        return res.status(400).json({
+                            message:
+                                'Enable at least one delivery channel: email or Telegram.',
+                        });
+                    }
+                    if (sendTelegramEnabled) {
+                        const cid =
+                            typeof sendMyselfEmailObj.telegramChatId === 'string'
+                                ? sendMyselfEmailObj.telegramChatId.trim()
+                                : '';
+                        if (cid.length < 1) {
+                            return res.status(400).json({
+                                message:
+                                    'Select a Telegram chat when Telegram delivery is enabled.',
+                            });
+                        }
+                    }
+                    let telegramMessageThreadId: number | null = null;
+                    const rawThr = sendMyselfEmailObj.telegramMessageThreadId;
+                    if (typeof rawThr === 'number' && rawThr > 0) {
+                        telegramMessageThreadId = rawThr;
+                    }
+                    let telegramChatId = '';
+                    if (typeof sendMyselfEmailObj.telegramChatId === 'string') {
+                        telegramChatId = sendMyselfEmailObj.telegramChatId.trim();
+                    }
+
                     // delete existing send myself email
                     await ModelTaskScheduleSendMyselfEmail.deleteMany({
                         $or: [
@@ -806,6 +840,11 @@ router.post(
                         // email fields -> staticContent
                         emailSubject: sendMyselfEmailObj.emailSubject || '',
                         emailContent: sendMyselfEmailObj.emailContent || '',
+
+                        sendMailEnabled,
+                        sendTelegramEnabled,
+                        telegramChatId,
+                        telegramMessageThreadId,
 
                         // ai fields -> aiConversationMail
                         aiEnabled: sendMyselfEmailObj.aiEnabled || false,

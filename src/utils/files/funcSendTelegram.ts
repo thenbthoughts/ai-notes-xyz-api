@@ -15,11 +15,16 @@ export const funcSendTelegram = async ({
     subject,
     text,
     html,
+    overrideChatId,
+    overrideMessageThreadId,
 }: {
     username: string;
     subject: string;
     text: string;
     html?: string;
+    /** When set, send to this chat instead of the user’s saved default */
+    overrideChatId?: string;
+    overrideMessageThreadId?: number | null;
 }): Promise<boolean> => {
     try {
         if (!username || !subject) {
@@ -35,10 +40,26 @@ export const funcSendTelegram = async ({
         }
 
         const token = apiKeys.telegramBotToken?.trim() || '';
-        const chatId = apiKeys.telegramChatId?.trim() || '';
+        let chatId = apiKeys.telegramChatId?.trim() || '';
+        let messageThreadId: number | null = null;
         const threadRaw = apiKeys.telegramMessageThreadId;
-        const messageThreadId =
-            typeof threadRaw === 'number' && threadRaw > 0 ? threadRaw : null;
+        if (typeof threadRaw === 'number' && threadRaw > 0) {
+            messageThreadId = threadRaw;
+        }
+
+        const overrideTrim =
+            typeof overrideChatId === 'string' ? overrideChatId.trim() : '';
+        if (overrideTrim.length >= 1) {
+            chatId = overrideTrim;
+            if (
+                typeof overrideMessageThreadId === 'number' &&
+                overrideMessageThreadId > 0
+            ) {
+                messageThreadId = overrideMessageThreadId;
+            } else {
+                messageThreadId = null;
+            }
+        }
 
         const parts: string[] = [subject];
         if (typeof text === 'string' && text.trim().length >= 1) {
@@ -59,7 +80,7 @@ export const funcSendTelegram = async ({
             text: message,
             html: '',
             channel: 'telegram',
-            telegramChatId: chatId,
+            telegramChatId: chatId.length >= 1 ? chatId : '',
         });
 
         if (apiKeys.telegramValid !== true || !token || !chatId) {
