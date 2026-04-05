@@ -3,12 +3,12 @@ import { DateTime } from 'luxon';
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
 import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
 import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import IUserApiKey from '../../../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 
 import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
 import { tsTaskListScheduleSendMyselfEmail } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleSendMyselfEmail.types';
 
 import { funcSendMail } from '../../../files/funcSendMail';
+import { funcSendTelegram } from '../../../files/funcSendTelegram';
 import { ModelTaskScheduleSendMyselfEmail } from '../../../../schema/schemaTaskSchedule/SchemaTaskScheduleSendMyselfEmail.schema';
 import fetchLlmUnified from '../../utils/fetchLlmUnified';
 import { getDefaultLlmModel } from '../../utils/getDefaultLlmModel';
@@ -80,24 +80,14 @@ const sendMyselfEmail = async ({
             return true;
         }
 
-        // Step 3: validate api keys (for SMTP)
-        const apiKeys = await ModelUserApiKey.findOne({
-            username: taskInfo.username,
-            smtpValid: true,
-        });
-        if (!apiKeys) {
-            return true;
+        let sendMailEnabled = true;
+        if (sendMyselfEmailInfo.sendMailEnabled === false) {
+            sendMailEnabled = false;
         }
+        const sendTelegramEnabled =
+            sendMyselfEmailInfo.sendTelegramEnabled === true;
 
-        // Step 4: get user email
-        const userInfo = await ModelUser.findOne({
-            username: taskInfo.username,
-        });
-        if (!userInfo) {
-            return true;
-        }
-
-        // step 5: llm ai
+        // step 3: llm ai
         let aiResponse= ``;
         if (
             sendMyselfEmailInfo.aiEnabled &&
@@ -136,6 +126,16 @@ const sendMyselfEmail = async ({
 
         let emailSubject = `${sendMyselfEmailInfo.emailSubject} | AI Notes XYZ`;
 
+        const keysForFooter = await ModelUserApiKey.findOne({
+            username: taskInfo.username,
+        })
+            .select('clientFrontendUrl')
+            .lean();
+        let clientFrontendUrl = '';
+        if (typeof keysForFooter?.clientFrontendUrl === 'string') {
+            clientFrontendUrl = keysForFooter.clientFrontendUrl;
+        }
+
         let emailContent = `
         <html>
         <body>
@@ -156,23 +156,94 @@ const sendMyselfEmail = async ({
                 <p style="color: #666; font-size: 12px; font-style: italic;">
                     This is an automated email sent to yourself via AI Notes XYZ task scheduler.
                 </p>
-                <p><a href="${apiKeys.clientFrontendUrl}/user/task-schedule">View Task Schedule</a></p>
-                <p>Sent from <a href="${apiKeys.clientFrontendUrl}">AI Notes XYZ</a></p>
+                <p><a href="${clientFrontendUrl}/user/task-schedule">View Task Schedule</a></p>
+                <p>Sent from <a href="${clientFrontendUrl}">AI Notes XYZ</a></p>
             </div>
         </body>
         </html>
         `;
 
-        // Step 5: send mail
-        await funcSendMail({
-            username: taskInfo.username,
-            smtpTo: userInfo.email,
-            subject: emailSubject,
-            text: '',
-            html: emailContent,
-        });
+        if (!sendMailEnabled && !sendTelegramEnabled) {
+            return true;
+        }
 
-        return true;
+        let anyChannel = false;
+        let allOk = true;
+
+        if (sendMailEnabled) {
+            anyChannel = true;
+            const apiKeysSmtp = await ModelUserApiKey.findOne({
+                username: taskInfo.username,
+                smtpValid: true,
+            });
+            const userInfo = await ModelUser.findOne({
+                username: taskInfo.username,
+            });
+            if (!apiKeysSmtp || !userInfo) {
+                allOk = false;
+            } else {
+                try {
+                    await funcSendMail({
+                        username: taskInfo.username,
+                        smtpTo: userInfo.email,
+                        subject: emailSubject,
+                        text: '',
+                        html: emailContent,
+                    });
+                } catch (_mailErr) {
+                    allOk = false;
+                }
+            }
+        }
+
+        if (sendTelegramEnabled) {
+            let emailSubjectTelegram = `${sendMyselfEmailInfo.emailSubject}`;
+
+            anyChannel = true;
+            let threadOverride: number | null = null;
+            const rawT = sendMyselfEmailInfo.telegramMessageThreadId;
+            if (typeof rawT === 'number' && rawT > 0) {
+                threadOverride = rawT;
+            }
+            let chatOverride = '';
+            if (typeof sendMyselfEmailInfo.telegramChatId === 'string') {
+                chatOverride = sendMyselfEmailInfo.telegramChatId.trim();
+            }
+
+            let textTelegram = '';
+            // Compose the Telegram message by simple string concatenation, no array or parts.
+            textTelegram = `📝 ${sendMyselfEmailInfo.emailSubject ?? ''}
+            
+${sendMyselfEmailInfo.emailContent ?? ''}
+
+${aiResponse ?? ''}
+
+This is an automated message sent to yourself via AI Notes XYZ task scheduler.
+View Task Schedule: ${clientFrontendUrl}/user/task-schedule
+Sent from: ${clientFrontendUrl}`.trim();
+
+            if (textTelegram.length > 4000) {
+                textTelegram = textTelegram.slice(0, 3997) + '...';
+            }
+
+
+            const tgOk = await funcSendTelegram({
+                username: taskInfo.username,
+                subject: emailSubjectTelegram,
+                text: '',
+                html: emailContent,
+                overrideChatId: chatOverride,
+                overrideMessageThreadId: threadOverride,
+            });
+            if (!tgOk) {
+                allOk = false;
+            }
+        }
+
+        if (!anyChannel) {
+            return true;
+        }
+        return allOk;
     } catch (error) {
         console.error(error);
         return false;

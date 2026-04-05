@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
+import { ModelUserTelegramConversationCache } from '../../schema/schemaUser/SchemaUserTelegramConversationCache';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
@@ -878,6 +879,515 @@ router.post(
     }
 );
 
+type TTelegramChat = {
+    chatId: string;
+    messageThreadId: number | null;
+    label: string;
+    type: string;
+};
+
+function labelForTelegramChat(chat: Record<string, unknown>): {
+    label: string;
+    type: string;
+} {
+    const id = String(chat.id);
+    let type = 'unknown';
+    if (typeof chat.type === 'string') {
+        type = chat.type;
+    }
+    let label: string;
+    if (typeof chat.title === 'string' && chat.title.length >= 1) {
+        label = chat.title;
+    } else {
+        let fn = '';
+        if (typeof chat.first_name === 'string') {
+            fn = chat.first_name;
+        }
+        let ln = '';
+        if (typeof chat.last_name === 'string') {
+            ln = chat.last_name;
+        }
+        const name = `${fn} ${ln}`.trim();
+        let un = '';
+        if (typeof chat.username === 'string') {
+            un = chat.username;
+        }
+        if (name && un) {
+            label = `${name} (@${un})`;
+        } else if (name) {
+            label = name;
+        } else if (un) {
+            label = `@${un}`;
+        } else {
+            label = id;
+        }
+    }
+    return { label: `${label} · ${type}`, type };
+}
+
+/** Topic title when Telegram includes it on the message (forum_topic or forum_topic_created) */
+function forumTopicTitleFromMessage(m: Record<string, unknown>): string | null {
+    const ft = m.forum_topic;
+    if (ft && typeof ft === 'object') {
+        const name = (ft as Record<string, unknown>).name;
+        if (typeof name === 'string' && name.trim().length >= 1) {
+            return name.trim();
+        }
+    }
+    const ftc = m.forum_topic_created;
+    if (ftc && typeof ftc === 'object') {
+        const name = (ftc as Record<string, unknown>).name;
+        if (typeof name === 'string' && name.trim().length >= 1) {
+            return name.trim();
+        }
+    }
+    return null;
+}
+
+/** One row per chat, or per (supergroup + forum topic) so you can target a specific “channel” inside a forum */
+function collectChatsFromTelegramUpdates(
+    updates: unknown[]
+): TTelegramChat[] {
+    const map = new Map<string, TTelegramChat>();
+
+    const pushFromMessageLike = (o: unknown) => {
+        if (!o || typeof o !== 'object') return;
+        const m = o as Record<string, unknown>;
+        const chat = m.chat;
+        if (!chat || typeof chat !== 'object') return;
+        const c = chat as Record<string, unknown>;
+        if (typeof c.id === 'undefined' || c.id === null) return;
+        const chatId = String(c.id);
+        const mt = m.message_thread_id;
+        let messageThreadId: number | null = null;
+        if (typeof mt === 'number' && mt > 0) {
+            messageThreadId = mt;
+        }
+        let threadKey = '';
+        if (messageThreadId != null) {
+            threadKey = String(messageThreadId);
+        }
+        const key = `${chatId}:::${threadKey}`;
+        const { label: baseLabel, type } = labelForTelegramChat(c);
+        let topicBit = '';
+        if (messageThreadId != null) {
+            const topicTitle = forumTopicTitleFromMessage(m);
+            if (topicTitle) {
+                topicBit = ` · ${topicTitle} (topic ${messageThreadId})`;
+            } else {
+                topicBit = ` · topic ${messageThreadId}`;
+            }
+        }
+        const fullLabel = `${baseLabel}${topicBit}`;
+        const prev = map.get(key);
+        if (prev) {
+            const titleNow = forumTopicTitleFromMessage(m);
+            if (titleNow) {
+                map.set(key, {
+                    chatId,
+                    messageThreadId,
+                    label: `${baseLabel} · ${titleNow} (topic ${messageThreadId})`,
+                    type,
+                });
+            }
+            return;
+        }
+        map.set(key, {
+            chatId,
+            messageThreadId,
+            label: fullLabel,
+            type,
+        });
+    };
+
+    for (const u of updates) {
+        if (!u || typeof u !== 'object') continue;
+        const up = u as Record<string, unknown>;
+        pushFromMessageLike(up.message);
+        pushFromMessageLike(up.edited_message);
+        pushFromMessageLike(up.channel_post);
+        if (up.chat_join_request && typeof up.chat_join_request === 'object') {
+            const cjr = up.chat_join_request as Record<string, unknown>;
+            if (cjr.chat) pushFromMessageLike({ chat: cjr.chat });
+        }
+        const cq = up.callback_query;
+        if (cq && typeof cq === 'object') {
+            pushFromMessageLike((cq as Record<string, unknown>).message);
+        }
+        if (up.my_chat_member && typeof up.my_chat_member === 'object') {
+            const x = up.my_chat_member as Record<string, unknown>;
+            if (x.chat) pushFromMessageLike({ chat: x.chat });
+        }
+        if (up.chat_member && typeof up.chat_member === 'object') {
+            const x = up.chat_member as Record<string, unknown>;
+            if (x.chat) pushFromMessageLike({ chat: x.chat });
+        }
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+        a.label.localeCompare(b.label)
+    );
+}
+
+function normalizeCachedTelegramChat(raw: unknown): TTelegramChat | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    let chatId = '';
+    if (typeof o.chatId === 'string') {
+        chatId = o.chatId;
+    } else if (typeof o.id === 'string') {
+        chatId = o.id;
+    }
+    if (!chatId) return null;
+    let label = chatId;
+    if (typeof o.label === 'string') {
+        label = o.label;
+    }
+    let type = 'unknown';
+    if (typeof o.type === 'string') {
+        type = o.type;
+    }
+    const mt = o.messageThreadId;
+    let messageThreadId: number | null = null;
+    if (typeof mt === 'number' && mt > 0) {
+        messageThreadId = mt;
+    }
+    return { chatId, messageThreadId, label, type };
+}
+
+/** Bot token for Telegram APIs: JWT session identifies the user; token only from DB */
+async function getTelegramBotTokenFromDbOnly(
+    authUsername: string
+): Promise<{ token: string; error: string }> {
+    const keys = await ModelUserApiKey.findOne({
+        username: authUsername,
+    })
+        .select('telegramBotToken')
+        .lean();
+    let stored = '';
+    if (typeof keys?.telegramBotToken === 'string') {
+        stored = keys.telegramBotToken.trim();
+    }
+    if (stored) {
+        return { token: stored, error: '' };
+    }
+    return {
+        token: '',
+        error:
+            'No bot token stored for your account. Paste your token above and click “Save bot token”, or use “Send test message and save” once.',
+    };
+}
+
+// Store bot token only (getMe check) so telegramListRecentChats can run before picking a chat
+router.post(
+    '/telegramSaveBotToken',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            let raw = '';
+            if (typeof req.body?.telegramBotToken === 'string') {
+                raw = req.body.telegramBotToken.trim();
+            }
+            if (!raw) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'telegramBotToken is required',
+                });
+            }
+
+            const url = `https://api.telegram.org/bot${raw}/getMe`;
+            const tgRes = await axios.get<{
+                ok: boolean;
+                description?: string;
+            }>(url, { timeout: 15_000 });
+
+            if (!tgRes.data?.ok) {
+                let errInvalid = 'Invalid bot token';
+                if (typeof tgRes.data?.description === 'string') {
+                    errInvalid = tgRes.data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: errInvalid,
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { username: res.locals.auth_username },
+                { $set: { telegramBotToken: raw } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            if (isAxiosError(error) && error.response?.data) {
+                const data = error.response.data as { description?: string };
+                let errReach = 'Failed to reach Telegram API';
+                if (typeof data?.description === 'string') {
+                    errReach = data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: errReach,
+                });
+            }
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Cached conversation list (MongoDB); restores dropdown after refresh
+router.post(
+    '/telegramGetCachedChats',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const username = res.locals.auth_username;
+            const [cacheDoc, apiKeys] = await Promise.all([
+                ModelUserTelegramConversationCache.findOne({ username }).lean(),
+                ModelUserApiKey.findOne({ username })
+                    .select('telegramChatId telegramMessageThreadId telegramBotToken')
+                    .lean(),
+            ]);
+
+            const hasTelegramBotToken =
+                typeof apiKeys?.telegramBotToken === 'string' &&
+                apiKeys.telegramBotToken.trim().length >= 1;
+
+            let rawList: unknown[] = [];
+            if (Array.isArray(cacheDoc?.chats)) {
+                rawList = cacheDoc.chats;
+            }
+            const chats: TTelegramChat[] = [];
+            for (const row of rawList) {
+                const n = normalizeCachedTelegramChat(row);
+                if (n) chats.push(n);
+            }
+
+            const savedThr = apiKeys?.telegramMessageThreadId;
+            let savedMessageThreadId: number | null = null;
+            if (typeof savedThr === 'number' && savedThr > 0) {
+                savedMessageThreadId = savedThr;
+            }
+
+            let savedChatId = '';
+            if (typeof apiKeys?.telegramChatId === 'string') {
+                savedChatId = apiKeys.telegramChatId;
+            }
+
+            return res.json({
+                success: 'ok',
+                error: '',
+                chats,
+                hasTelegramBotToken,
+                savedChatId,
+                savedMessageThreadId,
+                updatedAtUtc: cacheDoc?.updatedAtUtc ?? null,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// List chats the bot has recently seen (getUpdates); persists to userTelegramConversationCache
+router.post(
+    '/telegramListRecentChats',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const { token, error: tokenErr } = await getTelegramBotTokenFromDbOnly(
+                res.locals.auth_username
+            );
+            if (!token) {
+                return res.status(400).json({
+                    success: '',
+                    error: tokenErr,
+                    chats: [] as TTelegramChat[],
+                });
+            }
+
+            const url = `https://api.telegram.org/bot${token}/getUpdates`;
+            const tgRes = await axios.get<{
+                ok: boolean;
+                result?: unknown[];
+                description?: string;
+            }>(url, { params: { limit: 100 }, timeout: 15_000 });
+
+            if (!tgRes.data?.ok) {
+                let apiErr = 'Telegram API error';
+                if (typeof tgRes.data?.description === 'string') {
+                    apiErr = tgRes.data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: apiErr,
+                    chats: [] as TTelegramChat[],
+                });
+            }
+
+            let updates: unknown[] = [];
+            if (Array.isArray(tgRes.data.result)) {
+                updates = tgRes.data.result;
+            }
+            const chats = collectChatsFromTelegramUpdates(updates);
+            const username = res.locals.auth_username;
+            const updatedAtUtc = new Date();
+
+            // Remove all prior cache rows for this user (including duplicates), then insert only what Telegram returned now
+            await ModelUserTelegramConversationCache.deleteMany({ username });
+            await ModelUserTelegramConversationCache.create({
+                username,
+                chats,
+                updatedAtUtc,
+            });
+
+            return res.json({
+                success: 'ok',
+                error: '',
+                chats,
+            });
+        } catch (error) {
+            console.error(error);
+            if (isAxiosError(error) && error.response?.data) {
+                const data = error.response.data as { description?: string };
+                let errReach2 = 'Failed to reach Telegram API';
+                if (typeof data?.description === 'string') {
+                    errReach2 = data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: errReach2,
+                    chats: [] as TTelegramChat[],
+                });
+            }
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User Telegram (Bot token + chat id; sends a test message before saving)
+router.post(
+    '/updateUserApiTelegram',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const {
+                telegramBotToken,
+                telegramChatId,
+                telegramMessageThreadId,
+                useStoredToken,
+            } = req.body as {
+                telegramBotToken?: string;
+                telegramChatId?: string;
+                telegramMessageThreadId?: number | null;
+                useStoredToken?: boolean;
+            };
+
+            let token = '';
+            if (typeof telegramBotToken === 'string') {
+                token = telegramBotToken.trim();
+            }
+            let chatId = '';
+            if (typeof telegramChatId === 'string') {
+                chatId = telegramChatId.trim();
+            }
+            let messageThreadId: number | null = null;
+            if (
+                typeof telegramMessageThreadId === 'number' &&
+                telegramMessageThreadId > 0
+            ) {
+                messageThreadId = telegramMessageThreadId;
+            }
+
+            if (!token && useStoredToken === true) {
+                const keys = await ModelUserApiKey.findOne({
+                    username: res.locals.auth_username,
+                })
+                    .select('telegramBotToken')
+                    .lean();
+                if (typeof keys?.telegramBotToken === 'string') {
+                    token = keys.telegramBotToken.trim();
+                }
+            }
+
+            if (!token || !chatId) {
+                return res.status(400).json({
+                    success: '',
+                    error:
+                        'telegramChatId is required. Paste the bot token, or save Telegram once so the server can reuse it.',
+                });
+            }
+
+            const testText =
+                'AI Notes XYZ: Telegram notifications are configured successfully.';
+            const url = `https://api.telegram.org/bot${token}/sendMessage`;
+            const sendPayload: Record<string, unknown> = {
+                chat_id: chatId,
+                text: testText,
+            };
+            if (messageThreadId != null) {
+                sendPayload.message_thread_id = messageThreadId;
+            }
+            const tgRes = await axios.post<{ ok: boolean; description?: string }>(
+                url,
+                sendPayload,
+                { headers: { 'Content-Type': 'application/json' }, timeout: 15_000 }
+            );
+
+            if (!tgRes.data?.ok) {
+                let rejectErr = 'Telegram API rejected the request';
+                if (typeof tgRes.data?.description === 'string') {
+                    rejectErr = tgRes.data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: rejectErr,
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { username: res.locals.auth_username },
+                {
+                    telegramValid: true,
+                    telegramBotToken: token,
+                    telegramChatId: chatId,
+                    telegramMessageThreadId: messageThreadId,
+                },
+                { new: true }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            if (isAxiosError(error) && error.response?.data) {
+                const data = error.response.data as { description?: string };
+                let errReach3 = 'Failed to reach Telegram API';
+                if (typeof data?.description === 'string') {
+                    errReach3 = data.description;
+                }
+                return res.status(400).json({
+                    success: '',
+                    error: errReach3,
+                });
+            }
+            return res.status(500).json({
+                message: 'Server error',
+            });
+        }
+    }
+);
+
 // User Email Verify Send OTP
 router.post(
     '/userEmailVerifySendOtp',
@@ -1057,7 +1567,7 @@ router.post(
 
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
-                'replicate', 'runpod', 'openai', 'localai', 'smtp'
+                'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram'
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1119,6 +1629,12 @@ router.post(
                     smtpPassword: '',
                     smtpFrom: '',
                 },
+                telegram: {
+                    telegramValid: false,
+                    telegramBotToken: '',
+                    telegramChatId: '',
+                    telegramMessageThreadId: null,
+                },
             };
 
             const updateFields = clearOperations[apiKeyType];
@@ -1139,6 +1655,13 @@ router.post(
                     new: true
                 }
             );
+
+            // Clear Telegram conversation cache
+            if (apiKeyType === 'telegram') {
+                await ModelUserTelegramConversationCache.deleteOne({
+                    username: res.locals.auth_username,
+                });
+            }
 
             return res.json({
                 success: 'API Key cleared successfully',

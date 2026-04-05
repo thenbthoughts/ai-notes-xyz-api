@@ -59,6 +59,13 @@ interface IUserApiKey extends Document {
     smtpPassword: string;
     smtpFrom: string;
 
+    // telegram
+    telegramValid: boolean;
+    telegramBotToken: string;
+    telegramChatId: string;
+    /** forum topic id; omit or null for non-forum chats */
+    telegramMessageThreadId?: number | null;
+
     // user-email-verify
     userEmailVerifyOtp: number;
     userEmailVerifyEmail: string;

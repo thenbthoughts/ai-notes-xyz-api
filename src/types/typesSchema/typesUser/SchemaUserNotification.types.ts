@@ -9,7 +9,9 @@ interface IUserNotification extends Document {
     subject: string;
     text: string;
     html: string;
-    
+    channel?: 'email' | 'telegram';
+    telegramChatId?: string;
+
     // createdAt
     createdAtUtc: Date;
 }
