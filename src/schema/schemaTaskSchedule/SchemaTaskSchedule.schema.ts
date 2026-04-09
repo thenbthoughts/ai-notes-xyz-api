@@ -67,6 +67,14 @@ const taskScheduleSchema = new Schema<tsTaskListSchedule>({
         type: [String],
         default: [],
     },
+    dueDate: {
+        type: Date,
+        default: null,
+    },
+    dueDateReminderPresetLabels: {
+        type: [String],
+        default: [],
+    },
 
     // schedule execution time
     scheduleExecutionTimeArr: {

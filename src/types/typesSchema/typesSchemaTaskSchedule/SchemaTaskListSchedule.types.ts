@@ -27,6 +27,8 @@ export interface tsTaskListSchedule extends Document {
     timezoneOffset: number;
     scheduleTimeArr: Date[];
     cronExpressionArr: string[];
+    dueDate: Date | null;
+    dueDateReminderPresetLabels: string[];
     scheduleExecutionTimeArr: Date[];
     scheduleExecutedTimeArr: Date[];
     executedTimes: number;

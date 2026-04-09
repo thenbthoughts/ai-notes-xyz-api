@@ -12,6 +12,7 @@ import { tsTaskListScheduleAddTask } from '../../types/typesSchema/typesSchemaTa
 import { tsTaskListScheduleSendMyselfEmail } from '../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleSendMyselfEmail.types';
 import { ModelTaskScheduleSendMyselfEmail } from '../../schema/schemaTaskSchedule/SchemaTaskScheduleSendMyselfEmail.schema';
 import { computeRemainderScheduledTimesFromInput } from '../../utils/task/computeRemainderScheduledTimesInput';
+import { REMINDER_LABEL_TO_MS } from '../../constants/reminderLabelToMsArr';
 
 // Router
 const router = Router();
@@ -25,6 +26,18 @@ const TASK_SCHEDULE_VALID_TASK_TYPES = [
     'suggestDailyTasksByAi',
     'sendMyselfEmail',
 ] as const;
+
+const normalizeDueReminderPresetLabels = (labels: unknown): string[] => {
+    if (!Array.isArray(labels)) {
+        return [];
+    }
+    const allowed = new Set<string>(REMINDER_LABEL_TO_MS.map((item) => item.labelName));
+    const normalized = labels
+        .filter((x): x is string => typeof x === 'string')
+        .map((x) => x.trim().toLowerCase())
+        .filter((x) => x !== '' && allowed.has(x));
+    return [...new Set(normalized)];
+};
 
 const getMongodbObjectOrNull = (id: string | null) => {
     if (!id) {
@@ -78,10 +91,13 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             {
                 $addFields: {
                     cronExpressionArrLen: {
-                        $size: '$cronExpressionArr'
+                        $size: { $ifNull: ['$cronExpressionArr', []] }
                     },
                     scheduleTimeArrLen: {
-                        $size: '$scheduleTimeArr'
+                        $size: { $ifNull: ['$scheduleTimeArr', []] }
+                    },
+                    dueDateReminderPresetLabelsLen: {
+                        $size: { $ifNull: ['$dueDateReminderPresetLabels', []] }
                     }
                 }
             },
@@ -93,6 +109,9 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
                         },
                         {
                             scheduleTimeArrLen: { $gt: 0 }
+                        },
+                        {
+                            dueDateReminderPresetLabelsLen: { $gt: 0 }
                         }
                     ]
                 }
@@ -136,11 +155,47 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             }
         }
 
-        // remove duplicates
-        scheduleExecutionTimeArr = [...new Set(scheduleExecutionTimeArr)];
+        // step 3: due-date preset reminders
+        if (
+            itemTaskSchedule.dueDate &&
+            itemTaskSchedule.dueDateReminderPresetLabels &&
+            itemTaskSchedule.dueDateReminderPresetLabels.length > 0
+        ) {
+            scheduleExecutionTimeArr.push(
+                ...computeRemainderScheduledTimesFromInput({
+                    cronExpressions: [],
+                    cronTimeZone: itemTaskSchedule.timezoneName || 'UTC',
+                    absoluteTimesIso: [],
+                    presetLabels: itemTaskSchedule.dueDateReminderPresetLabels,
+                    dueDate: new Date(itemTaskSchedule.dueDate),
+                }).remainderScheduledTimes,
+            );
+        }
+
+        // remove duplicates by UTC ms value (Date object reference dedupe is not enough)
+        {
+            const seen = new Set<number>();
+            const uniqueByMs: Date[] = [];
+            for (const d of scheduleExecutionTimeArr) {
+                const t = new Date(d).getTime();
+                if (Number.isNaN(t)) continue;
+                if (!seen.has(t)) {
+                    seen.add(t);
+                    uniqueByMs.push(new Date(t));
+                }
+            }
+            scheduleExecutionTimeArr = uniqueByMs;
+        }
 
         // sort by date
         scheduleExecutionTimeArr.sort((a, b) => a.getTime() - b.getTime());
+
+        // drop stale execution times older than current UTC - 1 minute
+        const minAllowedTimeMs = Date.now() - 60 * 1000;
+        scheduleExecutionTimeArr = scheduleExecutionTimeArr.filter((d) => {
+            const t = new Date(d).getTime();
+            return !Number.isNaN(t) && t >= minAllowedTimeMs;
+        });
 
         // take first 101 dates
         scheduleExecutionTimeArr = scheduleExecutionTimeArr.slice(0, 101);
@@ -172,13 +227,16 @@ export const executeTaskSchedule = async ({
             {
                 $addFields: {
                     cronExpressionArrLen: {
-                        $size: '$cronExpressionArr'
+                        $size: { $ifNull: ['$cronExpressionArr', []] }
                     },
                     scheduleTimeArrLen: {
-                        $size: '$scheduleTimeArr'
+                        $size: { $ifNull: ['$scheduleTimeArr', []] }
+                    },
+                    dueDateReminderPresetLabelsLen: {
+                        $size: { $ifNull: ['$dueDateReminderPresetLabels', []] }
                     },
                     scheduleExecutionTimeArrLen: {
-                        $size: '$scheduleExecutionTimeArr'
+                        $size: { $ifNull: ['$scheduleExecutionTimeArr', []] }
                     }
                 }
             },
@@ -190,6 +248,9 @@ export const executeTaskSchedule = async ({
                         },
                         {
                             scheduleTimeArrLen: { $gt: 0 }
+                        },
+                        {
+                            dueDateReminderPresetLabelsLen: { $gt: 0 }
                         }
                     ],
                     scheduleExecutionTimeArrLen: { $gt: 0 }
@@ -330,7 +391,9 @@ router.post(
                 scheduleTimeArr,
                 cronExpressionArr,
                 timezoneName,
-                timezoneOffset
+                timezoneOffset,
+                dueDate,
+                dueDateReminderPresetLabels,
             } = req.body;
 
             // Validate required fields
@@ -365,6 +428,22 @@ router.post(
                 }
             }
 
+            // Validate due date if provided
+            let validDueDate: Date | null = null;
+            if (dueDate !== undefined && dueDate !== null && dueDate !== '') {
+                const parsedDueDate = new Date(dueDate);
+                if (Number.isNaN(parsedDueDate.getTime())) {
+                    return res.status(400).json({
+                        message: `Invalid due date: ${dueDate}`,
+                    });
+                }
+                validDueDate = parsedDueDate;
+            }
+
+            const normalizedDueDateReminderPresetLabels = normalizeDueReminderPresetLabels(
+                dueDateReminderPresetLabels,
+            );
+
             const actionDatetimeObj = normalizeDateTimeIpAddress(
                 res.locals.actionDatetime
             );
@@ -387,6 +466,8 @@ router.post(
 
                 // cron
                 cronExpressionArr: cronExpressionArr || [],
+                dueDate: validDueDate,
+                dueDateReminderPresetLabels: normalizedDueDateReminderPresetLabels,
 
                 // timezone
                 timezoneName: timezoneName || 'Asia/Kolkata',
@@ -571,6 +652,33 @@ router.post(
                 ModelTaskSchedule.aggregate(stateDocument),
                 ModelTaskSchedule.aggregate(stateCount),
             ]);
+            const docsWithComputedDueReminderDates = (resultTaskSchedules as Array<
+                tsTaskListSchedule & { dueDateReminderComputedTimes?: string[] }
+            >).map((doc) => {
+                const presetLabels = normalizeDueReminderPresetLabels(
+                    (doc as unknown as { dueDateReminderPresetLabels?: unknown }).dueDateReminderPresetLabels,
+                );
+                const dueDateRaw = (doc as unknown as { dueDate?: Date | string | null }).dueDate;
+                const dueDateParsed =
+                    dueDateRaw === null || dueDateRaw === undefined ? null : new Date(dueDateRaw);
+                const dueDateValid =
+                    dueDateParsed && !Number.isNaN(dueDateParsed.getTime()) ? dueDateParsed : null;
+                const dueDateReminderComputedTimes =
+                    dueDateValid && presetLabels.length > 0
+                        ? computeRemainderScheduledTimesFromInput({
+                              cronExpressions: [],
+                              cronTimeZone: 'UTC',
+                              absoluteTimesIso: [],
+                              presetLabels,
+                              dueDate: dueDateValid,
+                          }).remainderScheduledTimes
+                              .map((d) => d.toISOString())
+                        : [];
+                return {
+                    ...doc,
+                    dueDateReminderComputedTimes,
+                };
+            });
 
             let totalCount = 0;
             if (resultCount.length === 1 && typeof resultCount[0].count === 'number') {
@@ -580,7 +688,7 @@ router.post(
             return res.json({
                 message: 'Task schedules retrieved successfully',
                 count: totalCount,
-                docs: resultTaskSchedules,
+                docs: docsWithComputedDueReminderDates,
             });
         } catch (error) {
             console.error(error);
@@ -662,6 +770,8 @@ router.post(
                 cronExpressionArr,
                 timezoneName,
                 timezoneOffset,
+                dueDate,
+                dueDateReminderPresetLabels,
 
                 // 
                 taskAddObj: arg_taskAddObj,
@@ -707,6 +817,26 @@ router.post(
                 }
             }
 
+            // Validate due date if provided
+            let validDueDate: Date | null | undefined = undefined;
+            if (dueDate !== undefined) {
+                if (dueDate === null || dueDate === '') {
+                    validDueDate = null;
+                } else {
+                    const parsedDueDate = new Date(dueDate);
+                    if (Number.isNaN(parsedDueDate.getTime())) {
+                        return res.status(400).json({
+                            message: `Invalid due date: ${dueDate}`,
+                        });
+                    }
+                    validDueDate = parsedDueDate;
+                }
+            }
+            const normalizedDueDateReminderPresetLabels =
+                dueDateReminderPresetLabels !== undefined
+                    ? normalizeDueReminderPresetLabels(dueDateReminderPresetLabels)
+                    : undefined;
+
             // Build update object
             const updateObj = {} as Partial<tsTaskListSchedule>;
 
@@ -717,6 +847,10 @@ router.post(
             if (shouldSendEmail !== undefined) updateObj.shouldSendEmail = Boolean(shouldSendEmail);
             if (validScheduleTimeArr !== undefined) updateObj.scheduleTimeArr = validScheduleTimeArr;
             if (cronExpressionArr !== undefined) updateObj.cronExpressionArr = cronExpressionArr;
+            if (validDueDate !== undefined) updateObj.dueDate = validDueDate;
+            if (normalizedDueDateReminderPresetLabels !== undefined) {
+                updateObj.dueDateReminderPresetLabels = normalizedDueDateReminderPresetLabels;
+            }
 
             // timezone
             if (timezoneName !== undefined) updateObj.timezoneName = timezoneName;

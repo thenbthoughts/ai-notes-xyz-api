@@ -1,23 +1,8 @@
 import { CronExpressionParser } from 'cron-parser';
+import { REMINDER_LABEL_TO_MS } from '../../constants/reminderLabelToMsArr';
 
 const TASK_REMINDER_SCHEDULED_CAP = 101;
 const DEFAULT_MAX_CRON_OCCURRENCES_PER_EXPRESSION = 101;
-
-/** Preset reminder offsets (ms before due date). Label names are lowercase kebab-case. */
-const REMINDER_LABEL_TO_MS: { labelName: string; subTime: number }[] = [
-    { labelName: 'before-60-day', subTime: 60 * 24 * 60 * 60 * 1000 },
-    { labelName: 'before-30-day', subTime: 30 * 24 * 60 * 60 * 1000 },
-    { labelName: 'before-15-day', subTime: 15 * 24 * 60 * 60 * 1000 },
-    { labelName: 'before-5-day', subTime: 5 * 24 * 60 * 60 * 1000 },
-    { labelName: 'before-3-day', subTime: 3 * 24 * 60 * 60 * 1000 },
-    { labelName: 'before-1-day', subTime: 24 * 60 * 60 * 1000 },
-    { labelName: 'before-6-hours', subTime: 6 * 60 * 60 * 1000 },
-    { labelName: 'before-3-hours', subTime: 3 * 60 * 60 * 1000 },
-    { labelName: 'before-1-hours', subTime: 60 * 60 * 1000 },
-    { labelName: 'before-30-mins', subTime: 30 * 60 * 1000 },
-    { labelName: 'before-15-mins', subTime: 15 * 60 * 1000 },
-    { labelName: 'at-the-time-of-due-date', subTime: 0 },
-];
 
 /** 1) Cron expressions → upcoming execution instants. */
 // TODO
