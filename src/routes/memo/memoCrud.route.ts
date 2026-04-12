@@ -3,16 +3,14 @@ import type { Types } from 'mongoose';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelMemoLabel } from '../../schema/schemaMemo/SchemaMemoLabel.schema';
+import { ModelMemoFile } from '../../schema/schemaMemo/SchemaMemoFile.schema';
 import { ModelMemoNote } from '../../schema/schemaMemo/SchemaMemoNote.schema';
-import { deleteFileByPath } from '../upload/uploadFileS3ForFeatures';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
+import { mergeMemoFilePathsAndLegacyDoc, deleteAllMemoFilesAndLegacyStorage } from './memoImageShared';
 
 const router = Router();
 
 const MAX_LABELS_PER_NOTE = 25;
-const MAX_IMAGES_PER_NOTE = 25;
-const MAX_IMAGE_DATA_URL_LENGTH = 450_000;
-const MAX_IMAGE_STORAGE_PATH_LENGTH = 2048;
 
 const ALLOWED_NOTE_COLORS = new Set([
   '',
@@ -36,145 +34,6 @@ function parseNoteColor(noteColorInput: unknown): { ok: true; value: string } | 
   return { ok: true, value: trimmedNoteColor };
 }
 
-/**
- * Uploaded file paths look like `ai-notes-xyz/{username}/features/{parentEntityId}/{id}.ext`.
- * Usernames may be emails (`@`, `+`, etc.); reject only traversal and obvious junk.
- */
-function isValidMemoImageStoragePath(storagePath: string): boolean {
-  if (!storagePath.startsWith('ai-notes-xyz/')) return false;
-  if (storagePath.length > MAX_IMAGE_STORAGE_PATH_LENGTH) return false;
-  if (storagePath.includes('..') || storagePath.includes('\\')) return false;
-  if (/[\s\n\r]/.test(storagePath)) return false;
-  if (/[\u0000-\u001f\u007f-\u009f]/.test(storagePath)) return false;
-  return true;
-}
-
-/** Accepts inline data URLs or uploaded storage paths (`ai-notes-xyz/...`). */
-function parseMemoImageField(imageInput: unknown): { ok: true; value: string } | { ok: false; message: string } {
-  if (imageInput === undefined || imageInput === null) return { ok: true, value: '' };
-  if (typeof imageInput !== 'string') return { ok: false, message: 'Each image must be a string' };
-  const trimmedImageValue = imageInput.trim();
-  if (trimmedImageValue === '') return { ok: true, value: '' };
-  if (trimmedImageValue.startsWith('data:image/')) {
-    if (trimmedImageValue.length > MAX_IMAGE_DATA_URL_LENGTH) {
-      return { ok: false, message: 'Image is too large; try a smaller photo' };
-    }
-    return { ok: true, value: trimmedImageValue };
-  }
-  if (trimmedImageValue.startsWith('ai-notes-xyz/')) {
-    if (!isValidMemoImageStoragePath(trimmedImageValue)) {
-      return { ok: false, message: 'Invalid image path' };
-    }
-    return { ok: true, value: trimmedImageValue };
-  }
-  return { ok: false, message: 'image must be a data URL or an uploaded file path' };
-}
-
-function normalizeMemoImageUrlsFromDoc(doc: Record<string, unknown>): string[] {
-  const imageDataUrlsRaw = doc.imageDataUrls;
-  if (!Array.isArray(imageDataUrlsRaw) || imageDataUrlsRaw.length === 0) {
-    return [];
-  }
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const imageItem of imageDataUrlsRaw) {
-    if (typeof imageItem !== 'string' || !imageItem.trim()) continue;
-    const trimmedImageValue = imageItem.trim();
-    if (seen.has(trimmedImageValue)) continue;
-    seen.add(trimmedImageValue);
-    out.push(trimmedImageValue);
-  }
-  return out;
-}
-
-/** Parses `ai-notes-xyz/{username}/features/{parentEntityId}/{fileName}` for `deleteFileByPath`. */
-function parseFeatureUploadPathForDelete(
-  username: string,
-  fileUploadPath: string,
-): { parentEntityId: string; fileName: string } | null {
-  const prefix = `ai-notes-xyz/${username}/features/`;
-  const trimmedUploadPath = fileUploadPath.trim();
-  if (!trimmedUploadPath.startsWith(prefix)) return null;
-  const rest = trimmedUploadPath.slice(prefix.length);
-  const i = rest.indexOf('/');
-  if (i <= 0 || i === rest.length - 1) return null;
-  const parentEntityId = rest.slice(0, i);
-  const fileName = rest.slice(i + 1);
-  if (!fileName || fileName.includes('..')) return null;
-  return { parentEntityId, fileName };
-}
-
-/** Remove stored uploads (not inline `data:` URLs) referenced by a memo document. */
-async function deleteMemoStoredImages(username: string, doc: Record<string, unknown>): Promise<void> {
-  const urls = normalizeMemoImageUrlsFromDoc(doc);
-  const seen = new Set<string>();
-  for (const p of urls) {
-    if (typeof p !== 'string' || !p.startsWith('ai-notes-xyz/')) continue;
-    if (seen.has(p)) continue;
-    seen.add(p);
-    const parsed = parseFeatureUploadPathForDelete(username, p);
-    if (!parsed) {
-      console.error(`deleteMemoStoredImages: skip path (not features layout): ${p}`);
-      continue;
-    }
-    const r = await deleteFileByPath({ username, ...parsed });
-    if (!r.success) {
-      console.error(`deleteMemoStoredImages: could not delete ${p}: ${r.error}`);
-    }
-  }
-}
-
-/**
- * Deletes stored `ai-notes-xyz/{username}/features/...` files by full path (not `data:` URLs).
- * Used by `POST /memoDeleteStoredImagePaths` after the memo document was updated via `memoEdit`.
- */
-async function deleteMemoStoredImagePathsByFullPaths(username: string, pathsToDelete: string[]): Promise<void> {
-  const seen = new Set<string>();
-  for (const p of pathsToDelete) {
-    const pt = typeof p === 'string' ? p.trim() : '';
-    if (!pt || seen.has(pt)) continue;
-    seen.add(pt);
-    if (!pt.startsWith(`ai-notes-xyz/${username}/`)) {
-      console.error(`deleteMemoStoredImagePathsByFullPaths: rejected path (not owned by user): ${pt}`);
-      continue;
-    }
-    const parsed = parseFeatureUploadPathForDelete(username, pt);
-    if (!parsed) {
-      console.error(`deleteMemoStoredImagePathsByFullPaths: skip path (not features layout): ${pt}`);
-      continue;
-    }
-    const r = await deleteFileByPath({ username, ...parsed });
-    if (!r.success) {
-      console.error(`deleteMemoStoredImagePathsByFullPaths: could not delete ${pt}: ${r.error}`);
-    }
-  }
-}
-
-function parseMemoImageUrls(imageDataUrlsInput: unknown): { ok: true; values: string[] } | { ok: false; message: string } {
-  if (imageDataUrlsInput === undefined || imageDataUrlsInput === null) {
-    return { ok: true, values: [] };
-  }
-  if (!Array.isArray(imageDataUrlsInput)) {
-    return { ok: false, message: 'imageDataUrls must be an array' };
-  }
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const imageItem of imageDataUrlsInput) {
-    const parsed = parseMemoImageField(imageItem);
-    if (!parsed.ok) {
-      return { ok: false, message: parsed.message };
-    }
-    if (parsed.value === '') continue;
-    if (seen.has(parsed.value)) continue;
-    seen.add(parsed.value);
-    out.push(parsed.value);
-    if (out.length > MAX_IMAGES_PER_NOTE) {
-      return { ok: false, message: `At most ${MAX_IMAGES_PER_NOTE} images per memo` };
-    }
-  }
-  return { ok: true, values: out };
-}
-
 type MemoDocPlain = {
   _id: Types.ObjectId;
   username: string;
@@ -185,7 +44,6 @@ type MemoDocPlain = {
   archived?: boolean;
   trashed?: boolean;
   noteColor?: string;
-  imageDataUrls?: string[];
   createdAtUtc?: Date;
   createdAtIpAddress?: string;
   createdAtUserAgent?: string;
@@ -249,7 +107,9 @@ async function parseAndValidateLabelIds(
   return { ok: true, ids };
 }
 
-async function enrichNoteDoc(doc: MemoDocPlain | null): Promise<(MemoDocPlain & { labelNames: string[] }) | null> {
+async function enrichNoteDoc(
+  doc: MemoDocPlain | null,
+): Promise<(MemoDocPlain & { labelNames: string[]; imageDataUrls: string[] }) | null> {
   if (!doc || !doc._id) return null;
   const rawDoc = doc as Record<string, unknown>;
   const slim = rawDoc as MemoDocPlain;
@@ -257,11 +117,13 @@ async function enrichNoteDoc(doc: MemoDocPlain | null): Promise<(MemoDocPlain & 
   const ids = effectiveLabelObjectIds(doc);
   const lbls = ids.length ? await ModelMemoLabel.find({ username, _id: { $in: ids } }).lean() : [];
   const labelNames = ids.map((id) => lbls.find((l) => String(l._id) === String(id))?.name ?? '');
+  const files = await ModelMemoFile.find({ username, memoNoteId: doc._id }).sort({ sortOrder: 1, createdAtUtc: 1 }).lean();
+  const pathsFromFiles = files.map((f) => f.filePath);
   return {
     ...slim,
     labelIds: ids,
     labelNames,
-    imageDataUrls: normalizeMemoImageUrlsFromDoc(rawDoc),
+    imageDataUrls: mergeMemoFilePathsAndLegacyDoc(pathsFromFiles, rawDoc),
   };
 }
 
@@ -347,11 +209,26 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
       ...memoLabelResolutionStages,
     ]);
 
+    const noteIds = docs.map((d) => d._id as Types.ObjectId);
+    const fileRows =
+      noteIds.length > 0
+        ? await ModelMemoFile.find({ username, memoNoteId: { $in: noteIds } })
+            .sort({ sortOrder: 1, createdAtUtc: 1 })
+            .lean()
+        : [];
+    const pathsByMemo = new Map<string, string[]>();
+    for (const fr of fileRows) {
+      const key = String(fr.memoNoteId);
+      if (!pathsByMemo.has(key)) pathsByMemo.set(key, []);
+      pathsByMemo.get(key)!.push(fr.filePath);
+    }
+
     const docsOut = docs.map((d) => {
       const rec = d as Record<string, unknown>;
+      const pathsFromFiles = pathsByMemo.get(String(d._id)) ?? [];
       return {
         ...rec,
-        imageDataUrls: normalizeMemoImageUrlsFromDoc(rec),
+        imageDataUrls: mergeMemoFilePathsAndLegacyDoc(pathsFromFiles, rec),
       };
     });
 
@@ -382,27 +259,21 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
     if (!nc.ok) {
       return res.status(400).json({ message: nc.message });
     }
-    const urlsParsed = parseMemoImageUrls(req.body?.imageDataUrls);
-    if (!urlsParsed.ok) {
-      return res.status(400).json({ message: urlsParsed.message });
-    }
-    const imageDataUrls = urlsParsed.values;
 
-    if (!title && !body && imageDataUrls.length === 0) {
-      return res.status(400).json({ message: 'Title, body, or at least one image is required' });
+    if (!title && !body) {
+      return res.status(400).json({ message: 'Title or body is required' });
     }
 
     const now = new Date();
     const created = await ModelMemoNote.create({
       username,
-      title: title || (imageDataUrls.length ? 'Image' : ''),
+      title: title || '',
       body,
       labelIds,
       pinned,
       archived: false,
       trashed: false,
       noteColor: nc.value,
-      imageDataUrls,
       createdAtUtc: now,
       createdAtIpAddress: req.ip || '',
       createdAtUserAgent: req.headers['user-agent'] || '',
@@ -417,42 +288,6 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
     return res.json({
       message: 'Memo added successfully',
       doc,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.post('/memoDeleteStoredImagePaths', middlewareUserAuth, async (req: Request, res: Response) => {
-  try {
-    const username = res.locals.auth_username as string;
-    const pathsInput = req.body?.paths;
-    if (!Array.isArray(pathsInput)) {
-      return res.status(400).json({ message: 'paths must be an array' });
-    }
-    if (pathsInput.length > MAX_IMAGES_PER_NOTE) {
-      return res.status(400).json({ message: `At most ${MAX_IMAGES_PER_NOTE} paths per request` });
-    }
-    const paths: string[] = [];
-    const seenIn = new Set<string>();
-    for (const item of pathsInput) {
-      if (typeof item !== 'string') continue;
-      const trimmedPath = item.trim();
-      if (!trimmedPath || seenIn.has(trimmedPath)) continue;
-      seenIn.add(trimmedPath);
-      const parsedField = parseMemoImageField(trimmedPath);
-      if (!parsedField.ok) {
-        console.warn('memoDeleteStoredImagePaths: skip invalid path', parsedField.message);
-        continue;
-      }
-      if (parsedField.value === '' || parsedField.value.startsWith('data:')) continue;
-      paths.push(parsedField.value);
-    }
-    await deleteMemoStoredImagePathsByFullPaths(username, paths);
-    return res.json({
-      message: 'Storage paths processed',
-      requested: paths.length,
     });
   } catch (error) {
     console.error(error);
@@ -498,14 +333,6 @@ router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response)
       updateObj.noteColor = nc.value;
     }
 
-    if (Object.prototype.hasOwnProperty.call(req.body, 'imageDataUrls')) {
-      const urls = parseMemoImageUrls(req.body.imageDataUrls);
-      if (!urls.ok) {
-        return res.status(400).json({ message: urls.message });
-      }
-      updateObj.imageDataUrls = urls.values;
-    }
-
     if (Object.prototype.hasOwnProperty.call(req.body, 'labelIds')) {
       const parsed = await parseAndValidateLabelIds(username, req.body.labelIds);
       if (!parsed.ok) {
@@ -540,7 +367,7 @@ router.post('/memoDelete', middlewareUserAuth, async (req: Request, res: Respons
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
 
-    await deleteMemoStoredImages(username, existing as Record<string, unknown>);
+    await deleteAllMemoFilesAndLegacyStorage(username, existing as Record<string, unknown>, _id);
     await ModelMemoNote.deleteOne({ _id, username });
 
     return res.json({ message: 'Memo deleted successfully' });
@@ -555,7 +382,7 @@ router.post('/memoEmptyBin', middlewareUserAuth, async (req: Request, res: Respo
     const username = res.locals.auth_username as string;
     const trashed = await ModelMemoNote.find({ username, trashed: true }).lean();
     for (const doc of trashed) {
-      await deleteMemoStoredImages(username, doc as Record<string, unknown>);
+      await deleteAllMemoFilesAndLegacyStorage(username, doc as Record<string, unknown>, doc._id as Types.ObjectId);
     }
     await ModelMemoNote.deleteMany({ username, trashed: true });
     return res.json({ message: 'Bin emptied successfully' });

@@ -49,6 +49,7 @@ import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
 
 // page -> memo
 import routesMemoCrud from './memo/memoCrud.route';
+import routesMemoFileCrud from './memo/memoFileCrud.route';
 import routesMemoLabelCrud from './memo/memoLabelCrud.route';
 
 // page -> info vault
@@ -135,6 +136,7 @@ router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
 
 // routes -> memo
 router.use('/memo/crud', routesMemoCrud);
+router.use('/memo-file/crud', routesMemoFileCrud);
 router.use('/memo-label/crud', routesMemoLabelCrud);
 
 // routes -> info vault

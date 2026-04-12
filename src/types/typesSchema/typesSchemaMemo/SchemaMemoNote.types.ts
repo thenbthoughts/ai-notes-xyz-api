@@ -9,7 +9,6 @@ export interface IMemoNote extends Document {
   archived: boolean;
   trashed: boolean;
   noteColor: string;
-  imageDataUrls: string[];
   createdAtUtc: Date;
   createdAtIpAddress: string;
   createdAtUserAgent: string;

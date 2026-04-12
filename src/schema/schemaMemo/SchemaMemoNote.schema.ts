@@ -12,8 +12,6 @@ const memoNoteSchema = new Schema<IMemoNote>({
   trashed: { type: Boolean, default: false },
   /** Keep-style palette key: '', coral, orange, yellow, green, teal, blue, purple, pink, brown, gray */
   noteColor: { type: String, default: '' },
-  /** Storage paths or data URLs; max count/length enforced in routes */
-  imageDataUrls: { type: [String], default: [] },
   createdAtUtc: { type: Date, default: null },
   createdAtIpAddress: { type: String, default: '' },
   createdAtUserAgent: { type: String, default: '' },
