@@ -47,6 +47,10 @@ import routesTaskScheduleCrud from './taskSchedule/taskSchedule.route';
 import routesNotesCrud from './notes/notesCrud.route';
 import routesNotesWorkspaceCrud from './notes/notesWorkspaceCrud.route';
 
+// page -> memo
+import routesMemoCrud from './memo/memoCrud.route';
+import routesMemoLabelCrud from './memo/memoLabelCrud.route';
+
 // page -> info vault
 import routesInfoVaultAll from './infoVault/infoVaultAll.route';
 
@@ -128,6 +132,10 @@ router.use('/task-schedule/crud', routesTaskScheduleCrud);
 // routes -> notes
 router.use('/notes/crud', routesNotesCrud);
 router.use('/notes-workspace/crud', routesNotesWorkspaceCrud);
+
+// routes -> memo
+router.use('/memo/crud', routesMemoCrud);
+router.use('/memo-label/crud', routesMemoLabelCrud);
 
 // routes -> info vault
 router.use('/info-vault', routesInfoVaultAll);
