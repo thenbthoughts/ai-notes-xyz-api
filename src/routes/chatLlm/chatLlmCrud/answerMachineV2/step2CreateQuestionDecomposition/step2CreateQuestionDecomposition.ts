@@ -10,8 +10,10 @@ import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 
 const step2CreateQuestionDecomposition = async ({
     answerMachineRecordId,
+    abortSignal,
 }: {
     answerMachineRecordId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -183,9 +185,17 @@ const step2CreateQuestionDecomposition = async ({
             maxTokens: 4096,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return {
+                    success: false,
+                    errorReason: 'Cancelled',
+                    data: null,
+                };
+            }
             const errorMsg = `Failed to generate questions: ${llmResult.error || 'Unknown error'}`;
             console.error(`[Question Generation] ${errorMsg}`);
             return {

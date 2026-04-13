@@ -38,7 +38,14 @@ router.post(
     '/notesAddAutoNextMessage',
     middlewareUserAuth,
     middlewareActionDatetime,
-    async (req: Request, res: Response) => {
+       async (req: Request, res: Response) => {
+        const abortController = new AbortController();
+        const abortIfClientGone = () => {
+            if (!res.writableEnded) {
+                abortController.abort();
+            }
+        };
+        req.on('close', abortIfClientGone);
         try {
             const auth_username = res.locals.auth_username;
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
@@ -112,19 +119,29 @@ router.post(
                     aiModelName: aiModelName,
                     userApiKey: apiKeys,
                     messageId: messageId,
+                    abortSignal: abortController.signal,
                 });
 
-                // Generate tags
-                await generateTags({
-                    mongodbRecordId: messageId.toString(),
-                    auth_username,
-                });
+                if (!abortController.signal.aborted) {
+                    await generateTags({
+                        mongodbRecordId: messageId.toString(),
+                        auth_username,
+                    });
+                }
             }
 
-            return res.status(200).json({ message: 'Success' });
+            if (!abortController.signal.aborted && !res.writableEnded) {
+                return res.status(200).json({ message: 'Success' });
+            }
+            return;
         } catch (error) {
+            if (abortController.signal.aborted) {
+                return;
+            }
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
+        } finally {
+            req.off('close', abortIfClientGone);
         }
     }
 );
@@ -135,6 +152,13 @@ router.post(
     middlewareUserAuth,
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
+        const abortController = new AbortController();
+        const abortIfClientGone = () => {
+            if (!res.writableEnded) {
+                abortController.abort();
+            }
+        };
+        req.on('close', abortIfClientGone);
         try {
             const auth_username = res.locals.auth_username;
 
@@ -158,23 +182,33 @@ router.post(
             // answer machine
             const result = await answerMachineInitiateFunc({
                 messageId: messageId,
+                abortSignal: abortController.signal,
             });
 
             if (result.success === false) {
                 return res.status(500).json({ message: 'Server error', error: result.errorReason });
             }
 
-            // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Title, Embedding)
-            await ModelLlmPendingTaskCron.create({
-                username: auth_username,
-                taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
-                targetRecordId: threadId,
-            });
+            if (!abortController.signal.aborted) {
+                await ModelLlmPendingTaskCron.create({
+                    username: auth_username,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
+                    targetRecordId: threadId,
+                });
+            }
 
-            return res.status(200).json({ message: 'Success' });
+            if (!abortController.signal.aborted && !res.writableEnded) {
+                return res.status(200).json({ message: 'Success' });
+            }
+            return;
         } catch (error) {
+            if (abortController.signal.aborted) {
+                return;
+            }
             console.error(error);
             return res.status(500).json({ message: 'Server error', error: error });
+        } finally {
+            req.off('close', abortIfClientGone);
         }
     }
 );

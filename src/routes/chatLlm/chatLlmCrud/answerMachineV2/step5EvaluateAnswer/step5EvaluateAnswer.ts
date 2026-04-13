@@ -13,12 +13,15 @@ interface EvaluationResult {
     isSatisfactory: boolean;
     reason: string;
     confidence: number; // 0-1 scale
+    cancelled?: boolean;
 }
 
 const step5EvaluateAnswer = async ({
     answerMachineRecordId,
+    abortSignal,
 }: {
     answerMachineRecordId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -62,7 +65,22 @@ const step5EvaluateAnswer = async ({
         const finalAnswer = answerMachineRecord.finalAnswer || '';
 
         // Evaluate the final answer using LLM
-        const evaluation = await evaluateFinalAnswer(finalAnswer, llmConfig, answerMachineRecord.threadId, answerMachineRecord.username, answerMachineRecordId);
+        const evaluation = await evaluateFinalAnswer(
+            finalAnswer,
+            llmConfig,
+            answerMachineRecord.threadId,
+            answerMachineRecord.username,
+            answerMachineRecordId,
+            abortSignal,
+        );
+
+        if (evaluation.cancelled) {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
 
         // Update the answer machine record with evaluation results
         await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecordId, {
@@ -194,7 +212,8 @@ const evaluateFinalAnswer = async (
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
     username: string,
-    answerMachineRecordId: mongoose.Types.ObjectId
+    answerMachineRecordId: mongoose.Types.ObjectId,
+    abortSignal?: AbortSignal,
 ): Promise<EvaluationResult> => {
     if (!finalAnswer || finalAnswer.trim().length === 0) {
         return {
@@ -309,9 +328,18 @@ Be strict but fair in your evaluation. Only mark as satisfactory if the answer i
             maxTokens: 1024,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return {
+                    isSatisfactory: false,
+                    reason: 'Cancelled',
+                    confidence: 0,
+                    cancelled: true,
+                };
+            }
             console.warn('[Evaluation] LLM evaluation failed');
             return {
                 isSatisfactory: false,
