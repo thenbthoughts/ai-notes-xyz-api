@@ -23,8 +23,10 @@ interface RelevantContextResponse {
 
 const step3AnswerSubQuestions = async ({
     answerMachineRecordId,
+    abortSignal,
 }: {
     answerMachineRecordId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -32,6 +34,14 @@ const step3AnswerSubQuestions = async ({
 }> => {
     try {
         console.log('step3AnswerSubQuestions', answerMachineRecordId);
+
+        if (abortSignal?.aborted) {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
 
         // Get the answer machine record to get thread info
         const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
@@ -67,7 +77,7 @@ const step3AnswerSubQuestions = async ({
             try {
                 console.log(`Answering sub-question: ${subQuestion._id}`);
 
-                const result = await answerSubQuestionInline(subQuestion._id);
+                const result = await answerSubQuestionInline(subQuestion._id, abortSignal);
 
                 if (!result.success) {
                     console.error(`Failed to answer sub-question ${subQuestion._id}:`, result.errorReason);
@@ -134,9 +144,24 @@ const step3AnswerSubQuestions = async ({
         // Wait for all sub-questions to be answered
         const results = await Promise.all(answerPromises);
 
+        if (abortSignal?.aborted) {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
+
         // Check if any failed
         const failedResults = results.filter(result => !result.success);
         if (failedResults.length > 0) {
+            if (failedResults.some((r) => 'error' in r && r.error === 'Cancelled')) {
+                return {
+                    success: false,
+                    errorReason: 'Cancelled',
+                    data: null,
+                };
+            }
             console.error(`Failed to answer ${failedResults.length} sub-questions`);
             return {
                 success: false,
@@ -166,7 +191,10 @@ const step3AnswerSubQuestions = async ({
 /**
  * Inline implementation of AnswerSubQuestion.execute()
  */
-async function answerSubQuestionInline(subQuestionId: mongoose.Types.ObjectId): Promise<{
+async function answerSubQuestionInline(
+    subQuestionId: mongoose.Types.ObjectId,
+    abortSignal?: AbortSignal,
+): Promise<{
     success: boolean;
     keywords: string[];
     contextIds: mongoose.Types.ObjectId[];
@@ -196,7 +224,16 @@ async function answerSubQuestionInline(subQuestionId: mongoose.Types.ObjectId): 
         const { threadId, username, question, llmConfig } = initData;
 
         // Step 1: Generate keywords
-        const keywords = await generateKeywordsInline(question, llmConfig, threadId, username);
+        const keywords = await generateKeywordsInline(question, llmConfig, threadId, username, abortSignal);
+        if (abortSignal?.aborted) {
+            return {
+                success: false,
+                keywords: [],
+                contextIds: [],
+                answer: '',
+                errorReason: 'Cancelled',
+            };
+        }
         if (keywords.length === 0) {
             return {
                 success: false,
@@ -208,13 +245,23 @@ async function answerSubQuestionInline(subQuestionId: mongoose.Types.ObjectId): 
         }
 
         // Step 2: Search for context IDs
-        const contextIds = await searchContextIdsInline(keywords, threadId, username, llmConfig);
+        const contextIds = await searchContextIdsInline(keywords, threadId, username, llmConfig, abortSignal);
 
         // Step 3: Get context content
         const contextContent = await getContextContentInline(contextIds, username);
 
         // Step 4: Generate answer
-        const answerResult = await generateAnswerInline(contextContent, question, threadId, username, llmConfig);
+        const answerResult = await generateAnswerInline(contextContent, question, threadId, username, llmConfig, abortSignal);
+        if (abortSignal?.aborted) {
+            return {
+                success: false,
+                keywords,
+                contextIds,
+                answer: '',
+                errorReason: 'Cancelled',
+                tokens: answerResult.tokens,
+            };
+        }
         if (!answerResult.answer) {
             return {
                 success: false,
@@ -290,7 +337,13 @@ async function initializeSubQuestion(subQuestionId: mongoose.Types.ObjectId): Pr
 /**
  * Generate keywords from the sub-question
  */
-async function generateKeywordsInline(question: string, llmConfig: LlmConfig, threadId: mongoose.Types.ObjectId, username: string): Promise<string[]> {
+async function generateKeywordsInline(
+    question: string,
+    llmConfig: LlmConfig,
+    threadId: mongoose.Types.ObjectId,
+    username: string,
+    abortSignal?: AbortSignal,
+): Promise<string[]> {
     try {
         const llmMessages: Message[] = [
             {
@@ -313,9 +366,13 @@ async function generateKeywordsInline(question: string, llmConfig: LlmConfig, th
             maxTokens: 2048,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return [];
+            }
             console.error('Failed to generate keywords:', llmResult.error);
             return [];
         }
@@ -365,7 +422,13 @@ async function generateKeywordsInline(question: string, llmConfig: LlmConfig, th
 /**
  * Search for context IDs using keywords
  */
-async function searchContextIdsInline(keywords: string[], threadId: mongoose.Types.ObjectId, username: string, llmConfig: LlmConfig): Promise<mongoose.Types.ObjectId[]> {
+async function searchContextIdsInline(
+    keywords: string[],
+    threadId: mongoose.Types.ObjectId,
+    username: string,
+    llmConfig: LlmConfig,
+    abortSignal?: AbortSignal,
+): Promise<mongoose.Types.ObjectId[]> {
     try {
         if (keywords.length === 0) {
             return [];
@@ -411,7 +474,7 @@ async function searchContextIdsInline(keywords: string[], threadId: mongoose.Typ
         }
 
         // Score context references with LLM
-        const scoredItems = await scoreContextReferencesInline(searchResults, keywords, threadId, username, llmConfig);
+        const scoredItems = await scoreContextReferencesInline(searchResults, keywords, threadId, username, llmConfig, abortSignal);
 
         if (scoredItems.length === 0) {
             return [];
@@ -446,7 +509,8 @@ async function scoreContextReferencesInline(
     keywords: string[],
     threadId: mongoose.Types.ObjectId,
     username: string,
-    llmConfig: LlmConfig
+    llmConfig: LlmConfig,
+    abortSignal?: AbortSignal,
 ): Promise<RelevantContextResponse['relevantItems']> {
     try {
         // Get conversation context
@@ -486,9 +550,13 @@ async function scoreContextReferencesInline(
             maxTokens: 4096,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return [];
+            }
             console.error('Failed to score context references:', llmResult.error);
             return [];
         }
@@ -841,7 +909,8 @@ async function generateAnswerInline(
     question: string,
     threadId: mongoose.Types.ObjectId,
     username: string,
-    llmConfig: LlmConfig
+    llmConfig: LlmConfig,
+    abortSignal?: AbortSignal,
 ): Promise<{
     answer: string;
     tokens?: {
@@ -886,9 +955,13 @@ async function generateAnswerInline(
             temperature: 0.7,
             maxTokens: 4096,
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return { answer: '' };
+            }
             console.error('Failed to generate answer:', llmResult.error);
             return { answer: '' };
         }

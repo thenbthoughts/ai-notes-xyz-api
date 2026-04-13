@@ -782,6 +782,8 @@ const getNextMessageFromLast30Conversation = async ({
 
     // messageId
     messageId,
+
+    abortSignal,
 }: {
     threadId: mongoose.Types.ObjectId,
     threadInfo: IChatLlmThread,
@@ -794,8 +796,22 @@ const getNextMessageFromLast30Conversation = async ({
 
     // messageId
     messageId: mongoose.Types.ObjectId;
+
+    abortSignal?: AbortSignal;
 }) => {
     const messages: Message[] = [];
+
+    if (abortSignal?.aborted) {
+        await ModelChatLlm.findOneAndUpdate(
+            { _id: messageId },
+            { $set: { content: 'AI: (Generation cancelled.)' } },
+        );
+        return {
+            nextMessage: '',
+            aiModelProvider: aiModelProvider,
+            aiModelName: aiModelName,
+        };
+    }
 
     // 
     const chatLlmTemperature = threadInfo.chatLlmTemperature || 1;
@@ -980,6 +996,7 @@ const getNextMessageFromLast30Conversation = async ({
                     temperature: chatLlmTemperature,
                     maxTokens: chatLlmMaxTokens,
                     headersExtra: customHeaders,
+                    abortSignal,
                 },
                 async ({
                     token,
@@ -1032,6 +1049,26 @@ const getNextMessageFromLast30Conversation = async ({
                             totalTokens: streamResult.totalTokens,
                             costInUsd: streamResult.costInUsd,
                         }
+                    }
+                );
+            } else if (streamResult.cancelled || abortSignal?.aborted) {
+                const partial = streamResult.fullContent?.trim() || '';
+                const content =
+                    partial.length > 0
+                        ? `AI: ${partial}\n\n(Generation stopped.)`
+                        : 'AI: (Generation cancelled.)';
+                await ModelChatLlm.findOneAndUpdate(
+                    { _id: messageId },
+                    {
+                        $set: {
+                            content,
+                            reasoningContent: streamResult.reasoningContent || '',
+                            promptTokens: streamResult.promptTokens,
+                            completionTokens: streamResult.completionTokens,
+                            reasoningTokens: streamResult.reasoningTokens,
+                            totalTokens: streamResult.totalTokens,
+                            costInUsd: streamResult.costInUsd,
+                        },
                     }
                 );
             } else {

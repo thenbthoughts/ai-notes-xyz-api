@@ -11,8 +11,10 @@ import step5EvaluateAnswer from "./step5EvaluateAnswer/step5EvaluateAnswer";
 
 const executeIteration = async ({
     answerMachineRecordId,
+    abortSignal,
 }: {
     answerMachineRecordId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -20,6 +22,14 @@ const executeIteration = async ({
 }> => {
     try {
         console.log('executeIteration', answerMachineRecordId);
+
+        if (abortSignal?.aborted) {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
 
         // Step 1: Get the answer machine record
         const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
@@ -29,7 +39,15 @@ const executeIteration = async ({
         // Step 2: Generate the sub questions
         const resultSubQuestions = await step2CreateQuestionDecomposition({
             answerMachineRecordId,
+            abortSignal,
         });
+        if (resultSubQuestions.errorReason === 'Cancelled') {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
         if (resultSubQuestions.success === false) {
             return {
                 success: false,
@@ -41,7 +59,15 @@ const executeIteration = async ({
         // Step 3: Answer the sub questions
         const resultAnswerSubQuestions = await step3AnswerSubQuestions({
             answerMachineRecordId,
+            abortSignal,
         });
+        if (resultAnswerSubQuestions.errorReason === 'Cancelled') {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
         if (resultAnswerSubQuestions.success === false) {
             return {
                 success: false,
@@ -53,7 +79,15 @@ const executeIteration = async ({
         // Step 4: Generate the final answer
         const resultGenerateFinalAnswer = await step4GenerateFinalAnswer({
             answerMachineRecordId,
+            abortSignal,
         });
+        if (resultGenerateFinalAnswer.errorReason === 'Cancelled') {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
         if (resultGenerateFinalAnswer.success === false) {
             return {
                 success: false,
@@ -65,7 +99,15 @@ const executeIteration = async ({
         // Step 5: Evaluate the answer and set the status to answered if satisfactory
         const resultEvaluateAnswer = await step5EvaluateAnswer({
             answerMachineRecordId,
+            abortSignal,
         });
+        if (resultEvaluateAnswer.errorReason === 'Cancelled') {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
         if (resultEvaluateAnswer.success === false) {
             return {
                 success: false,

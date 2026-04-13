@@ -20,8 +20,10 @@ interface LlmConfig {
 
 const step4GenerateFinalAnswer = async ({
     answerMachineRecordId,
+    abortSignal,
 }: {
     answerMachineRecordId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -49,7 +51,15 @@ const step4GenerateFinalAnswer = async ({
         console.log('Generating final answer for thread:', threadId);
 
         // Inline implementation from GenerateFinalAnswer class
-        const result = await generateFinalAnswerInline(threadId, username, answerMachineRecordId);
+        const result = await generateFinalAnswerInline(threadId, username, answerMachineRecordId, abortSignal);
+
+        if (result.errorReason === 'Cancelled') {
+            return {
+                success: false,
+                errorReason: 'Cancelled',
+                data: null,
+            };
+        }
 
         if (!result.success) {
             console.error('Failed to generate final answer:', result.errorReason);
@@ -94,7 +104,8 @@ const step4GenerateFinalAnswer = async ({
 async function generateFinalAnswerInline(
     threadId: mongoose.Types.ObjectId,
     username: string,
-    answerMachineRecordId: mongoose.Types.ObjectId
+    answerMachineRecordId: mongoose.Types.ObjectId,
+    abortSignal?: AbortSignal,
 ): Promise<{
     success: boolean;
     finalAnswer: string;
@@ -127,7 +138,15 @@ async function generateFinalAnswerInline(
     }
 
     // Generate final answer
-    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username, answerMachineRecordId);
+    const finalAnswerResult = await generateFinalAnswerContent(thread, llmConfig, threadId, username, answerMachineRecordId, abortSignal);
+    if (finalAnswerResult.errorReason === 'Cancelled') {
+        return {
+            success: false,
+            finalAnswer: '',
+            messageId: null,
+            errorReason: 'Cancelled',
+        };
+    }
     if (!finalAnswerResult.answer) {
         return {
             success: false,
@@ -375,9 +394,11 @@ async function generateFinalAnswerContent(
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
     username: string,
-    answerMachineRecordId: mongoose.Types.ObjectId
+    answerMachineRecordId: mongoose.Types.ObjectId,
+    abortSignal?: AbortSignal,
 ): Promise<{
     answer: string;
+    errorReason?: string;
     tokens?: {
         promptTokens: number;
         completionTokens: number;
@@ -451,9 +472,13 @@ async function generateFinalAnswerContent(
             temperature,
             maxTokens,
             headersExtra: llmConfig.customHeaders,
+            abortSignal,
         });
 
         if (!llmResult.success || !llmResult.content) {
+            if (abortSignal?.aborted) {
+                return { answer: '', errorReason: 'Cancelled' };
+            }
             console.error('Failed to generate final answer:', llmResult.error);
             return { answer: '' };
         }

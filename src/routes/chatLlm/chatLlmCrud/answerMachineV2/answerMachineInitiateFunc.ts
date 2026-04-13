@@ -11,8 +11,10 @@ import executeIteration from "./executeIteration";
 
 const answerMachineInitiateFunc = async ({
     messageId,
+    abortSignal,
 }: {
     messageId: mongoose.Types.ObjectId;
+    abortSignal?: AbortSignal;
 }): Promise<{
     success: boolean;
     errorReason: string;
@@ -57,10 +59,34 @@ const answerMachineInitiateFunc = async ({
         });
 
         for (let i = 1; i <= answerMachineRecord.maxNumberOfIterations; i++) {
+            if (abortSignal?.aborted) {
+                await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecord._id, {
+                    $set: { status: 'error', errorReason: 'Cancelled by user' },
+                });
+                return {
+                    success: true,
+                    errorReason: '',
+                    data: null,
+                };
+            }
+
             console.log(`----- executeIteration: ${i},  of ${answerMachineRecord.maxNumberOfIterations} -----`);
-            await executeIteration({
+            const iterationResult = await executeIteration({
                 answerMachineRecordId: answerMachineRecord._id,
+                abortSignal,
             });
+
+            if (iterationResult.errorReason === 'Cancelled' || abortSignal?.aborted) {
+                await ModelChatLlmAnswerMachine.findByIdAndUpdate(answerMachineRecord._id, {
+                    $set: { status: 'error', errorReason: 'Cancelled by user' },
+                });
+                return {
+                    success: true,
+                    errorReason: '',
+                    data: null,
+                };
+            }
+
             // get the answer machine record
             const answerMachineRecordValidate = await ModelChatLlmAnswerMachine.findOne({ _id: answerMachineRecord._id });
             if (answerMachineRecordValidate) {

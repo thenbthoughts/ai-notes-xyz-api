@@ -102,7 +102,9 @@ export interface FetchLlmParams {
     provider?: {
       sort?: 'price' | 'throughput'
     }
-  }
+  };
+  /** When aborted, in-flight HTTP requests to the provider are cancelled. */
+  abortSignal?: AbortSignal;
 }
 
 export interface FetchLlmStreamParams {
@@ -119,6 +121,7 @@ export interface FetchLlmStreamParams {
   openrouterExtras?: {
     routerTags?: Record<string, string>;
   };
+  abortSignal?: AbortSignal;
 }
 
 export interface FetchLlmResult {
@@ -287,6 +290,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
         await axios.post(pullUrl, pullPayload, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 3000000, // 50 minutes timeout for model pulling
+          signal: params.abortSignal,
         });
         console.log(`Successfully pulled model: ${params.model}`);
       } catch (pullError: any) {
@@ -316,6 +320,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
       const response = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 1000000, // 10 minutes timeout for model pulling
+        signal: params.abortSignal,
       });
 
       const content: string = response?.data?.message?.content ?? '';
@@ -377,6 +382,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
         url: url,
         headers,
         data: JSON.stringify(data),
+        signal: params.abortSignal,
       };
 
       const response: AxiosResponse = await axios.request(config);
@@ -452,6 +458,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
       url: finalApiEndpoint,
       headers,
       data: JSON.stringify(data),
+      signal: params.abortSignal,
     };
 
     const response: AxiosResponse = await axios.request(config);
@@ -518,7 +525,8 @@ export async function fetchLlmUnifiedStream(
     reasoningContent: string;
   }) => Promise<void>
 ): Promise<{
-  success: boolean; error?: string; fullContent: string, reasoningContent: string;
+  success: boolean; error?: string; fullContent: string; reasoningContent: string;
+  cancelled?: boolean;
 
   // stats
   promptTokens: number;
@@ -609,6 +617,7 @@ export async function fetchLlmUnifiedStream(
       headers,
       data: JSON.stringify(data),
       responseType: 'stream',
+      signal: params.abortSignal,
     };
 
     let fullContent = '';
@@ -630,11 +639,28 @@ export async function fetchLlmUnifiedStream(
     const stream = response.data;
     let buffer = '';
 
+    const cleanupAbort = () => {
+      if (params.abortSignal) {
+        params.abortSignal.removeEventListener('abort', onHttpStreamAbort);
+      }
+    };
+    const onHttpStreamAbort = () => {
+      try {
+        stream.destroy();
+      } catch {
+        /* ignore */
+      }
+    };
+    if (params.abortSignal) {
+      params.abortSignal.addEventListener('abort', onHttpStreamAbort, { once: true });
+    }
+
     return new Promise<{
       success: boolean;
       error?: string;
       fullContent: string;
       reasoningContent: string;
+      cancelled?: boolean;
 
       // stats
       promptTokens: number;
@@ -642,7 +668,7 @@ export async function fetchLlmUnifiedStream(
       reasoningTokens: number;
       totalTokens: number;
       costInUsd: number;
-    }>((resolve, reject) => {
+    }>((resolve) => {
       stream.on('data', async (chunk: Buffer) => {
         buffer += chunk.toString();
 
@@ -707,6 +733,7 @@ export async function fetchLlmUnifiedStream(
       });
 
       stream.on('end', () => {
+        cleanupAbort();
         // Process any remaining buffer
         if (buffer.trim()) {
           const trimmedLine = buffer.trim();
@@ -734,12 +761,15 @@ export async function fetchLlmUnifiedStream(
       });
 
       stream.on('error', (error: Error) => {
+        cleanupAbort();
         console.error('Stream error:', error);
+        const aborted = params.abortSignal?.aborted === true;
         resolve({
           success: false,
           error: error.message,
           fullContent,
           reasoningContent,
+          cancelled: aborted,
           ...returnStatsObj,
         });
       });
@@ -747,8 +777,10 @@ export async function fetchLlmUnifiedStream(
   } catch (error) {
     console.error('Llm stream failed error: ', error);
     if (isAxiosError(error)) {
+      const aborted = params.abortSignal?.aborted === true || error.code === 'ERR_CANCELED';
       return {
         success: false,
+        cancelled: aborted,
         error: error.message,
         fullContent: '',
         reasoningContent: '',
@@ -782,6 +814,7 @@ export async function fetchLlmUnifiedStreamOllama(
   error?: string;
   fullContent: string;
   reasoningContent: string;
+  cancelled?: boolean;
   promptTokens: number;
   completionTokens: number;
   reasoningTokens: number;
@@ -850,6 +883,7 @@ export async function fetchLlmUnifiedStreamOllama(
       headers,
       data: JSON.stringify(data),
       responseType: 'stream',
+      signal: params.abortSignal,
     };
 
     let fullContent = '';
@@ -873,6 +907,22 @@ export async function fetchLlmUnifiedStreamOllama(
     return new Promise((resolve) => {
       const stream = response.data;
       let buffer = '';
+
+      const cleanupAbort = () => {
+        if (params.abortSignal) {
+          params.abortSignal.removeEventListener('abort', onOllamaStreamAbort);
+        }
+      };
+      const onOllamaStreamAbort = () => {
+        try {
+          stream.destroy();
+        } catch {
+          /* ignore */
+        }
+      };
+      if (params.abortSignal) {
+        params.abortSignal.addEventListener('abort', onOllamaStreamAbort, { once: true });
+      }
 
       stream.on('data', async (chunk: Buffer) => {
         buffer += chunk.toString();
@@ -920,6 +970,7 @@ export async function fetchLlmUnifiedStreamOllama(
       });
 
       stream.on('end', () => {
+        cleanupAbort();
         // Process any remaining buffer
         if (buffer.trim()) {
           try {
@@ -952,12 +1003,15 @@ export async function fetchLlmUnifiedStreamOllama(
       });
 
       stream.on('error', (error: Error) => {
+        cleanupAbort();
         console.error('Ollama stream error:', error);
+        const aborted = params.abortSignal?.aborted === true;
         resolve({
           success: false,
           error: error.message,
           fullContent,
           reasoningContent,
+          cancelled: aborted,
           ...returnStatsObj,
         });
       });
@@ -969,8 +1023,10 @@ export async function fetchLlmUnifiedStreamOllama(
     console.error('Ollama stream failed error 4:', error?.response?.data?.data);
     console.error('Ollama stream failed error 5:', error?.response?.data?.data?.error);
     if (isAxiosError(error)) {
+      const aborted = params.abortSignal?.aborted === true || error.code === 'ERR_CANCELED';
       return {
         success: false,
+        cancelled: aborted,
         error: error.message,
         fullContent: '',
         reasoningContent: '',
