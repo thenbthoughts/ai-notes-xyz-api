@@ -27,6 +27,13 @@ import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/Schem
 import { ModelAiListOllama } from "../../../../schema/schemaDynamicData/SchemaOllamaModel.schema";
 import { ModelOpenaiCompatibleModel } from "../../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema";
 
+/** Placeholder row while streaming; must not be sent as prompt context (see notesAddAutoNextMessage). */
+const CHAT_LLM_IN_PROGRESS_SUBSTRING = 'AI generating in progress';
+
+function isChatLlmInProgressPlaceholder(content: string | undefined | null): boolean {
+    return typeof content === 'string' && content.includes(CHAT_LLM_IN_PROGRESS_SUBSTRING);
+}
+
 const funcDoesModalSupportImage = async ({
     modelProvider,
     modelName,
@@ -240,6 +247,9 @@ const getConversationList = async ({
                 }
             }
         } else if (element.type === 'text') {
+            if (isChatLlmInProgressPlaceholder(element.content)) {
+                continue;
+            }
             conversationList.push({
                 role: 'user',
                 content: element.content,
