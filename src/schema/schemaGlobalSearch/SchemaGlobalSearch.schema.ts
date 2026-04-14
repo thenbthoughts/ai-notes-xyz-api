@@ -32,6 +32,7 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
             'infoVault',
             'chatLlmThread',
             'chatLlm',
+            'memoNotes',
         ],
     },
 

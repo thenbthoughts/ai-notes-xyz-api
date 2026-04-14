@@ -6,6 +6,7 @@ import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
 import { ModelChatLlmThread } from '../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { ModelChatLlm } from '../../schema/schemaChatLlm/SchemaChatLlm.schema';
+import { ModelMemoNote } from '../../schema/schemaMemo/SchemaMemoNote.schema';
 
 import { getMongodbObjectOrNull } from '../common/getMongodbObjectOrNull';
 
@@ -15,6 +16,7 @@ import { funcSearchReindexLifeEventsById } from './searchReindexLifeEvents';
 import { funcSearchReindexInfoVaultById } from './searchReindexInfoVault';
 import { funcSearchReindexChatLlmThreadById } from './searchReindexChatLlmThread';
 import { funcSearchReindexChatLlmById } from './searchReindexChatLlm';
+import { funcSearchReindexMemoById } from './searchReindexMemo';
 
 // Reindex all documents for a user
 export const reindexAll = async ({ username }: { username: string }): Promise<void> => {
@@ -23,7 +25,7 @@ export const reindexAll = async ({ username }: { username: string }): Promise<vo
         await ModelGlobalSearch.deleteMany({ username: username });
 
         // Get all document IDs for each entity type using aggregation
-        const [tasks, notes, lifeEvents, infoVault, chatLlmThreads, chatLlmMessages] = await Promise.all([
+        const [tasks, notes, lifeEvents, infoVault, chatLlmThreads, chatLlmMessages, memos] = await Promise.all([
             ModelTask.aggregate([
                 { $match: { username } },
                 { $project: { _id: 1 } }
@@ -48,11 +50,15 @@ export const reindexAll = async ({ username }: { username: string }): Promise<vo
                 { $match: { username } },
                 { $project: { _id: 1 } }
             ]),
+            ModelMemoNote.aggregate([
+                { $match: { username, trashed: false } },
+                { $project: { _id: 1 } }
+            ]),
         ]);
 
         // Build reindex document array
         const reindexDocumentArr: Array<{
-            collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm';
+            collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm' | 'memoNotes';
             documentId: string;
         }> = [];
 
@@ -80,6 +86,10 @@ export const reindexAll = async ({ username }: { username: string }): Promise<vo
             reindexDocumentArr.push({ collectionName: 'chatLlm', documentId: message._id.toString() });
         });
 
+        memos.forEach(memo => {
+            reindexDocumentArr.push({ collectionName: 'memoNotes', documentId: memo._id.toString() });
+        });
+
         console.log('Info vault length: ', infoVault.length);
 
         console.log(`Total documents to reindex: ${reindexDocumentArr.length}`);
@@ -103,7 +113,7 @@ export const reindexDocument = async ({
     reindexDocumentArr,
 }: {
     reindexDocumentArr: Array<{
-        collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm';
+        collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm' | 'memoNotes';
         documentId: string;
     }>;
 }): Promise<void> => {
@@ -130,6 +140,8 @@ export const reindexDocument = async ({
                 await funcSearchReindexChatLlmThreadById({ recordId: entityIdObj.toString() });
             } else if (doc.collectionName === 'chatLlm') {
                 await funcSearchReindexChatLlmById({ recordId: entityIdObj.toString() });
+            } else if (doc.collectionName === 'memoNotes') {
+                await funcSearchReindexMemoById({ recordId: entityIdObj.toString() });
             }
         }
     } catch (error) {
