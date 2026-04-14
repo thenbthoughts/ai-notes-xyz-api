@@ -54,6 +54,119 @@ const getCalenderFromTasks = ({
     return stateDocument;
 }
 
+const getCalenderFromTaskReminderByLookup = ({
+    username,
+    startDate,
+    endDate,
+    reminderField,
+    fromCollection,
+}: {
+    username: string;
+    startDate: Date;
+    endDate: Date;
+    reminderField: 'remainderScheduledTimes' | 'dueDateReminderScheduledTimes';
+    fromCollection: 'taskRemainders' | 'taskDueDateRemainders';
+}) => {
+    type PipelineStageCustom =
+        | PipelineStage.Match
+        | PipelineStage.AddFields
+        | PipelineStage.Lookup
+        | PipelineStage.Project
+        | PipelineStage.Unwind;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    // stateDocument -> match
+    tempStage = {
+        $match: {
+            username: username,
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> lookup (self lookup to isolate reminder field and title)
+    tempStage = {
+        $lookup: {
+            from: 'tasks',
+            let: {
+                taskId: '$_id',
+            },
+            pipeline: [
+                {
+                    $match: {
+                        $expr: {
+                            $eq: ['$_id', '$$taskId']
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        title: 1,
+                        dueDate: 1,
+                        reminderTimes: `$${reminderField}`,
+                    }
+                },
+            ],
+            as: 'taskReminderLookup',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> unwind taskReminderLookup
+    tempStage = {
+        $unwind: {
+            path: '$taskReminderLookup',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> unwind reminderTimes (each reminder as separate record)
+    tempStage = {
+        $unwind: {
+            path: '$taskReminderLookup.reminderTimes',
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> match reminder date range
+    tempStage = {
+        $match: {
+            'taskReminderLookup.reminderTimes': {
+                $lte: endDate,
+                $gte: startDate,
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> addFields -> fromCollection
+    tempStage = {
+        $addFields: {
+            fromCollection: fromCollection,
+        }
+    };
+    stateDocument.push(tempStage);
+
+    // stateDocument -> project
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            taskReminderInfo: {
+                _id: '$taskReminderLookup._id',
+                title: '$taskReminderLookup.title',
+                dueDate: '$taskReminderLookup.dueDate',
+                reminderTime: '$taskReminderLookup.reminderTimes',
+            },
+        }
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+}
+
 const getCalenderFromLifeEvents = ({
     username,
     startDate,
@@ -381,6 +494,36 @@ router.post(
                             username: res.locals.auth_username,
                             startDate,
                             endDate,
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+
+                // task remainder reminders (lookup + unwind one record per reminder)
+                tempStage = {
+                    $unionWith: {
+                        coll: 'tasks',
+                        pipeline: getCalenderFromTaskReminderByLookup({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                            reminderField: 'remainderScheduledTimes',
+                            fromCollection: 'taskRemainders',
+                        }),
+                    }
+                };
+                stateDocument.push(tempStage);
+
+                // due-date reminder reminders (lookup + unwind one record per reminder)
+                tempStage = {
+                    $unionWith: {
+                        coll: 'tasks',
+                        pipeline: getCalenderFromTaskReminderByLookup({
+                            username: res.locals.auth_username,
+                            startDate,
+                            endDate,
+                            reminderField: 'dueDateReminderScheduledTimes',
+                            fromCollection: 'taskDueDateRemainders',
                         }),
                     }
                 };
