@@ -186,10 +186,10 @@ router.post(
             if (updateObj.referenceId === null) {
                 return res.status(400).json({ message: 'Reference ID cannot be null' });
             }
-            if (['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault'].includes(updateObj.referenceFrom)) {
+            if (['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault', 'memo'].includes(updateObj.referenceFrom)) {
                 // valid
             } else {
-                return res.status(400).json({ message: 'Reference from is invalid. Valid values are: notes, tasks, chats, life-events, info-vaults' });
+                return res.status(400).json({ message: 'Reference from is invalid. Valid values are: notes, tasks, chats, life-events, info-vaults, memo' });
             }
 
             const existingContext = await ModelChatLlmThreadContextReference.findOne({
@@ -275,7 +275,7 @@ router.post(
                 }
 
                 // Validate referenceFrom
-                if (!['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault'].includes(referenceFrom)) {
+                if (!['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault', 'memo'].includes(referenceFrom)) {
                     continue; // Skip invalid reference types
                 }
 
@@ -422,6 +422,7 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             filterEventTypeLifeEvents,
             filterEventTypeNotes,
             filterEventTypeDiary,
+            filterEventTypeMemo,
             filterIsContextSelected,
 
             // filter -> task
@@ -447,6 +448,7 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             filterEventTypeLifeEvents,
             filterEventTypeNotes,
             filterEventTypeDiary,
+            filterEventTypeMemo,
             filterIsContextSelected,
             // filterEventTypeInfoVault: false,
 

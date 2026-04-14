@@ -24,6 +24,8 @@ import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/Schem
 import updateLlmModalModalityById from "../../../../utils/llm/updateLlmModalModalityById";
 import { ModelLifeEvents } from "../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ILifeEvents } from "../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types";
+import { ModelMemoNote } from "../../../../schema/schemaMemo/SchemaMemoNote.schema";
+import { IMemoNote } from "../../../../types/typesSchema/typesSchemaMemo/SchemaMemoNote.types";
 import { ModelAiListOllama } from "../../../../schema/schemaDynamicData/SchemaOllamaModel.schema";
 import { ModelOpenaiCompatibleModel } from "../../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema";
 
@@ -765,6 +767,92 @@ const getLifeEvents = async ({
     return lifeEventStr;
 }
 
+const MEMO_BODY_CONTEXT_MAX_CHARS = 12000;
+
+const getMemos = async ({
+    username,
+    threadId,
+}: {
+    username: string;
+    threadId: mongoose.Types.ObjectId;
+}) => {
+    let memoStr = '';
+
+    const contextReferences = await ModelChatLlmThreadContextReference.find({
+        threadId,
+        username,
+        referenceFrom: 'memo',
+    });
+
+    if (contextReferences.length < 1) {
+        return memoStr;
+    }
+
+    const contextIds = contextReferences
+        .map((context: IChatLlmThreadContextReference) => context.referenceId)
+        .filter((id): id is mongoose.Types.ObjectId => id !== null);
+
+    if (contextIds.length < 1) {
+        return memoStr;
+    }
+
+    interface IMemoAggregate extends IMemoNote {
+        memoLabelDocs: { name?: string }[];
+    }
+
+    const resultMemos = await ModelMemoNote.aggregate([
+        {
+            $match: {
+                username,
+                _id: { $in: contextIds },
+                trashed: false,
+            },
+        },
+        {
+            $lookup: {
+                from: 'memoLabels',
+                localField: 'labelIds',
+                foreignField: '_id',
+                as: 'memoLabelDocs',
+            },
+        },
+    ]) as IMemoAggregate[];
+
+    if (resultMemos.length < 1) {
+        return memoStr;
+    }
+
+    memoStr = 'Below are Memo notes added by the user:\n\n';
+    for (let index = 0; index < resultMemos.length; index++) {
+        const element = resultMemos[index];
+        if (element.title && element.title.length >= 1) {
+            memoStr += `Memo ${index + 1} -> title: ${element.title}.\n`;
+        }
+        if (element.body && element.body.length >= 1) {
+            const body =
+                element.body.length > MEMO_BODY_CONTEXT_MAX_CHARS
+                    ? `${element.body.slice(0, MEMO_BODY_CONTEXT_MAX_CHARS)}…`
+                    : element.body;
+            memoStr += `Memo ${index + 1} -> body: ${body}.\n`;
+        }
+        if (element.pinned) {
+            memoStr += `Memo ${index + 1} -> pinned: Yes.\n`;
+        }
+        if (element.archived) {
+            memoStr += `Memo ${index + 1} -> archived: Yes.\n`;
+        }
+        const labelNames = (element.memoLabelDocs || [])
+            .map((l) => (typeof l?.name === 'string' ? l.name : ''))
+            .filter((n) => n.length > 0);
+        if (labelNames.length > 0) {
+            memoStr += `Memo ${index + 1} -> labels: ${labelNames.join(', ')}.\n`;
+        }
+        memoStr += '\n';
+    }
+    memoStr += '\n\n';
+    return memoStr;
+};
+
 const getNextMessageFromLast30Conversation = async ({
     // thread
     threadId,
@@ -884,6 +972,18 @@ const getNextMessageFromLast30Conversation = async ({
         messages.push({
             role: "user",
             content: lifeEventStr,
+        });
+    }
+
+    // memo notes (Memo page)
+    const memoStr = await getMemos({
+        username,
+        threadId,
+    });
+    if (memoStr.length > 0) {
+        messages.push({
+            role: "user",
+            content: memoStr,
         });
     }
 

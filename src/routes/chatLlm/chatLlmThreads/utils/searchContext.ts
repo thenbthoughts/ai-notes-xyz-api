@@ -393,6 +393,79 @@ const getContextFromLifeEvents = ({
     return stateDocument;
 }
 
+const getContextFromMemo = ({
+    username,
+    searchQuery,
+}: {
+    username: string;
+    searchQuery: string;
+}) => {
+    type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
+
+    let tempStage = {} as PipelineStageCustom;
+    const stateDocument = [] as PipelineStageCustom[];
+
+    tempStage = {
+        $match: {
+            username,
+            trashed: false,
+        },
+    };
+    stateDocument.push(tempStage);
+
+    if (searchQuery && searchQuery.length >= 1) {
+        const searchQueryArr = searchQuery.replace('-', ' ').split(' ');
+        const matchAnd = [];
+        for (let index = 0; index < searchQueryArr.length; index++) {
+            const elementStr = searchQueryArr[index];
+            if (!elementStr) continue;
+            matchAnd.push({
+                $or: [
+                    { title: { $regex: elementStr, $options: 'i' } },
+                    { body: { $regex: elementStr, $options: 'i' } },
+                ],
+            });
+        }
+        if (matchAnd.length > 0) {
+            tempStage = {
+                $match: {
+                    $and: matchAnd,
+                },
+            };
+            stateDocument.push(tempStage);
+        }
+    }
+
+    tempStage = {
+        $lookup: {
+            from: 'memoLabels',
+            localField: 'labelIds',
+            foreignField: '_id',
+            as: 'memoLabelDocs',
+        },
+    };
+    stateDocument.push(tempStage);
+
+    tempStage = {
+        $addFields: {
+            fromCollection: 'memo',
+        },
+    };
+    stateDocument.push(tempStage);
+
+    tempStage = {
+        $project: {
+            _id: 1,
+            fromCollection: 1,
+            updatedAtUtcSort: '$updatedAtUtc',
+            memoInfo: '$$ROOT',
+        },
+    };
+    stateDocument.push(tempStage);
+
+    return stateDocument;
+};
+
 const searchContext = async ({
     username,
     threadId,
@@ -403,6 +476,7 @@ const searchContext = async ({
     filterEventTypeLifeEvents,
     filterEventTypeNotes,
     filterEventTypeDiary,
+    filterEventTypeMemo,
     filterIsContextSelected,
 
     // filter -> task
@@ -425,6 +499,7 @@ const searchContext = async ({
     filterEventTypeLifeEvents: boolean;
     filterEventTypeNotes: boolean;
     filterEventTypeDiary: boolean;
+    filterEventTypeMemo?: boolean;
     filterIsContextSelected: 'all' | 'added' | 'not-added';
 
     // filter -> task
@@ -495,6 +570,21 @@ const searchContext = async ({
                         filterNotesWorkspaceIds,
                     }),
                 }
+            };
+            stateDocument.push(tempStage);
+            stateCount.push(tempStage);
+        }
+
+        const includeMemo = filterEventTypeMemo !== false;
+        if (includeMemo) {
+            tempStage = {
+                $unionWith: {
+                    coll: 'memoNotes',
+                    pipeline: getContextFromMemo({
+                        username,
+                        searchQuery,
+                    }),
+                },
             };
             stateDocument.push(tempStage);
             stateCount.push(tempStage);
