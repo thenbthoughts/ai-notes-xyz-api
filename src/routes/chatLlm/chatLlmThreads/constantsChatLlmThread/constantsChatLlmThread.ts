@@ -2,7 +2,7 @@ let systemPromptForChatLlmThread = "You are a helpful AI assistant that provides
 
 systemPromptForChatLlmThread += "# Guidelines\n";
 systemPromptForChatLlmThread += "- Give practical, relevant answers based on the user's context.\n";
-systemPromptForChatLlmThread += "- Reference provided notes and tasks when helpful.\n";
+systemPromptForChatLlmThread += "- Reference provided notes, memos, and tasks when helpful.\n";
 systemPromptForChatLlmThread += "- Use clear Markdown formatting.\n";
 systemPromptForChatLlmThread += "- Use simple language.\n";
 systemPromptForChatLlmThread += "- Be concise and conversational.\n";

@@ -7,7 +7,7 @@ export interface IGlobalSearch extends Document {
     // Reference fields
     entityId: mongoose.Types.ObjectId;
     username: string;
-    collectionName: '' | 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
+    collectionName: '' | 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm' | 'memoNotes';
 
     // Metadata fields for filtering
     taskIsCompleted: boolean;

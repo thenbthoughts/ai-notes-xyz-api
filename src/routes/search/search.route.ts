@@ -20,7 +20,7 @@ const getUnionPipeline = ({
     filterLifeEventSearchDiary,
 }: {
     username: string;
-    collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
+    collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'memoNotes';
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
     filterTaskWorkspaceIds: string[];
@@ -188,6 +188,33 @@ const getUnionPipeline = ({
         }
     }
 
+    if (collectionName === 'memoNotes') {
+        const tempStage = {
+            username: username,
+            collectionName: collectionName,
+        } as {
+            username: string;
+            collectionName: string;
+        };
+        return {
+            $unionWith: {
+                coll: 'globalSearch',
+                pipeline: [
+                    {
+                        $match: {
+                            ...tempStage
+                        }
+                    },
+                    {
+                        $addFields: {
+                            collectionName: collectionName
+                        }
+                    },
+                ],
+            }
+        };
+    }
+
     if (collectionName === 'chatLlmThread') {
         let tempStage = {
             username: username,
@@ -233,6 +260,7 @@ router.post(
             let filterEventTypeNotes = true;
             let filterEventTypeInfoVault = true;
             let filterEventTypeChatLlm = true;
+            let filterEventTypeMemo = true;
             let filterLifeEventSearchDiary = true;
 
             // filter -> task
@@ -279,6 +307,10 @@ router.post(
             // set arg -> filterEventTypeChatLlm
             if (typeof req.body?.filterEventTypeChatLlm === 'boolean') {
                 filterEventTypeChatLlm = req.body.filterEventTypeChatLlm;
+            }
+            // set arg -> filterEventTypeMemo
+            if (typeof req.body?.filterEventTypeMemo === 'boolean') {
+                filterEventTypeMemo = req.body.filterEventTypeMemo;
             }
 
             // set arg -> filterTaskIsCompleted
@@ -407,6 +439,24 @@ router.post(
                 }
             }
 
+            // union pipeline -> memo (Memo page)
+            if (filterEventTypeMemo) {
+                const unionPipeline = getUnionPipeline({
+                    username: res.locals.auth_username,
+                    collectionName: 'memoNotes',
+
+                    filterTaskIsCompleted,
+                    filterTaskIsArchived,
+                    filterTaskWorkspaceIds,
+                    filterNotesWorkspaceIds,
+                    filterLifeEventSearchDiary,
+                });
+                if (unionPipeline !== null) {
+                    pipelineDocument.push(unionPipeline);
+                    pipelineCount.push(unionPipeline);
+                }
+            }
+
             // Build search query conditions
             let matchConditionsSearch = {
                 username: res.locals.auth_username,
@@ -504,6 +554,16 @@ router.post(
             };
             pipelineDocument.push(tempStage);
 
+            tempStage = {
+                $lookup: {
+                    from: 'memoNotes',
+                    localField: 'entityId',
+                    foreignField: '_id',
+                    as: 'memoDoc'
+                }
+            };
+            pipelineDocument.push(tempStage);
+
             // Filter out documents where lookup didn't find a match
             tempStage = {
                 $match: {
@@ -513,64 +573,39 @@ router.post(
             pipelineDocument.push(tempStage);
             pipelineCount.push(tempStage);
 
-            // Project to create unified structure
+            // Project to create unified structure (keyed by globalSearch.collectionName)
             tempStage = {
                 $project: {
                     _id: {
-                        $cond: [
-                            { $eq: ['$entityType', 'task'] },
-                            { $arrayElemAt: ['$taskDoc._id', 0] },
-                            {
-                                $cond: [
-                                    { $eq: ['$entityType', 'note'] },
-                                    { $arrayElemAt: ['$noteDoc._id', 0] },
-                                    {
-                                        $cond: [
-                                            { $eq: ['$entityType', 'lifeEvent'] },
-                                            { $arrayElemAt: ['$lifeEventDoc._id', 0] },
-                                            {
-                                                $cond: [
-                                                    { $eq: ['$entityType', 'infoVault'] },
-                                                    { $arrayElemAt: ['$infoVaultDoc._id', 0] },
-                                                    { $arrayElemAt: ['$chatLlmThreadDoc._id', 0] }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$collectionName', 'tasks'] }, then: { $arrayElemAt: ['$taskDoc._id', 0] } },
+                                { case: { $eq: ['$collectionName', 'notes'] }, then: { $arrayElemAt: ['$noteDoc._id', 0] } },
+                                { case: { $eq: ['$collectionName', 'lifeEvents'] }, then: { $arrayElemAt: ['$lifeEventDoc._id', 0] } },
+                                { case: { $eq: ['$collectionName', 'infoVault'] }, then: { $arrayElemAt: ['$infoVaultDoc._id', 0] } },
+                                { case: { $eq: ['$collectionName', 'memoNotes'] }, then: { $arrayElemAt: ['$memoDoc._id', 0] } },
+                            ],
+                            default: { $arrayElemAt: ['$chatLlmThreadDoc._id', 0] },
+                        },
                     },
                     updatedAtUtcSort: {
-                        $cond: [
-                            { $eq: ['$entityType', 'task'] },
-                            { $arrayElemAt: ['$taskDoc.updatedAtUtc', 0] },
-                            {
-                                $cond: [
-                                    { $eq: ['$entityType', 'note'] },
-                                    { $arrayElemAt: ['$noteDoc.updatedAtUtc', 0] },
-                                    {
-                                        $cond: [
-                                            { $eq: ['$entityType', 'lifeEvent'] },
-                                            { $arrayElemAt: ['$lifeEventDoc.updatedAtUtc', 0] },
-                                            {
-                                                $cond: [
-                                                    { $eq: ['$entityType', 'infoVault'] },
-                                                    { $arrayElemAt: ['$infoVaultDoc.updatedAtUtc', 0] },
-                                                    { $arrayElemAt: ['$chatLlmThreadDoc.updatedAtUtc', 0] }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$collectionName', 'tasks'] }, then: { $arrayElemAt: ['$taskDoc.updatedAtUtc', 0] } },
+                                { case: { $eq: ['$collectionName', 'notes'] }, then: { $arrayElemAt: ['$noteDoc.updatedAtUtc', 0] } },
+                                { case: { $eq: ['$collectionName', 'lifeEvents'] }, then: { $arrayElemAt: ['$lifeEventDoc.updatedAtUtc', 0] } },
+                                { case: { $eq: ['$collectionName', 'infoVault'] }, then: { $arrayElemAt: ['$infoVaultDoc.updatedAtUtc', 0] } },
+                                { case: { $eq: ['$collectionName', 'memoNotes'] }, then: { $arrayElemAt: ['$memoDoc.updatedAtUtc', 0] } },
+                            ],
+                            default: { $arrayElemAt: ['$chatLlmThreadDoc.updatedAtUtc', 0] },
+                        },
                     },
                     taskDoc: 1,
                     noteDoc: 1,
                     lifeEventDoc: 1,
                     infoVaultDoc: 1,
                     chatLlmThreadDoc: 1,
+                    memoDoc: 1,
                     collectionName: 1,
                 }
             };
@@ -596,6 +631,7 @@ router.post(
                     lifeEventInfo: doc.lifeEventDoc && doc.lifeEventDoc.length > 0 ? doc.lifeEventDoc[0] : undefined,
                     infoVaultInfo: doc.infoVaultDoc && doc.infoVaultDoc.length > 0 ? doc.infoVaultDoc[0] : undefined,
                     chatLlmThreadInfo: doc.chatLlmThreadDoc && doc.chatLlmThreadDoc.length > 0 ? doc.chatLlmThreadDoc[0] : undefined,
+                    memoInfo: doc.memoDoc && doc.memoDoc.length > 0 ? doc.memoDoc[0] : undefined,
                 };
             });
 

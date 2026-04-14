@@ -7,6 +7,8 @@ import { ModelMemoFile } from '../../schema/schemaMemo/SchemaMemoFile.schema';
 import { ModelMemoNote } from '../../schema/schemaMemo/SchemaMemoNote.schema';
 import { getMongodbObjectOrNull } from '../../utils/common/getMongodbObjectOrNull';
 import { mergeMemoFilePathsAndLegacyDoc, deleteAllMemoFilesAndLegacyStorage } from './memoImageShared';
+import { reindexDocument } from '../../utils/search/reindexGlobalSearch';
+import { ModelGlobalSearch } from '../../schema/schemaGlobalSearch/SchemaGlobalSearch.schema';
 
 const router = Router();
 
@@ -285,6 +287,10 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
     const lean = created.toObject<MemoDocPlain>();
     const doc = await enrichNoteDoc(lean);
 
+    await reindexDocument({
+      reindexDocumentArr: [{ collectionName: 'memoNotes', documentId: String(created._id) }],
+    });
+
     return res.json({
       message: 'Memo added successfully',
       doc,
@@ -347,6 +353,10 @@ router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response)
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
 
+    await reindexDocument({
+      reindexDocumentArr: [{ collectionName: 'memoNotes', documentId: _id.toString() }],
+    });
+
     return res.json({ message: 'Memo updated successfully' });
   } catch (error) {
     console.error(error);
@@ -369,6 +379,7 @@ router.post('/memoDelete', middlewareUserAuth, async (req: Request, res: Respons
 
     await deleteAllMemoFilesAndLegacyStorage(username, existing as Record<string, unknown>, _id);
     await ModelMemoNote.deleteOne({ _id, username });
+    await ModelGlobalSearch.deleteMany({ entityId: _id });
 
     return res.json({ message: 'Memo deleted successfully' });
   } catch (error) {
@@ -381,6 +392,10 @@ router.post('/memoEmptyBin', middlewareUserAuth, async (req: Request, res: Respo
   try {
     const username = res.locals.auth_username as string;
     const trashed = await ModelMemoNote.find({ username, trashed: true }).lean();
+    const trashedIds = trashed.map((d) => d._id as Types.ObjectId);
+    if (trashedIds.length > 0) {
+      await ModelGlobalSearch.deleteMany({ entityId: { $in: trashedIds } });
+    }
     for (const doc of trashed) {
       await deleteAllMemoFilesAndLegacyStorage(username, doc as Record<string, unknown>, doc._id as Types.ObjectId);
     }

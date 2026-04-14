@@ -101,7 +101,7 @@ const step2CreateQuestionDecomposition = async ({
             systemPrompt += `You will be provided with intermediate answers from previous iterations that were evaluated as not satisfactory.\n\n`;
             systemPrompt += `Generate detailed, keyword-rich questions specifically to address these intermediate answers and improve the final answer quality.\n`;
             systemPrompt += `Focus ONLY on questions that will help improve these specific intermediate answers.\n`;
-            systemPrompt += `Make each question comprehensive and specific, including relevant keywords and technical terms that will help search and retrieve relevant context from documents, notes, and knowledge base.\n`;
+            systemPrompt += `Make each question comprehensive and specific, including relevant keywords and technical terms that will help search and retrieve relevant context from documents, notes, memos, and knowledge base.\n`;
             systemPrompt += `Explore various related keywords, synonyms, alternative terms, and different phrasings to maximize context retrieval: include technical jargon, brand names, abbreviations, industry terms, and related concepts that might be documented under different names.\n`;
             systemPrompt += `Reply with a JSON object:\n`;
             systemPrompt += `{"missingRequirements": [detailed questions with keywords addressing the intermediate answers], "contextualQuestions": [], "implementationDetails": []}.\n`;
@@ -115,7 +115,7 @@ const step2CreateQuestionDecomposition = async ({
             systemPrompt += `3. Exclude formatting, presentation, UI, or display preferences\n`;
             systemPrompt += `4. Prioritize questions that directly help solve the user's problem\n`;
             systemPrompt += `5. Maximum 3-5 total questions, only if truly essential\n`;
-            systemPrompt += `6. Make each question detailed and keyword-rich, including specific technical terms, product names, concepts, and search terms that will help retrieve relevant context from documents and knowledge base\n`;
+            systemPrompt += `6. Make each question detailed and keyword-rich, including specific technical terms, product names, concepts, and search terms that will help retrieve relevant context from documents, notes, memos, and knowledge base\n`;
             systemPrompt += `7. Structure questions to be comprehensive enough to generate meaningful search queries for finding related information\n`;
             systemPrompt += `8. Include various related keywords, synonyms, alternative terms, and different phrasings of the same concepts to maximize context retrieval efficiency\n`;
             systemPrompt += `9. Consider multiple search angles: technical terms, brand names, common abbreviations, industry jargon, and related concepts that users might have documented under different names\n`;
@@ -151,12 +151,12 @@ const step2CreateQuestionDecomposition = async ({
         if (currentIteration > 1) {
             llmMessages.push({
                 role: 'user',
-                content: `Based on the intermediate answers (from previous iterations that were not satisfactory) and conversation context above, generate detailed, keyword-rich questions that will help gather information to improve these intermediate answers. Each question should be comprehensive and explore various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will efficiently retrieve context from documents, notes, tasks, and knowledge base.`,
+                content: `Based on the intermediate answers (from previous iterations that were not satisfactory) and conversation context above, generate detailed, keyword-rich questions that will help gather information to improve these intermediate answers. Each question should be comprehensive and explore various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will efficiently retrieve context from documents, notes, memos, tasks, and knowledge base.`,
             });
         } else {
             llmMessages.push({
                 role: 'user',
-                content: `Based on the conversation context above, analyze and identify any missing requirements needed to solve the user's question. Focus on information that is actually required but not provided. Make each question detailed and keyword-rich, exploring various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will help search and retrieve relevant context efficiently from all available sources.`,
+                content: `Based on the conversation context above, analyze and identify any missing requirements needed to solve the user's question. Focus on information that is actually required but not provided. Make each question detailed and keyword-rich, exploring various related keywords, synonyms, technical terms, brand names, abbreviations, and alternative phrasings that will help search and retrieve relevant context efficiently from documents, notes, memos, tasks, and other available sources.`,
             });
         }
 

@@ -7,6 +7,7 @@ import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
 import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
 import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
 import { ModelInfoVault } from "../../../../../schema/schemaInfoVault/SchemaInfoVault.schema";
+import { ModelMemoNote } from "../../../../../schema/schemaMemo/SchemaMemoNote.schema";
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { NodeHtmlMarkdown } from "node-html-markdown";
@@ -451,23 +452,27 @@ async function searchContextIdsInline(
             $or: searchQueryOrConditions,
         };
 
-        // Search global search by keywords
+        type SearchHit = {
+            entityId: mongoose.Types.ObjectId;
+            collectionName: string;
+            text?: string;
+            updatedAtUtc?: Date;
+        };
+
+        const searchLimit = 20;
+
         const searchResults = await ModelGlobalSearch.aggregate([
             {
                 $match: {
                     username: username,
-                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault'] }
+                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault', 'memoNotes'] }
                 }
             },
             { $sort: { updatedAtUtc: -1 } },
             { $match: matchConditionsSearch },
             { $sort: { updatedAtUtc: -1 } },
-            { $limit: 20 },
-        ]) as Array<{
-            entityId: mongoose.Types.ObjectId;
-            collectionName: string;
-            text?: string;
-        }>;
+            { $limit: searchLimit },
+        ]) as SearchHit[];
 
         if (searchResults.length === 0) {
             return [];
@@ -505,6 +510,7 @@ async function scoreContextReferencesInline(
         entityId: mongoose.Types.ObjectId;
         collectionName: string;
         text?: string;
+        updatedAtUtc?: Date;
     }>,
     keywords: string[],
     threadId: mongoose.Types.ObjectId,
@@ -671,6 +677,28 @@ async function getContextContentInline(contextIds: mongoose.Types.ObjectId[], us
             contextByCollection[collectionName].push(item.entityId);
         }
 
+        const classifiedIds = new Set<string>();
+        for (const ids of Object.values(contextByCollection)) {
+            for (const id of ids) {
+                classifiedIds.add(id.toString());
+            }
+        }
+        const missingForGlobalSearch = contextIds.filter((id) => !classifiedIds.has(id.toString()));
+        if (missingForGlobalSearch.length > 0) {
+            const memoRows = await ModelMemoNote.find({
+                username,
+                _id: { $in: missingForGlobalSearch },
+                trashed: false,
+            })
+                .select('_id')
+                .lean();
+            if (memoRows.length > 0) {
+                contextByCollection['memo'] = memoRows.map(
+                    (row) => row._id as mongoose.Types.ObjectId,
+                );
+            }
+        }
+
         let contextContent = '';
 
         // Get tasks
@@ -691,6 +719,14 @@ async function getContextContentInline(contextIds: mongoose.Types.ObjectId[], us
         // Get info vault
         if (contextByCollection['infoVault'] && contextByCollection['infoVault'].length > 0) {
             contextContent += await getInfoVaultContentInline(contextByCollection['infoVault'], username);
+        }
+
+        // Memo notes (globalSearch uses collectionName memoNotes; legacy path uses key memo)
+        if (contextByCollection['memoNotes'] && contextByCollection['memoNotes'].length > 0) {
+            contextContent += await getMemoContentInline(contextByCollection['memoNotes'], username);
+        }
+        if (contextByCollection['memo'] && contextByCollection['memo'].length > 0) {
+            contextContent += await getMemoContentInline(contextByCollection['memo'], username);
         }
 
         return contextContent;
@@ -855,6 +891,63 @@ async function getLifeEventsContentInline(contextIds: mongoose.Types.ObjectId[],
         return lifeEventStr;
     } catch (error) {
         console.error('Error in getLifeEventsContentInline:', error);
+        return '';
+    }
+}
+
+const MEMO_INLINE_BODY_MAX = 12000;
+
+/**
+ * Get memo (Memo page) content
+ */
+async function getMemoContentInline(contextIds: mongoose.Types.ObjectId[], username: string): Promise<string> {
+    try {
+        const resultMemos = await ModelMemoNote.aggregate([
+            {
+                $match: {
+                    username,
+                    _id: { $in: contextIds },
+                    trashed: false,
+                },
+            },
+            {
+                $lookup: {
+                    from: 'memoLabels',
+                    localField: 'labelIds',
+                    foreignField: '_id',
+                    as: 'memoLabelDocs',
+                },
+            },
+            { $limit: 10 },
+        ]);
+
+        if (resultMemos.length === 0) {
+            return '';
+        }
+
+        let memoStr = 'Below are Memo notes:\n\n';
+        for (let index = 0; index < resultMemos.length; index++) {
+            const element = resultMemos[index];
+            memoStr += `Memo ${index + 1} -> title -> ${element.title || ''}.\n`;
+            if (element.body && element.body.length > 0) {
+                const body =
+                    element.body.length > MEMO_INLINE_BODY_MAX
+                        ? `${element.body.slice(0, MEMO_INLINE_BODY_MAX)}…`
+                        : element.body;
+                memoStr += `Memo ${index + 1} -> body -> ${body}.\n`;
+            }
+            const labelNames = (element.memoLabelDocs || [])
+                .map((l: { name?: string }) => (typeof l?.name === 'string' ? l.name : ''))
+                .filter((n: string) => n.length > 0);
+            if (labelNames.length > 0) {
+                memoStr += `Memo ${index + 1} -> labels -> ${labelNames.join(', ')}.\n`;
+            }
+            memoStr += '\n';
+        }
+        memoStr += '\n\n';
+        return memoStr;
+    } catch (error) {
+        console.error('Error in getMemoContentInline:', error);
         return '';
     }
 }

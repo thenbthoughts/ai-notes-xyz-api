@@ -424,23 +424,26 @@ const searchAndAddContextReferences = async ({
             $or: searchQueryOrConditions,
         };
 
-        // Search global search by keywords
+        type SearchHit = {
+            entityId: mongoose.Types.ObjectId;
+            collectionName: string;
+            text?: string;
+            updatedAtUtc?: Date;
+        };
+
+        // Search global search by keywords (includes memoNotes)
         const searchResults = await ModelGlobalSearch.aggregate([
             {
                 $match: {
                     username: username,
-                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault'] }
+                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault', 'memoNotes'] }
                 }
             },
             { $sort: { updatedAtUtc: -1 } },
             { $match: matchConditionsSearch },
             { $sort: { updatedAtUtc: -1 } },
             { $limit: limit },
-        ]) as Array<{
-            entityId: mongoose.Types.ObjectId;
-            collectionName: string;
-            text?: string;
-        }>;
+        ]) as SearchHit[];
 
         if (searchResults.length === 0) {
             return 0;
@@ -459,13 +462,14 @@ const searchAndAddContextReferences = async ({
         const allowedEntityIds = new Set(scoredItems.map(item => item.entityId));
 
         // Map collectionName to referenceFrom
-        const collectionNameToReferenceFrom: Record<string, 'notes' | 'tasks' | 'chatLlm' | 'lifeEvents' | 'infoVault'> = {
+        const collectionNameToReferenceFrom: Record<string, 'notes' | 'tasks' | 'chatLlm' | 'lifeEvents' | 'infoVault' | 'memo'> = {
             'tasks': 'tasks',
             'notes': 'notes',
             'lifeEvents': 'lifeEvents',
             'infoVault': 'infoVault',
             'chatLlm': 'chatLlm',
             'chatLlmThread': 'chatLlm', // Map chatLlmThread to chatLlm
+            'memoNotes': 'memo',
         };
 
         let insertedCount = 0;
