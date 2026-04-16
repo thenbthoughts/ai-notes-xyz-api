@@ -22,11 +22,12 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
         }
 
         // Pagination parameters
+        const minLimitPerRequest = 10;
         let limit = 50; // Default limit
         let skip = 0; // Default skip (0 means most recent messages)
 
         if (typeof req.body?.limit === 'number' && req.body.limit > 0) {
-            limit = Math.min(req.body.limit, 200); // Max 200 messages per request
+            limit = Math.max(req.body.limit, minLimitPerRequest);
         }
 
         if (typeof req.body?.skip === 'number' && req.body.skip >= 0) {
