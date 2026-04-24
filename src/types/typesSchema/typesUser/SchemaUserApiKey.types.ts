@@ -14,6 +14,13 @@ interface IUserApiKey extends Document {
     apiKeyOpenrouterValid: boolean;
     apiKeyOpenrouter: string;
 
+    // apikey - opencode
+    apiKeyOpencodeValid: boolean;
+    apiKeyOpencode: string;
+    apiKeyOpencodeEndpoint: string;
+    apiKeyOpencodeBasicAuthUsername: string;
+    apiKeyOpencodeBasicAuthPassword: string;
+
     // apikey - s3
     apiKeyS3Valid: boolean;
     apiKeyS3Endpoint: string,

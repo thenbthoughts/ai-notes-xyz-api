@@ -16,6 +16,24 @@ export interface AnswerMachinePollingResponse {
     jobs: Array<{
         id: string;
         status: string;
+        usedOpencode: boolean;
+        opencodeExecutionSummary: string;
+        opencodeExecutionRequestList: string[];
+        opencodeExecutionConversation: string;
+        opencodeTasks: Array<{
+            id: string;
+            sortIndex: number;
+            title: string;
+            status: string;
+            summary: string;
+            errorReason: string;
+            outputFileRefs: Array<{
+                fileName: string;
+                filePath: string;
+                contentType: string;
+                size: number;
+            }>;
+        }>;
         currentIteration: number;
         maxNumberOfIterations: number;
         subQuestions: Array<{
@@ -129,11 +147,92 @@ router.post(
                         as: 'subQuestions',
                     },
                 },
+                {
+                    $lookup: {
+                        from: 'chatLlmAnswerMachineOpencodeRecord',
+                        let: { localAnswerMachineRecordId: '$_id' },
+                        pipeline: [
+                            { $match: { $expr: { $eq: ['$answerMachineRecordId', '$$localAnswerMachineRecordId'] } } },
+                            { $sort: { updatedAtUtc: -1 } },
+                            { $limit: 1 },
+                            { $project: { summary: 1, requestList: 1, conversation: 1 } },
+                        ],
+                        as: 'opencodeRecords',
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'chatLlmOpencodeTask',
+                        let: { localAnswerMachineRecordId: '$_id' },
+                        pipeline: [
+                            { $match: { $expr: { $eq: ['$answerMachineRecordId', '$$localAnswerMachineRecordId'] } } },
+                            { $sort: { createdAtUtc: 1, sortIndex: 1 } },
+                            {
+                                $project: {
+                                    _id: 1,
+                                    sortIndex: 1,
+                                    title: 1,
+                                    instruction: 1,
+                                    status: 1,
+                                    summary: 1,
+                                    errorReason: 1,
+                                    agentTranscript: 1,
+                                    outputFileRefs: 1,
+                                    runStartedAtUtc: 1,
+                                    runFinishedAtUtc: 1,
+                                },
+                            },
+                        ],
+                        as: 'opencodeTasks',
+                    },
+                },
             ]);
 
-            const jobs = answerMachineJobs.map((job) => ({
+            const jobs = answerMachineJobs.map((job) => {
+                const opencodeRecord = Array.isArray(job.opencodeRecords) && job.opencodeRecords.length > 0
+                    ? job.opencodeRecords[0]
+                    : null;
+
+                return {
                 id: job._id.toString(),
                 status: job.status || 'pending',
+                usedOpencode: job.usedOpencode === true,
+                opencodeExecutionSummary: typeof opencodeRecord?.summary === 'string' ? opencodeRecord.summary : '',
+                opencodeExecutionRequestList: Array.isArray(opencodeRecord?.requestList)
+                    ? opencodeRecord.requestList.filter((item: unknown) => typeof item === 'string')
+                    : [],
+                opencodeExecutionConversation: typeof opencodeRecord?.conversation === 'string'
+                    ? opencodeRecord.conversation
+                    : '',
+                opencodeTasks: Array.isArray(job.opencodeTasks)
+                    ? job.opencodeTasks.map((t: any) => {
+                          const rs = t.runStartedAtUtc;
+                          const rf = t.runFinishedAtUtc;
+                          let executionDurationMs: number | null = null;
+                          if (rs != null && rf != null) {
+                              const a = new Date(rs).getTime();
+                              const b = new Date(rf).getTime();
+                              if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+                                  executionDurationMs = b - a;
+                              }
+                          }
+                          return {
+                              id: t._id?.toString?.() || String(t._id || ''),
+                              sortIndex: typeof t.sortIndex === 'number' ? t.sortIndex : 0,
+                              title: typeof t.title === 'string' ? t.title : '',
+                              instruction: typeof t.instruction === 'string' ? t.instruction : '',
+                              status: typeof t.status === 'string' ? t.status : 'pending',
+                              summary: typeof t.summary === 'string' ? t.summary : '',
+                              errorReason: typeof t.errorReason === 'string' ? t.errorReason : '',
+                              agentTranscript:
+                                  typeof t.agentTranscript === 'string' ? t.agentTranscript : '',
+                              outputFileRefs: Array.isArray(t.outputFileRefs) ? t.outputFileRefs : [],
+                              runStartedAtUtc: rs ?? null,
+                              runFinishedAtUtc: rf ?? null,
+                              executionDurationMs,
+                          };
+                      })
+                    : [],
                 currentIteration: job.currentIteration || 0,
                 maxNumberOfIterations: job.maxNumberOfIterations || 1,
                 subQuestions: (job.subQuestions || []).map((sq: any) => ({
@@ -142,7 +241,8 @@ router.post(
                     answer: sq.answer || '',
                     status: sq.status || 'pending',
                 })),
-            }));
+                };
+            });
 
             const [tokenSummary] = await ModelChatLlmAnswerMachineTokenRecord.aggregate([
                 { $match: { threadId } },

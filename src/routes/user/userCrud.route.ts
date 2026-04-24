@@ -26,6 +26,7 @@ router.post(
                 clientFrontendUrl: '',
                 apiKeyGroqValid: false,
                 apiKeyOpenrouterValid: false,
+                apiKeyOpencodeValid: false,
                 fileStorageType: 'gridfs',
                 apiKeyS3Valid: false,
                 apiKeyOllamaValid: false,
@@ -63,6 +64,7 @@ router.post(
                             clientFrontendUrl: '',
                             apiKeyGroqValid: false,
                             apiKeyOpenrouterValid: false,
+                            apiKeyOpencodeValid: false,
                             apiKeyS3Valid: false,
                             apiKeyOllamaValid: false,
                             apiKeyQdrantValid: false,
@@ -92,6 +94,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.apiKeyOpenrouterValid === 'boolean') {
                     resultApiKey.apiKeyOpenrouterValid = resultUserInfoApi.apiKeyOpenrouterValid;
+                }
+            }
+
+            // api key opencode
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyOpencodeValid === 'boolean') {
+                    resultApiKey.apiKeyOpencodeValid = resultUserInfoApi.apiKeyOpencodeValid;
                 }
             }
 

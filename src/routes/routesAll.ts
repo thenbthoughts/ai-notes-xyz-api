@@ -26,6 +26,7 @@ import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThr
 import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAutoNextMessage.route';
 import routesChatLlmPolling from './chatLlm/chatLlmPolling/answerMachinePolling.route';
 import routesChatLlmTts from './chatLlm/chatLlmCrud/chatLlmTts.route';
+import routesChatLlmOpencodeTasks from './chatLlm/chatLlmAgent/opencodeTasks.route';
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
@@ -119,6 +120,7 @@ router.use('/chat-llm/threads-context-crud', routesChatLlmThreadsContextCrud);
 router.use('/chat-llm/add-auto-next-message', routesChatLlmAddAutoNextMessage);
 router.use('/chat-llm/polling', routesChatLlmPolling);
 router.use('/chat-llm/tts', routesChatLlmTts);
+router.use('/chat-llm/opencode-tasks', routesChatLlmOpencodeTasks);
 
 // routes -> task
 router.use('/task/crud', routesTaskCrud);

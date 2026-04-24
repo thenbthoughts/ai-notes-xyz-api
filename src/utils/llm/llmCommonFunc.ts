@@ -7,6 +7,13 @@ export interface tsUserApiKey {
     apiKeyOpenrouterValid: boolean;
     apiKeyOpenrouter: string;
 
+    // api key opencode
+    apiKeyOpencodeValid: boolean;
+    apiKeyOpencode: string;
+    apiKeyOpencodeEndpoint: string;
+    apiKeyOpencodeBasicAuthUsername: string;
+    apiKeyOpencodeBasicAuthPassword: string;
+
     // api key s3
     apiKeyS3Valid: boolean;
     apiKeyS3Endpoint: string;
@@ -54,6 +61,13 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         // api key openrouter
         apiKeyOpenrouterValid: false,
         apiKeyOpenrouter: '',
+
+        // api key opencode
+        apiKeyOpencodeValid: false,
+        apiKeyOpencode: '',
+        apiKeyOpencodeEndpoint: '',
+        apiKeyOpencodeBasicAuthUsername: '',
+        apiKeyOpencodeBasicAuthPassword: '',
         
         // api key s3
         apiKeyS3Valid: false,
@@ -114,6 +128,25 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyOpenrouter === 'string') {
                 apiKey.apiKeyOpenrouter = apiKeyObject.apiKeyOpenrouter;
+            }
+
+            // api key opencode
+            if (typeof apiKeyObject.apiKeyOpencodeValid === 'boolean') {
+                if(apiKeyObject.apiKeyOpencodeValid) {
+                    apiKey.apiKeyOpencodeValid = true;
+                }
+            }
+            if (typeof apiKeyObject.apiKeyOpencode === 'string') {
+                apiKey.apiKeyOpencode = apiKeyObject.apiKeyOpencode;
+            }
+            if (typeof apiKeyObject.apiKeyOpencodeEndpoint === 'string') {
+                apiKey.apiKeyOpencodeEndpoint = apiKeyObject.apiKeyOpencodeEndpoint;
+            }
+            if (typeof apiKeyObject.apiKeyOpencodeBasicAuthUsername === 'string') {
+                apiKey.apiKeyOpencodeBasicAuthUsername = apiKeyObject.apiKeyOpencodeBasicAuthUsername;
+            }
+            if (typeof apiKeyObject.apiKeyOpencodeBasicAuthPassword === 'string') {
+                apiKey.apiKeyOpencodeBasicAuthPassword = apiKeyObject.apiKeyOpencodeBasicAuthPassword;
             }
 
             // api key s3

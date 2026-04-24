@@ -211,6 +211,101 @@ router.post(
     }
 );
 
+// Update User API OpenCode
+router.post(
+    '/updateUserApiOpencode',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const {
+                apiKeyOpencode,
+                apiKeyOpencodeEndpoint,
+                apiKeyOpencodeBasicAuthUsername,
+                apiKeyOpencodeBasicAuthPassword,
+            } = req.body;
+
+            let normalizedKey = '';
+            if (typeof apiKeyOpencode === 'string') {
+                normalizedKey = apiKeyOpencode.trim();
+            }
+
+            let normalizedEndpoint = '';
+            if (typeof apiKeyOpencodeEndpoint === 'string') {
+                normalizedEndpoint = apiKeyOpencodeEndpoint.trim();
+            }
+
+            let normalizedBasicAuthUsername = '';
+            if (typeof apiKeyOpencodeBasicAuthUsername === 'string') {
+                normalizedBasicAuthUsername = apiKeyOpencodeBasicAuthUsername.trim();
+            }
+
+            let normalizedBasicAuthPassword = '';
+            if (typeof apiKeyOpencodeBasicAuthPassword === 'string') {
+                normalizedBasicAuthPassword = apiKeyOpencodeBasicAuthPassword;
+            }
+
+            if (normalizedEndpoint.length >= 1) {
+                try {
+                    const parsed = new URL(normalizedEndpoint);
+                    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                        return res.status(400).json({ message: 'Invalid OpenCode URL' });
+                    }
+                } catch (error) {
+                    return res.status(400).json({ message: 'Invalid OpenCode URL' });
+                }
+            }
+
+            if (
+                normalizedBasicAuthUsername.length >= 1 &&
+                normalizedBasicAuthPassword.length < 1
+            ) {
+                return res.status(400).json({
+                    message: 'Basic auth password is required when username is provided',
+                });
+            }
+
+            if (normalizedKey.length < 1 && normalizedEndpoint.length < 1) {
+                return res.status(400).json({
+                    message: 'Provide OpenCode API key or OpenCode URL',
+                });
+            }
+
+            const apiKeyOpencodeValid = (
+                normalizedKey.length >= 1 ||
+                normalizedEndpoint.length >= 1
+            );
+
+            const updatedUser = await ModelUserApiKey.findOneAndUpdate(
+                {
+                    username: res.locals.auth_username
+                },
+                {
+                    apiKeyOpencode: normalizedKey,
+                    apiKeyOpencodeValid: apiKeyOpencodeValid,
+                    apiKeyOpencodeEndpoint: normalizedEndpoint,
+                    apiKeyOpencodeBasicAuthUsername: normalizedBasicAuthUsername,
+                    apiKeyOpencodeBasicAuthPassword: normalizedBasicAuthPassword,
+                },
+                {
+                    new: true
+                }
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 // Update User File Storage Type
 router.post(
     '/updateUserApiFileStorageType',
@@ -1567,7 +1662,7 @@ router.post(
 
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
-                'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram'
+                'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram', 'opencode'
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1586,6 +1681,13 @@ router.post(
                 openrouter: {
                     apiKeyOpenrouter: '',
                     apiKeyOpenrouterValid: false,
+                },
+                opencode: {
+                    apiKeyOpencode: '',
+                    apiKeyOpencodeValid: false,
+                    apiKeyOpencodeEndpoint: '',
+                    apiKeyOpencodeBasicAuthUsername: '',
+                    apiKeyOpencodeBasicAuthPassword: '',
                 },
                 s3: {
                     apiKeyS3Valid: false,

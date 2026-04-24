@@ -5,10 +5,12 @@ import { ModelOpenaiCompatibleModel } from "../../../../../schema/schemaUser/Sch
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
 import { ModelAnswerMachineSubQuestion } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestions.schema";
 import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlmAnswerMachineOpencodeRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineOpencodeRecord.schema";
 import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
 import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/utils/fetchLlmUnified";
 import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
 import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
+import { runAiWorkspaceTools } from "../../utils/aiWorkspaceToolExecutor";
 
 interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'openai-compatible';
@@ -358,6 +360,16 @@ function formatConversationMessages(messages: IChatLlm[]): string {
         .join('\n\n');
 }
 
+function getLatestUserMessageText(messages: IChatLlm[]): string {
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const msg = messages[index];
+        if (msg.isAi === false && typeof msg.content === 'string' && msg.content.trim().length > 0) {
+            return msg.content.trim();
+        }
+    }
+    return '';
+}
+
 /**
  * Format sub-question answers for LLM
  */
@@ -411,6 +423,10 @@ async function generateFinalAnswerContent(
         // Get conversation messages
         const conversationMessages = await getConversationMessages(threadId, username);
         const conversationText = formatConversationMessages(conversationMessages);
+        const opencodeRequestList = conversationMessages
+            .filter((msg) => msg.isAi === false && typeof msg.content === 'string')
+            .map((msg) => msg.content.trim())
+            .filter((content) => content.length > 0);
 
         // Get answered sub-questions for this specific answer machine record
         const answeredSubQuestions = await getAnsweredSubQuestions(answerMachineRecordId);
@@ -420,6 +436,90 @@ async function generateFinalAnswerContent(
         const answerMachineRecord = await ModelChatLlmAnswerMachine.findById(answerMachineRecordId);
         const intermediateAnswers = answerMachineRecord?.intermediateAnswers ?? [];
         const intermediateAnswersText = formatIntermediateAnswers(intermediateAnswers);
+        const currentIteration = answerMachineRecord?.currentIteration || 1;
+
+        let toolExecutionSummary = '';
+        if (currentIteration === 1) {
+            const latestUserMessage = getLatestUserMessageText(conversationMessages);
+            if (latestUserMessage.length > 0) {
+                const userApiKeyDoc = await ModelUserApiKey.findOne({ username });
+                if (userApiKeyDoc) {
+                    const userApiKey = getApiKeyByObject(userApiKeyDoc);
+                    const toolResult = await runAiWorkspaceTools({
+                        username,
+                        threadId,
+                        userApiKey,
+                        latestUserPrompt: latestUserMessage,
+                    });
+                    if (toolResult.summary.trim().length > 0) {
+                        toolExecutionSummary = toolResult.summary.trim();
+                    }
+                    if (toolResult.artifacts.length > 0) {
+                        const now = new Date();
+                        for (const artifact of toolResult.artifacts) {
+                            await ModelChatLlm.create({
+                                type: artifact.messageType,
+                                content: `AI generated file: ${artifact.fileName}`,
+                                username,
+                                tags: ['ai-generated-file'],
+                                fileUrl: artifact.filePath,
+                                fileContentText: artifact.previewText,
+                                fileUrlArr: [],
+                                threadId,
+                                fileContentAi: artifact.description,
+                                isAi: true,
+                                aiModelProvider: llmConfig.provider,
+                                aiModelName: llmConfig.model,
+                                createdAtUtc: now,
+                                updatedAtUtc: now,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        const trimmedToolExecutionSummary = toolExecutionSummary.trim();
+        const trimmedConversationText = conversationText.trim();
+        const opencodeUpdateSet: {
+            summary?: string;
+            requestList?: string[];
+            conversation?: string;
+            updatedAtUtc?: Date;
+        } = {};
+
+        if (trimmedToolExecutionSummary.length > 0) {
+            opencodeUpdateSet.summary = trimmedToolExecutionSummary;
+        }
+        if (opencodeRequestList.length > 0) {
+            opencodeUpdateSet.requestList = opencodeRequestList;
+        }
+        if (trimmedConversationText.length > 0) {
+            opencodeUpdateSet.conversation = trimmedConversationText;
+        }
+
+        if (Object.keys(opencodeUpdateSet).length > 0) {
+            opencodeUpdateSet.updatedAtUtc = new Date();
+            await ModelChatLlmAnswerMachineOpencodeRecord.findOneAndUpdate(
+                {
+                    answerMachineRecordId: answerMachineRecordId,
+                    username,
+                },
+                {
+                    $set: opencodeUpdateSet,
+                    $setOnInsert: {
+                        answerMachineRecordId: answerMachineRecordId,
+                        threadId,
+                        username,
+                        createdAtUtc: new Date(),
+                    },
+                },
+                {
+                    upsert: true,
+                    new: true,
+                }
+            );
+        }
 
         // Get system prompt from thread
         const systemPrompt = thread?.systemPrompt || 'You are a helpful AI assistant.';
@@ -437,6 +537,9 @@ async function generateFinalAnswerContent(
 
         if (intermediateAnswersText) {
             userPrompt += `INTERMEDIATE ANSWERS (from previous iterations):\n${intermediateAnswersText}\n\n`;
+        }
+        if (toolExecutionSummary.length > 0) {
+            userPrompt += `AI WORKSPACE TOOLS EXECUTION SUMMARY:\n${toolExecutionSummary}\n\n`;
         }
 
         const contextParts = ['conversation history', 'research findings'];

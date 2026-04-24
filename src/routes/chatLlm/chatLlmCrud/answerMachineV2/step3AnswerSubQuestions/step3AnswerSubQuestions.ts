@@ -13,6 +13,10 @@ import fetchLlmUnified, { Message } from "../../../../../utils/llmPendingTask/ut
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import { trackAnswerMachineTokens } from "../helperFunction/tokenTracking";
 import { getLlmConfig, LlmConfig } from "../helperFunction/answerMachineGetLlmConfig";
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { getApiKeyByObject } from "../../../../../utils/llm/llmCommonFunc";
+import { runConciseOpencodePipeline } from "../../conciseOpencode/runConciseOpencodePipeline";
+import { formatConcisePipelineDataForFinalLlm } from "../../conciseOpencode/formatConcisePipelineForFinalLlm";
 
 interface RelevantContextResponse {
     relevantItems: {
@@ -55,6 +59,49 @@ const step3AnswerSubQuestions = async ({
         }
 
         const { threadId, username } = answerMachineRecord;
+        const isOpencodeEnabled = answerMachineRecord.usedOpencode === true;
+
+        const llmConfig = await getLlmConfig({ threadId });
+        if (!llmConfig) {
+            return {
+                success: false,
+                errorReason: 'Failed to initialize or missing LLM config',
+                data: null,
+            };
+        }
+
+        let opencodeTasksSummary = '';
+        if (isOpencodeEnabled) {
+            try {
+                const userApiKeyObj = await ModelUserApiKey.findOne({ username }).lean();
+                const userApiKey = getApiKeyByObject(userApiKeyObj || {});
+
+                const lastUserMessage = await ModelChatLlm.findOne({
+                    threadId,
+                    username,
+                    isAi: false,
+                }).sort({ createdAtUtc: -1 });
+
+                const pipeline = await runConciseOpencodePipeline({
+                    username,
+                    threadId,
+                    userApiKey,
+                    triggerMessageId: lastUserMessage?._id,
+                    answerMachineRecordId,
+                    llm: {
+                        provider: llmConfig.provider,
+                        apiKey: llmConfig.apiKey,
+                        apiEndpoint: llmConfig.apiEndpoint,
+                        model: llmConfig.model,
+                    },
+                    systemPromptPrefix: 'You are a helpful AI assistant.',
+                    userPrompt: lastUserMessage?.content || '',
+                });
+                opencodeTasksSummary = formatConcisePipelineDataForFinalLlm(pipeline);
+            } catch (e) {
+                opencodeTasksSummary = '';
+            }
+        }
 
         // Find all pending sub-questions for this specific answer machine record
         const pendingSubQuestions = await ModelAnswerMachineSubQuestion.find({
@@ -78,7 +125,12 @@ const step3AnswerSubQuestions = async ({
             try {
                 console.log(`Answering sub-question: ${subQuestion._id}`);
 
-                const result = await answerSubQuestionInline(subQuestion._id, abortSignal);
+                const result = await answerSubQuestionInline(
+                    subQuestion._id,
+                    isOpencodeEnabled,
+                    opencodeTasksSummary,
+                    abortSignal
+                );
 
                 if (!result.success) {
                     console.error(`Failed to answer sub-question ${subQuestion._id}:`, result.errorReason);
@@ -194,6 +246,8 @@ const step3AnswerSubQuestions = async ({
  */
 async function answerSubQuestionInline(
     subQuestionId: mongoose.Types.ObjectId,
+    isOpencodeEnabled: boolean,
+    opencodeTasksSummary: string,
     abortSignal?: AbortSignal,
 ): Promise<{
     success: boolean;
@@ -252,7 +306,16 @@ async function answerSubQuestionInline(
         const contextContent = await getContextContentInline(contextIds, username);
 
         // Step 4: Generate answer
-        const answerResult = await generateAnswerInline(contextContent, question, threadId, username, llmConfig, abortSignal);
+        const answerResult = await generateAnswerInline(
+            contextContent,
+            question,
+            threadId,
+            username,
+            llmConfig,
+            isOpencodeEnabled,
+            opencodeTasksSummary,
+            abortSignal
+        );
         if (abortSignal?.aborted) {
             return {
                 success: false,
@@ -1003,6 +1066,8 @@ async function generateAnswerInline(
     threadId: mongoose.Types.ObjectId,
     username: string,
     llmConfig: LlmConfig,
+    isOpencodeEnabled: boolean,
+    opencodeTasksSummary: string,
     abortSignal?: AbortSignal,
 ): Promise<{
     answer: string;
@@ -1025,6 +1090,9 @@ async function generateAnswerInline(
         }
         if (contextContent) {
             userPrompt += `RELEVANT CONTEXT:\n${contextContent}\n\n`;
+        }
+        if (isOpencodeEnabled && (opencodeTasksSummary || '').trim().length > 0) {
+            userPrompt += `OPENCODE TASKS EXECUTION SUMMARY:\n${opencodeTasksSummary.trim()}\n\n`;
         }
         userPrompt += `QUESTION: ${question}\n\nANSWER:`;
 

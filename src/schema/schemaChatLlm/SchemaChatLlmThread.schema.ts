@@ -86,6 +86,10 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         enum: ['conciseAnswer', 'answerMachine'],
         default: 'conciseAnswer',
     },
+    conciseUsedOpencode: {
+        type: Boolean,
+        default: false,
+    },
 
     // answerEngine -> answerMachine
     answerMachineMinNumberOfIterations: {

@@ -16,6 +16,13 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     apiKeyOpenrouterValid: { type: Boolean, default: false },
     apiKeyOpenrouter: { type: String, default: '' },
 
+    // apikey - opencode
+    apiKeyOpencodeValid: { type: Boolean, default: false },
+    apiKeyOpencode: { type: String, default: '' },
+    apiKeyOpencodeEndpoint: { type: String, default: '' },
+    apiKeyOpencodeBasicAuthUsername: { type: String, default: '' },
+    apiKeyOpencodeBasicAuthPassword: { type: String, default: '' },
+
     // apikey - s3
     apiKeyS3Valid: { type: Boolean, default: false },
     apiKeyS3Endpoint: { type: String, default: '' },

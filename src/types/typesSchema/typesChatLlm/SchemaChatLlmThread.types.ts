@@ -44,6 +44,7 @@ export interface IChatLlmThread extends Document {
 
     // answer type
     answerEngine: 'conciseAnswer' | 'answerMachine';
+    conciseUsedOpencode: boolean;
 
     // answerEngine -> answerMachine
     answerMachineMinNumberOfIterations: number;

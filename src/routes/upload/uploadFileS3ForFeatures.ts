@@ -88,6 +88,23 @@ const constructFilePath = (
     return returnObj;
 };
 
+/** Chat thread uploads aligned with OpenCode layout: .../thread/{threadId}/inputfiles/ */
+const constructThreadOpencodeInputfilesPath = (
+    username: string,
+    parentEntityId: string,
+    fileName: string,
+    fileExtension: string
+): { filePath: string; success: boolean } => ({
+    success: true,
+    filePath: `ai-notes-xyz/${username}/thread/${parentEntityId}/inputfiles/${fileName}${fileExtension}`,
+});
+
+const UPLOAD_PATH_LAYOUT_THREAD_OPENCODE_INPUTFILES = 'threadOpencodeInputfiles';
+
+function escapeRegexPrefix(prefix: string): string {
+    return prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Upload File API
 router.post(
     '/uploadFile',
@@ -143,13 +160,12 @@ router.post(
             // Use the generated MongoDB _id as the filename
             const fileName = fileRecordObj._id.toString();
 
-            // Construct file path (for backward compatibility)
-            const resultConstructFilePath = constructFilePath(
-                username,
-                parentEntityId,
-                fileName,
-                fileExtension,
-            );
+            const pathLayoutRaw = typeof req.body.pathLayout === 'string' ? req.body.pathLayout.trim() : '';
+            const useThreadInputfiles = pathLayoutRaw === UPLOAD_PATH_LAYOUT_THREAD_OPENCODE_INPUTFILES;
+
+            const resultConstructFilePath = useThreadInputfiles
+                ? constructThreadOpencodeInputfilesPath(username, parentEntityId, fileName, fileExtension)
+                : constructFilePath(username, parentEntityId, fileName, fileExtension);
 
             const objectKey = resultConstructFilePath.filePath;
 
@@ -228,12 +244,16 @@ export const deleteFilesByParentEntityId = async ({
     error: string;
 }> => {
     try {
-        let prefix = `ai-notes-xyz/${username}/features/${parentEntityId}/`;
+        const prefixes = [
+            `ai-notes-xyz/${username}/features/${parentEntityId}/`,
+            `ai-notes-xyz/${username}/thread/${parentEntityId}/`,
+        ];
 
-        // Get file records from database that match the prefix
         const fileRecords = await ModelUserFileUpload.find({
             username,
-            fileUploadPath: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` }
+            $or: prefixes.map((prefix) => ({
+                fileUploadPath: { $regex: `^${escapeRegexPrefix(prefix)}` },
+            })),
         });
 
         if (fileRecords.length === 0) {
@@ -246,9 +266,11 @@ export const deleteFilesByParentEntityId = async ({
         // Delete each file from storage and database
         const deletePromises = fileRecords.map(async (fileRecord) => {
             try {
-                // Validate that the file path starts with the expected prefix
-                if (!fileRecord.fileUploadPath.startsWith(prefix)) {
-                    console.error(`File path ${fileRecord.fileUploadPath} does not match expected prefix ${prefix}`);
+                const pathOk = prefixes.some((p) => fileRecord.fileUploadPath.startsWith(p));
+                if (!pathOk) {
+                    console.error(
+                        `File path ${fileRecord.fileUploadPath} does not match expected prefixes for entity ${parentEntityId}`
+                    );
                     return;
                 }
 
@@ -311,13 +333,12 @@ export const deleteFileByPath = async ({
     error: string;
 }> => {
     try {
-        // Generate the file path
-        const filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}`;
+        const pathLegacy = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}`;
+        const pathThreadInputfiles = `ai-notes-xyz/${username}/thread/${parentEntityId}/inputfiles/${fileName}`;
 
-        // Find file record
         const fileRecord = await ModelUserFileUpload.findOne({
             username,
-            fileUploadPath: filePath,
+            fileUploadPath: { $in: [pathLegacy, pathThreadInputfiles] },
         });
 
         if (!fileRecord) {
@@ -329,9 +350,10 @@ export const deleteFileByPath = async ({
 
         // Delete from storage
         const storageType = fileRecord.storageType || 'gridfs';
+        const storedPath = fileRecord.fileUploadPath;
         const fileId = storageType === 'gridfs' 
-            ? (fileRecord.gridFsId?.toString() || filePath)
-            : filePath;
+            ? (fileRecord.gridFsId?.toString() || storedPath)
+            : storedPath;
 
         const userApiKeyDoc = await ModelUserApiKey.findOne({ username });
         const userApiKey = userApiKeyDoc ? getApiKeyByObject(userApiKeyDoc) : undefined;
@@ -360,7 +382,7 @@ export const deleteFileByPath = async ({
         // Delete from database
         await ModelUserFileUpload.deleteOne({
             username,
-            fileUploadPath: filePath,
+            fileUploadPath: storedPath,
         });
 
         return {

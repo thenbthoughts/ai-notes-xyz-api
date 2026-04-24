@@ -242,6 +242,7 @@ router.post(
 
                 // answer type
                 answerEngine,
+                conciseUsedOpencode,
                 answerMachineUsedOpencode,
                 answerMachineUsedWebSearch,
                 
@@ -271,6 +272,7 @@ router.post(
                 // answer type
                 answerEngine: 'conciseAnswer',
                 answerMachineErrorReason: '',
+                conciseUsedOpencode: false,
                 answerMachineUsedOpencode: false,
                 answerMachineUsedWebSearch: false,
                 
@@ -325,6 +327,9 @@ router.post(
                     addData.answerEngine = answerEngine;
                 }
             };
+            if (typeof conciseUsedOpencode === 'boolean') {
+                addData.conciseUsedOpencode = conciseUsedOpencode;
+            }
             if (typeof answerMachineUsedOpencode === 'boolean') {
                 addData.answerMachineUsedOpencode = answerMachineUsedOpencode;
             };
@@ -459,6 +464,7 @@ router.post(
 
                 // answer type
                 answerEngine,
+                conciseUsedOpencode,
 
                 // answer engine -> answer machine
                 answerMachineUsedOpencode,
@@ -543,6 +549,9 @@ router.post(
                     updateData.answerEngine = answerEngine;
                 }
             };
+            if (typeof conciseUsedOpencode === 'boolean') {
+                updateData.conciseUsedOpencode = conciseUsedOpencode;
+            }
             if (typeof answerMachineUsedOpencode === 'boolean') {
                 updateData.answerMachineUsedOpencode = answerMachineUsedOpencode;
             };
