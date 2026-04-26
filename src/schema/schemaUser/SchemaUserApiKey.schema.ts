@@ -68,6 +68,11 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     /** set for Telegram forum supergroups (topic / “channel” inside the group) */
     telegramMessageThreadId: { type: Number, default: null },
 
+    // ai-notes-xyz-shell (origin URL without /api, + X-API-Token)
+    shellEngineValid: { type: Boolean, default: false },
+    shellEngineUrl: { type: String, default: '' },
+    shellEngineToken: { type: String, default: '' },
+
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },
     userEmailVerifyEmail: { type: String, default: '' },
