@@ -105,6 +105,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: false,
     },
 
+    /** When true, run shell prep before the next AI reply (concise stream or Answer Machine) */
+    executeShell: {
+        type: Boolean,
+        default: false,
+    },
+
     // auth
     username: { type: String, required: true, default: '', index: true, },
 

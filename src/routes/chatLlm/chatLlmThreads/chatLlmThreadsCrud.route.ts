@@ -248,6 +248,8 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations,
                 answerMachineMaxNumberOfIterations,
+
+                executeShell,
             } = req.body;
 
             const addData = {
@@ -277,6 +279,8 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations: 1,
                 answerMachineMaxNumberOfIterations: 1,
+
+                executeShell: false,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -330,6 +334,10 @@ router.post(
             };
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 addData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
+            };
+
+            if (typeof executeShell === 'boolean') {
+                addData.executeShell = executeShell;
             };
             
             // Handle min and max iterations together to ensure min <= max
@@ -467,6 +475,8 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations,
                 answerMachineMaxNumberOfIterations,
+
+                executeShell,
             } = req.body;
 
             // Build update object
@@ -548,6 +558,10 @@ router.post(
             };
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 updateData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
+            };
+
+            if (typeof executeShell === 'boolean') {
+                updateData.executeShell = executeShell;
             };
             
             // Handle min and max iterations together to ensure min <= max

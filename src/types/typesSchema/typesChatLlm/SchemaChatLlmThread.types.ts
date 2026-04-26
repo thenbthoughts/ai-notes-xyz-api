@@ -51,6 +51,9 @@ export interface IChatLlmThread extends Document {
     answerMachineUsedOpencode: boolean;
     answerMachineUsedWebSearch: boolean;
 
+    /** Persisted on thread; older documents may omit this field */
+    executeShell?: boolean;
+
     // auth
     username: string;
 
