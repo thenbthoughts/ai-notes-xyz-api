@@ -43,6 +43,11 @@ export interface tsUserApiKey {
     apiKeyLocalaiValid: boolean;
     apiKeyLocalaiEndpoint: string;
     apiKeyLocalai: string;
+
+    // shell engine (ai-notes-xyz-shell)
+    shellEngineValid: boolean;
+    shellEngineUrl: string;
+    shellEngineToken: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -91,6 +96,11 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         apiKeyLocalaiValid: false,
         apiKeyLocalaiEndpoint: '',
         apiKeyLocalai: '',
+
+        // shell engine
+        shellEngineValid: false,
+        shellEngineUrl: '',
+        shellEngineToken: '',
     } as tsUserApiKey;
 
     try {
@@ -205,6 +215,23 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.apiKeyLocalai === 'string') {
                 apiKey.apiKeyLocalai = apiKeyObject.apiKeyLocalai;
+            }
+
+            // shell engine
+            if (typeof apiKeyObject.shellEngineValid === 'boolean') {
+                if (apiKeyObject.shellEngineValid) {
+                    apiKey.shellEngineValid = true;
+                }
+            }
+            if (typeof apiKeyObject.shellEngineUrl === 'string') {
+                let u = apiKeyObject.shellEngineUrl.trim().replace(/\/+$/, '');
+                if (u.endsWith('/api')) {
+                    u = u.slice(0, -4).replace(/\/+$/, '');
+                }
+                apiKey.shellEngineUrl = u;
+            }
+            if (typeof apiKeyObject.shellEngineToken === 'string') {
+                apiKey.shellEngineToken = apiKeyObject.shellEngineToken;
             }
         }
         return apiKey;

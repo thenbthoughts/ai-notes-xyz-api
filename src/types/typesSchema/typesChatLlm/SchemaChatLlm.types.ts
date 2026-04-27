@@ -1,5 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 
+import type { IShellRunArtifactV1 } from './SchemaShellRunArtifactV1.types';
+
 // Chat Interface
 export interface IChatLlm extends Document {
     // identification
@@ -24,6 +26,9 @@ export interface IChatLlm extends Document {
     fileUrl: string;
     fileContentText: string;
     fileContentAi: string;
+
+    /** Embedded shell run summary (when tags include `shell-run`). */
+    shellRunArtifactV1?: IShellRunArtifactV1;
 
     // auto
     createdAtUtc: Date;

@@ -11,6 +11,7 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
 import answerMachineInitiateFunc from './answerMachineV2/answerMachineInitiateFunc';
+import { runChatShellForThread } from './shellExecute/runChatShellForThread';
 
 // Router
 const router = Router();
@@ -64,9 +65,24 @@ router.post(
             if (!threadInfo) {
                 return res.status(400).json({ message: 'Thread not found' });
             }
+            
+            if (threadInfo.executeShell) {
+                const actionDatetimeObj = normalizeDateTimeIpAddress({
+                    ...res.locals.actionDatetime,
+                    createdAtUtc: new Date().toISOString(),
+                    updatedAtUtc: new Date().toISOString(),
+                });
+                const shellRes = await runChatShellForThread({
+                    threadId,
+                    username: auth_username,
+                    actionDatetimeObj,
+                });
+                if (!shellRes.success) {
+                    return res.status(400).json({ message: shellRes.error });
+                }
+            }
 
             // does thread have personal context enabled?
-            const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
 
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Title, Embedding)
             await ModelLlmPendingTaskCron.create({
@@ -88,6 +104,11 @@ router.post(
             }
 
             // Create initial message record
+            const actionDatetimeObj2 = normalizeDateTimeIpAddress({
+                ...res.locals.actionDatetime,
+                createdAtUtc: new Date().toISOString(),
+                updatedAtUtc: new Date().toISOString(),
+            });
             const resultFromLastConversation = await ModelChatLlm.create({
                 type: 'text',
                 content: 'AI generating in progress...',
@@ -99,7 +120,7 @@ router.post(
                 isAi: true,
                 aiModelProvider: aiModelProvider,
                 aiModelName: aiModelName,
-                ...actionDatetimeObj,
+                ...actionDatetimeObj2,
             });
 
             const messageId = resultFromLastConversation._id;

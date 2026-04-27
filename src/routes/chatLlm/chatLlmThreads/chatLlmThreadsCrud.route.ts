@@ -248,6 +248,10 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations,
                 answerMachineMaxNumberOfIterations,
+
+                executeShell,
+                shellExecuteMinAttempts,
+                shellExecuteMaxAttempts,
             } = req.body;
 
             const addData = {
@@ -277,6 +281,10 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations: 1,
                 answerMachineMaxNumberOfIterations: 1,
+
+                executeShell: false,
+                shellExecuteMinAttempts: 1,
+                shellExecuteMaxAttempts: 3,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -331,6 +339,10 @@ router.post(
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 addData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
+
+            if (typeof executeShell === 'boolean') {
+                addData.executeShell = executeShell;
+            };
             
             // Handle min and max iterations together to ensure min <= max
             let minIterations: number | undefined = undefined;
@@ -379,6 +391,43 @@ router.post(
                     addData.answerMachineMaxNumberOfIterations = maxIterations;
                 }
             };
+
+            // Shell primary command retries (per thread), integers 1–10, min ≤ max
+            let shellMinA: number | undefined = undefined;
+            let shellMaxA: number | undefined = undefined;
+            if (typeof shellExecuteMinAttempts === 'number' && Number.isInteger(shellExecuteMinAttempts)) {
+                if (shellExecuteMinAttempts >= 1 && shellExecuteMinAttempts <= 10) {
+                    shellMinA = shellExecuteMinAttempts;
+                }
+            }
+            if (typeof shellExecuteMaxAttempts === 'number' && Number.isInteger(shellExecuteMaxAttempts)) {
+                if (shellExecuteMaxAttempts >= 1 && shellExecuteMaxAttempts <= 10) {
+                    shellMaxA = shellExecuteMaxAttempts;
+                }
+            }
+            if (shellMinA !== undefined && shellMaxA !== undefined) {
+                if (shellMinA <= shellMaxA) {
+                    addData.shellExecuteMinAttempts = shellMinA;
+                    addData.shellExecuteMaxAttempts = shellMaxA;
+                } else {
+                    addData.shellExecuteMinAttempts = shellMaxA;
+                    addData.shellExecuteMaxAttempts = shellMaxA;
+                }
+            } else if (shellMinA !== undefined) {
+                if (shellMinA <= addData.shellExecuteMaxAttempts) {
+                    addData.shellExecuteMinAttempts = shellMinA;
+                } else {
+                    addData.shellExecuteMinAttempts = shellMinA;
+                    addData.shellExecuteMaxAttempts = shellMinA;
+                }
+            } else if (shellMaxA !== undefined) {
+                if (addData.shellExecuteMinAttempts <= shellMaxA) {
+                    addData.shellExecuteMaxAttempts = shellMaxA;
+                } else {
+                    addData.shellExecuteMinAttempts = shellMaxA;
+                    addData.shellExecuteMaxAttempts = shellMaxA;
+                }
+            }
 
             let systemPrompt = systemPromptForChatLlmThread;
 
@@ -467,6 +516,11 @@ router.post(
                 // answer machine settings
                 answerMachineMinNumberOfIterations,
                 answerMachineMaxNumberOfIterations,
+
+                executeShell,
+
+                shellExecuteMinAttempts,
+                shellExecuteMaxAttempts,
             } = req.body;
 
             // Build update object
@@ -549,6 +603,10 @@ router.post(
             if (typeof answerMachineUsedWebSearch === 'boolean') {
                 updateData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
+
+            if (typeof executeShell === 'boolean') {
+                updateData.executeShell = executeShell;
+            };
             
             // Handle min and max iterations together to ensure min <= max
             let minIterations: number | undefined = undefined;
@@ -607,6 +665,42 @@ router.post(
                     updateData.answerMachineMaxNumberOfIterations = maxIterations;
                 }
             };
+
+            let shellMinB: number | undefined = undefined;
+            let shellMaxB: number | undefined = undefined;
+            if (typeof shellExecuteMinAttempts === 'number' && Number.isInteger(shellExecuteMinAttempts)) {
+                if (shellExecuteMinAttempts >= 1 && shellExecuteMinAttempts <= 10) {
+                    shellMinB = shellExecuteMinAttempts;
+                }
+            }
+            if (typeof shellExecuteMaxAttempts === 'number' && Number.isInteger(shellExecuteMaxAttempts)) {
+                if (shellExecuteMaxAttempts >= 1 && shellExecuteMaxAttempts <= 10) {
+                    shellMaxB = shellExecuteMaxAttempts;
+                }
+            }
+            if (shellMinB !== undefined || shellMaxB !== undefined) {
+                const existingShell = await ModelChatLlmThread.findOne({
+                    _id: threadId,
+                    username: res.locals.auth_username,
+                });
+                const existingShellMin = Math.min(
+                    10,
+                    Math.max(1, Math.round(Number(existingShell?.shellExecuteMinAttempts) || 1)),
+                );
+                const existingShellMax = Math.min(
+                    10,
+                    Math.max(1, Math.round(Number(existingShell?.shellExecuteMaxAttempts) || 3)),
+                );
+                const effMin = shellMinB !== undefined ? shellMinB : existingShellMin;
+                const effMax = shellMaxB !== undefined ? shellMaxB : existingShellMax;
+                if (effMin <= effMax) {
+                    updateData.shellExecuteMinAttempts = effMin;
+                    updateData.shellExecuteMaxAttempts = effMax;
+                } else {
+                    updateData.shellExecuteMinAttempts = effMax;
+                    updateData.shellExecuteMaxAttempts = effMax;
+                }
+            }
 
             if (Object.keys(updateData).length === 0) {
                 return res.status(400).json({ message: 'No valid fields provided for update' });

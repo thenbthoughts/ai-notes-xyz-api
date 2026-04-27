@@ -66,6 +66,11 @@ interface IUserApiKey extends Document {
     /** forum topic id; omit or null for non-forum chats */
     telegramMessageThreadId?: number | null;
 
+    /** ai-notes-xyz-shell: server origin only, no /api (e.g. http://host:2001) */
+    shellEngineValid: boolean;
+    shellEngineUrl: string;
+    shellEngineToken: string;
+
     // user-email-verify
     userEmailVerifyOtp: number;
     userEmailVerifyEmail: string;
