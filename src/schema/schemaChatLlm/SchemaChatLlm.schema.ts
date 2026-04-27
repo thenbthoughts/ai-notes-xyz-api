@@ -2,6 +2,48 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 import { IChatLlm } from '../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
 
+const shellRunArtifactV1TodoSchema = new Schema(
+    {
+        orderIndex: { type: Number, required: true },
+        taskName: { type: String, required: true },
+        executeStrategyBy: { type: String, required: true },
+        shellCommand: { type: String, default: '' },
+        verifyShellCommand: { type: String, default: '' },
+        attemptCount: { type: Number, default: 0 },
+        status: { type: String, required: true },
+        exitCode: { type: Number, default: null },
+        verifyExitCode: { type: Number, default: null },
+        stdoutPreview: { type: String, default: '' },
+        stderrPreview: { type: String, default: '' },
+    },
+    { _id: false },
+);
+
+const shellRunArtifactV1ImportedFileSchema = new Schema(
+    {
+        fileName: { type: String, required: true },
+        mimeType: { type: String, default: '' },
+        storedFileUrl: { type: String, required: true },
+        relativePath: { type: String, default: '' },
+        summaryPreview: { type: String, default: '' },
+    },
+    { _id: false },
+);
+
+const shellRunArtifactV1Schema = new Schema(
+    {
+        version: { type: Number, required: true },
+        kind: { type: String, required: true },
+        chatShellRunGroupId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        threadId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        username: { type: String, required: true },
+        completedAtUtc: { type: Date, required: true },
+        todos: { type: [shellRunArtifactV1TodoSchema], default: [] },
+        importedFiles: { type: [shellRunArtifactV1ImportedFileSchema], default: [] },
+    },
+    { _id: false },
+);
+
 // Chat Schema
 const chatLlmSchema = new Schema<IChatLlm>({
     threadId: {
@@ -40,6 +82,12 @@ const chatLlmSchema = new Schema<IChatLlm>({
     fileUrlArr: {
         type: [String],
         default: [],
+    },
+
+    shellRunArtifactV1: {
+        type: shellRunArtifactV1Schema,
+        required: false,
+        default: undefined,
     },
 
     // 

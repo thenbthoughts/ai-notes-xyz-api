@@ -14,11 +14,17 @@ export interface IChatShellRunTodo extends Document {
     executeStrategyBy: ChatShellExecuteStrategy;
     taskName: string;
     shellCommand: string;
+    /** Optional post-primary check; must exit 0 after primary succeeds. */
+    verifyShellCommand: string;
     status: 'pending' | 'running' | 'done' | 'failed' | 'skipped';
     orderIndex: number;
+    /** Number of primary execute attempts that ran. */
+    attemptCount: number;
     stdout: string;
     stderr: string;
     exitCode: number | null;
+    /** Exit code of verifyShellCommand when run; null if not run or N/A. */
+    verifyExitCode: number | null;
     createdAtUtc: Date | null;
     updatedAtUtc: Date | null;
 }

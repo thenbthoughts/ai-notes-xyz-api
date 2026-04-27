@@ -1,4 +1,5 @@
 import axios from 'axios';
+import path from 'path';
 import mongoose, { HydratedDocument } from 'mongoose';
 
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
@@ -7,23 +8,150 @@ import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.
 import { ModelChatShellRunGroup } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellRunGroup.schema';
 import { ModelChatShellRunTodo } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellRunTodo.schema';
 import { ModelChatShellGeneratedFile } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellGeneratedFile.schema';
+import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { getLlmConfig } from '../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
 import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
+import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';
+import { uploadRecentUserFilesToShellWorkspace } from './shellWorkspaceFileUpload';
 import type { ChatShellExecuteStrategy } from '../../../../types/typesSchema/typesChatLlm/SchemaChatShellRunTodo.types';
+import type {
+    IShellRunArtifactV1,
+    IShellRunArtifactV1Plain,
+} from '../../../../types/typesSchema/typesChatLlm/SchemaShellRunArtifactV1.types';
+
+export type { IShellRunArtifactV1, IShellRunArtifactV1Plain } from '../../../../types/typesSchema/typesChatLlm/SchemaShellRunArtifactV1.types';
 import type { IChatLlmThread } from '../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types';
 import type { IChatShellRunGroup } from '../../../../types/typesSchema/typesChatLlm/SchemaChatShellRunGroup.types';
 import type IUserApiKey from '../../../../types/typesSchema/typesUser/SchemaUserApiKey.types';
+import type IUserFileUpload from '../../../../types/typesSchema/typesUser/SchemaUserFileUpload.types';
 import type { DefaultDateTimeIpAddress } from '../../../../utils/llm/normalizeDateTimeIpAddress';
 
 const SHELL_RUN_LOG = '[runChatShellForThread]';
+
+/** Planner JSON array max length (prompt + normalizeTodos must match). */
+const SHELL_PLANNER_MAX_TODOS = 16;
+
+const SHELL_EXECUTE_MIN_ATTEMPTS = 1;
+const SHELL_RETRY_BACKOFF_MS = 600;
+
+function resolveShellExecuteMaxAttempts(): number {
+    const raw = process.env.SHELL_EXECUTE_MAX_ATTEMPTS;
+    if (raw === undefined || raw === '') {
+        return 3;
+    }
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) {
+        return 3;
+    }
+    return Math.min(10, Math.max(SHELL_EXECUTE_MIN_ATTEMPTS, n));
+}
+
+/** Inclusive attempt index range per shell todo primary command; thread overrides env default max. */
+function resolvePrimaryAttemptRangeFromThread(thread: HydratedDocument<IChatLlmThread>): {
+    minAttempt: number;
+    maxAttempt: number;
+} {
+    const envDefaultMax = resolveShellExecuteMaxAttempts();
+    const rawMax = thread.shellExecuteMaxAttempts;
+    let maxA =
+        typeof rawMax === 'number' && Number.isFinite(rawMax) && !Number.isNaN(rawMax)
+            ? Math.round(rawMax)
+            : envDefaultMax;
+    maxA = Math.min(10, Math.max(1, maxA));
+    const rawMin = thread.shellExecuteMinAttempts;
+    let minA =
+        typeof rawMin === 'number' && Number.isFinite(rawMin) && !Number.isNaN(rawMin)
+            ? Math.round(rawMin)
+            : 1;
+    minA = Math.min(10, Math.max(1, minA));
+    if (minA > maxA) {
+        minA = 1;
+    }
+    return { minAttempt: minA, maxAttempt: maxA };
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 type ParsedTodo = {
     taskName: string;
     executeStrategyBy: ChatShellExecuteStrategy;
     shellCommand: string;
+    /** Optional; runs once after primary succeeds (same validation as shellCommand). */
+    verifyShellCommand?: string;
 };
+
+const ARTIFACT_PREVIEW_MAX = 800;
+
+function clipForArtifact(text: string, max = ARTIFACT_PREVIEW_MAX): string {
+    const t = text || '';
+    if (t.length <= max) return t;
+    return `${t.slice(0, max)}…`;
+}
+
+async function buildShellRunArtifactV1(params: {
+    chatShellRunGroupId: mongoose.Types.ObjectId;
+    threadId: mongoose.Types.ObjectId;
+    username: string;
+}): Promise<IShellRunArtifactV1Plain> {
+    const { chatShellRunGroupId, threadId, username } = params;
+
+    const todoRows = await ModelChatShellRunTodo.find({ chatShellRunGroupId })
+        .sort({ orderIndex: 1 })
+        .lean();
+
+    const fileRows = await ModelChatShellGeneratedFile.find({ chatShellRunGroupId })
+        .sort({ createdAtUtc: 1 })
+        .lean();
+
+    return {
+        version: 1,
+        kind: 'shell_run',
+        chatShellRunGroupId: String(chatShellRunGroupId),
+        threadId: String(threadId),
+        username,
+        completedAtUtc: new Date().toISOString(),
+        todos: todoRows.map((row) => ({
+            orderIndex: row.orderIndex ?? 0,
+            taskName: row.taskName,
+            executeStrategyBy: row.executeStrategyBy,
+            shellCommand: clipForArtifact(row.shellCommand || '', 400),
+            verifyShellCommand: row.verifyShellCommand
+                ? clipForArtifact(row.verifyShellCommand, 400)
+                : undefined,
+            attemptCount: row.attemptCount ?? 0,
+            status: row.status,
+            exitCode: row.exitCode ?? null,
+            verifyExitCode: row.verifyExitCode ?? null,
+            stdoutPreview: clipForArtifact(row.stdout || ''),
+            stderrPreview: clipForArtifact(row.stderr || ''),
+        })),
+        importedFiles: fileRows.map((row) => ({
+            fileName: row.fileName,
+            mimeType: row.mimeType,
+            storedFileUrl: row.storedFileUrl,
+            relativePath: row.relativePath,
+            summaryPreview: clipForArtifact(row.summary || ''),
+        })),
+    };
+}
+
+function mapPlainArtifactToChatSubdocument(params: { plain: IShellRunArtifactV1Plain }): IShellRunArtifactV1 {
+    const { plain } = params;
+    return {
+        version: plain.version,
+        kind: plain.kind,
+        chatShellRunGroupId: new mongoose.Types.ObjectId(plain.chatShellRunGroupId),
+        threadId: new mongoose.Types.ObjectId(plain.threadId),
+        username: plain.username,
+        completedAtUtc: new Date(plain.completedAtUtc),
+        todos: plain.todos,
+        importedFiles: plain.importedFiles,
+    };
+}
 
 const STRATEGIES: ChatShellExecuteStrategy[] = [
     'llm',
@@ -32,12 +160,38 @@ const STRATEGIES: ChatShellExecuteStrategy[] = [
     'internalKnowledgeAndLlm',
 ];
 
-/** Planner + shell fallback: steer models away from missing POSIX tools (bc, md5sum) and blocked chaining (| ; &). */
+/** No raw `"` inside the node -e shell token — avoids bash quote tracking bugs that reject `python3 -c "..."` when HTML contains `style="..."`. */
+const NODE_WRITE_DATETIME_HTML_ONE_LINER =
+    'node -e "require(\'fs\').writeFileSync(\'datetime.html\',[\'<html><body><h1>Current time</h1><p>\',new Date().toISOString(),\'</p></body></html>\'].join(\'\'))"';
+
+/** Fallback: simple HTML only — no double quotes inside the Python string (bash wraps the whole -c in `"`). */
+const PYTHON_WRITE_DATETIME_HTML_ONE_LINER =
+    'python3 -c "import datetime; dt=datetime.datetime.now().strftime(\'%Y-%m-%d %H:%M:%S\'); open(\'datetime.html\',\'w\').write(\'<html><body><h1>Current Datetime</h1><p>\'+dt+\'</p></body></html>\')"';
+
+/** Planner + shell: runtime is Ubuntu 24.04 Docker; steer toward valid one-line commands and safe quoting. */
 const SHELL_EXECUTE_COMMAND_GUIDANCE =
-    'SHELL COMMAND STYLE (every shellExecute shellCommand):\n' +
-    '1) FIRST prefer Node.js as ONE line: node -e "..." using built-in modules (e.g. require("crypto") for hashes; JavaScript arithmetic for products/sums).\n' +
-    '2) Do NOT rely on bc, md5sum, openssl, etc. — they are often absent in the shell sandbox. Do NOT use `|`, `;`, or `&` (the server rejects those characters).\n' +
-    '3) If you truly need an npm library: plan TWO shellExecute steps in order — (a) a single line: npm install <package> --no-save  (b) a later step: node -e "..." that require()s that package. Each line must stay valid without pipes or command chaining.\n';
+    'RUNTIME: Commands execute on **Ubuntu 24.04** in **Docker** (glibc, GNU userland). Includes **Node.js 24**, **npm**, **Python 3**, **apt-get**, **curl**, **wget**, **git**, **build-essential**, **openssl**, **Chromium**, **ffmpeg**, **sqlite3**, **zip/unzip**, and common CLI tools.\n' +
+    'PYTHON / PIP (**PEP 668**): System Python is **externally-managed**. **Do not** append `&& pip install ...` after apt on distro Python — it fails with **externally-managed-environment** (exit 1) even when apt succeeded. For **WeasyPrint** use **only** `apt-get update -qq && apt-get install -y --no-install-recommends weasyprint` (Debian package is enough; skip pip). For PyPI-only packages use `python3 -m venv .venv && .venv/bin/pip install ...` in the thread cwd, or **npm/Node**.\n' +
+    'TOOL PRIORITY: **Prefer Node.js first** for workspace files, HTML, JSON, and `require(\'crypto\')` hashes — fewer quoting and PEP 668 issues than Python one-liners.\n' +
+    'SHELL COMMAND STYLE (each shellCommand is ONE physical line; the API rejects unquoted `|;&` shell chaining, backticks, and `$` / `${` outside single-quoted spans):\n' +
+    '1) Prefer **node -e** or **node ./script.js** for generating HTML/JSON/text; use **python3**, **bash -c**, **openssl**, **apt-get**, **npm** when clearly better.\n' +
+    '2) To run multiple shell steps in one line, wrap them in **bash -c** with a **single-quoted** inner script, e.g. `bash -c \'apt-get update -qq && apt-get install -y --no-install-recommends PKG\'` so `&&` is not unquoted at the top level.\n' +
+    '3) For npm: use `npm install <pkg> --no-save --no-fund --no-audit` (or **npx -y** when appropriate), then a later shellExecute that **require()**s the package from the same thread cwd.\n' +
+    '4) If the thread has **[Shell workspace: ... uploaded ...]**, those strings are **real paths** on disk — copy them **verbatim** into shellCommand (or use the **basename** only, since cwd is that folder). **Never** use placeholders like `input_file`, `output_file.png`, `YOUR_IMAGE.jpg`, or `photo.ext` — ImageMagick `convert`/`magick`, ffmpeg, and `file` will fail with "No such file or directory". If names are unclear, first shellExecute: `ls -F` then use an actual name from stdout in the next todo.\n' +
+    '5) Write NEW outputs under the thread workspace (see [Shell workspace cwd ...]) so the server can import them.\n' +
+    '5b) **Website → PNG (headless screenshot):** Use **`chromium`** or **`/usr/bin/chromium`** (Debian package, already installed). Example: `chromium --headless=new --disable-gpu --no-sandbox --disable-dev-shm-usage --screenshot=page.png` then the target URL as the last argument (wrap the URL in single quotes in bash if it has query params). **Never use `chromium-browser`** and **never `apt-get install chromium-browser`** — on Ubuntu 24.04 that metapackage is a **snap stub** (requires the chromium snap); **snap is unavailable in Docker**, so the command always fails. Do not run `snap install chromium`. If a prior step installed chromium-browser, use **`chromium`** only in the next step.\n' +
+    '6) PDFs: **weasyprint** / **wkhtmltopdf** via **apt** first; **pdfkit** / **puppeteer** via npm if needed. After HTML exists in cwd: `weasyprint datetime.html datetime.pdf`. Do not run weasyprint until the HTML step **exits 0**.\n' +
+    '7) **node -e "..."**: no real newlines in shellCommand; no **${...}** in double-quoted Node (bash expands it). Build strings with `+` or `.join()`. **Avoid raw `"` characters inside HTML** when using `python3 -c "..."` — bash sees those `"` and the validator treats `;` in Python as unquoted shell chaining. Prefer **NODE_GOLDEN** below for datetime HTML.\n' +
+    '7b) **python3 -c** (only if Node is awkward): no f-strings; no `strftime(\\\'...\\\')` (backslash-quote breaks). Keep HTML free of `"` or wrap the whole step in `bash -c \'...\'` with a single-quoted inner script.\n' +
+    '7c) **GOLDEN — write datetime.html with Node** (same cwd as weasyprint): ' +
+    NODE_WRITE_DATETIME_HTML_ONE_LINER +
+    '\n' +
+    '7c-alt) Python fallback (simple markup only): ' +
+    PYTHON_WRITE_DATETIME_HTML_ONE_LINER +
+    '\n' +
+    '7d) WeasyPrint: `weasyprint INPUT.html OUTPUT.pdf` only after the HTML file exists.\n' +
+    '8) **Change approach across todos:** Split **install** (apt only for weasyprint), **write HTML** (Node golden), **convert PDF**, across ordered shellExecute steps.\n' +
+    '9) **Mix strategies:** e.g. **llm** then **shellExecute** to materialize files. User uploads in [Shell workspace: ...] are on disk for later steps.\n';
 
 type LlmConfigNonNull = NonNullable<Awaited<ReturnType<typeof getLlmConfig>>>;
 
@@ -60,6 +214,7 @@ type ShellRunCtx = {
     nonShellSummary: string;
     shellLines: string[];
     fileLines: string[];
+    shellFailureAppendix: string;
     storageType: 's3' | 'gridfs';
     s3Config: S3Config | undefined;
 };
@@ -77,12 +232,118 @@ function isValidStrategy(s: string): s is ChatShellExecuteStrategy {
     return (STRATEGIES as string[]).includes(s);
 }
 
-function sanitizeShellCommand(raw: string): string | null {
-    const cmd = raw.trim();
-    if (!cmd) {
-        return null;
+/**
+ * Shell commands are passed to bash as one argv string. Newlines break parsing; `$` / `${` expand
+ * outside single-quoted spans; unquoted |;& chain multiple host-level commands (rejected).
+ */
+function validateShellCommand(raw: string | undefined): { ok: true; cmd: string } | { ok: false; reason: string } {
+    if (typeof raw !== 'string' || !raw.trim()) {
+        return { ok: false, reason: 'Empty shell command.' };
     }
-    return cmd;
+    const cmd = raw.trim();
+    if (/[\n\r]/.test(cmd)) {
+        return {
+            ok: false,
+            reason:
+                'Multiline shellCommand is not allowed (newline breaks node -e quoting). Use exactly ONE line; put \\n inside the JavaScript string for HTML newlines.',
+        };
+    }
+    if (cmd.includes('`')) {
+        return { ok: false, reason: 'Backticks are not allowed in shellCommand.' };
+    }
+    const dollarIssue = findDollarOrTemplateOutsideSingleQuotes(cmd);
+    if (dollarIssue) {
+        return { ok: false, reason: dollarIssue.reason };
+    }
+    const splitter = findUnquotedShellSplitter(cmd);
+    if (splitter) {
+        const nestedQuoteHint =
+            splitter === ';'
+                ? ' If you used python3 -c "..." with HTML that contains attribute double-quotes (style="..."), bash/our checker mis-counts quotes — use the Node golden one-liner from shell guidance (no raw " inside HTML) or bash -c with a single-quoted inner script.'
+                : '';
+        return {
+            ok: false,
+            reason: `Do not use unquoted "${splitter}" for shell chaining (multiple commands). Semicolons inside node -e "..." JavaScript are OK while the opening double-quote is still open; keep the whole shellCommand as one invocation.${nestedQuoteHint}`,
+        };
+    }
+    return { ok: true, cmd };
+}
+
+/** | ; & only when outside both '...' and "..." (bash-style). Allows node -e "const a=1; const b=2;" */
+function findUnquotedShellSplitter(cmd: string): '|' | ';' | '&' | null {
+    let inDouble = false;
+    let inSingle = false;
+    let escape = false;
+    for (let i = 0; i < cmd.length; i++) {
+        const c = cmd[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (inDouble && c === '\\') {
+            escape = true;
+            continue;
+        }
+        if (!inSingle && c === '"') {
+            inDouble = !inDouble;
+            continue;
+        }
+        if (!inDouble && c === "'") {
+            inSingle = !inSingle;
+            continue;
+        }
+        if (!inDouble && !inSingle) {
+            if (c === '|') return '|';
+            if (c === ';') return ';';
+            if (c === '&') return '&';
+        }
+    }
+    return null;
+}
+
+/**
+ * In bash, `$` and `${` expand in unquoted and double-quoted regions, not inside `'...'`.
+ * Allows e.g. `bash -c 'apt-get update && apt-get install -y pkg'`.
+ */
+function findDollarOrTemplateOutsideSingleQuotes(cmd: string): { reason: string } | null {
+    let inDouble = false;
+    let inSingle = false;
+    let escape = false;
+    for (let i = 0; i < cmd.length; i++) {
+        const c = cmd[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (inDouble && c === '\\') {
+            escape = true;
+            continue;
+        }
+        if (!inSingle && c === '"') {
+            inDouble = !inDouble;
+            continue;
+        }
+        if (!inDouble && c === "'") {
+            inSingle = !inSingle;
+            continue;
+        }
+        if (inSingle) {
+            continue;
+        }
+        if (c === '$' && cmd[i + 1] === '{') {
+            return {
+                reason:
+                    'Do not use ${...} outside single quotes (bash expands it before node runs). Use JavaScript + for strings inside node -e "...", or put the whole inner script in single quotes via bash -c.',
+            };
+        }
+        if (c === '$') {
+            return {
+                reason:
+                    'Do not use $VAR outside single quotes (bash expands it). Use bash -c \'...\' for inner shell that needs $, or avoid $ in double-quoted node -e.',
+            };
+        }
+    }
+    return null;
 }
 
 function looksComputeLike(text: string): boolean {
@@ -90,9 +351,7 @@ function looksComputeLike(text: string): boolean {
 }
 
 function hasRunnableShellTodo(todos: ParsedTodo[]): boolean {
-    return todos.some(
-        (t) => t.executeStrategyBy === 'shellExecute' && Boolean(sanitizeShellCommand(t.shellCommand || '')),
-    );
+    return todos.some((t) => t.executeStrategyBy === 'shellExecute' && validateShellCommand(t.shellCommand || '').ok);
 }
 
 async function tryGenerateShellTodoWithLlm(params: {
@@ -107,14 +366,12 @@ async function tryGenerateShellTodoWithLlm(params: {
         {
             role: 'system',
             content: `You output exactly one JSON object with keys "taskName" and "shellCommand" only. No markdown, no code fences.
-The shell server runs one command string with no stdin pipe chaining. shellCommand must be a SINGLE line.
-Forbidden characters inside shellCommand: backtick, dollar sign, pipe |, semicolon ;, ampersand &, newlines.
-You MAY use parentheses and angle brackets for typical CLI tools (e.g. node -e, python -c, simple redirects).
+The shell runs on Ubuntu 24.04 in Docker (see RUNTIME in guidance). shellCommand must be a SINGLE physical line.
+Forbidden: backticks, real newlines, unquoted | ; & at the top shell level, and $ / \${ outside single-quoted spans (bash expands them). Prefer **node -e** for HTML files. Semicolons inside node -e "..." JavaScript are OK while the outer bash double-quote is still open.
 ${SHELL_EXECUTE_COMMAND_GUIDANCE}
-Prefer a portable approach when possible: e.g. Node one-liner for MD5 of a literal string:
+Example MD5 of a literal string (no $):
 node -e "console.log(require('crypto').createHash('md5').update('YOUR_STRING').digest('hex'))"
-Replace YOUR_STRING with the actual UTF-8 string from the user request (escape quotes inside the string safely).
-If the user asks for a file hash and a path is given under ai-notes-xyz-shell-files, use certutil -hashfile on Windows or openssl dgst on POSIX — pick one style; assume a Windows-style host if unsure.
+For file hashes on disk under ai-notes-xyz-shell-files, prefer openssl dgst -sha256 PATH or sha256sum PATH on this Linux image.
 ${extraDirective}`,
         },
         {
@@ -158,19 +415,20 @@ ${extraDirective}`,
     const o = obj as Record<string, unknown>;
     const taskName = typeof o.taskName === 'string' ? o.taskName.trim() : '';
     const shellCommand = typeof o.shellCommand === 'string' ? o.shellCommand.trim() : '';
-    const safe = sanitizeShellCommand(shellCommand);
-    if (!taskName || !safe) {
-        console.log(SHELL_RUN_LOG, 'tryGenerateShellTodoWithLlm', 'reject after sanitize', {
+    const v = validateShellCommand(shellCommand);
+    if (!taskName || !v.ok) {
+        console.log(SHELL_RUN_LOG, 'tryGenerateShellTodoWithLlm', 'reject after validate', {
             hasTaskName: Boolean(taskName),
-            hasSafeCommand: Boolean(safe),
+            valid: v.ok,
+            reason: !v.ok ? v.reason : undefined,
         });
         return null;
     }
-    console.log(SHELL_RUN_LOG, 'tryGenerateShellTodoWithLlm', 'success', { taskName, shellCommandPreview: safe.slice(0, 200) });
+    console.log(SHELL_RUN_LOG, 'tryGenerateShellTodoWithLlm', 'success', { taskName, shellCommandPreview: v.cmd.slice(0, 200) });
     return {
         taskName,
         executeStrategyBy: 'shellExecute',
-        shellCommand: safe,
+        shellCommand: v.cmd,
     };
 }
 
@@ -198,7 +456,7 @@ function extractJsonArray(text: string): unknown[] | null {
 
 function normalizeTodos(raw: unknown[]): ParsedTodo[] {
     const out: ParsedTodo[] = [];
-    for (const item of raw.slice(0, 8)) {
+    for (const item of raw.slice(0, 10)) {
         if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
         const o = item as Record<string, unknown>;
         const taskName = typeof o.taskName === 'string' ? o.taskName.trim() : '';
@@ -226,6 +484,478 @@ function extractShellRelativePaths(text: string): string[] {
         }
     }
     return [...found];
+}
+
+function shellThreadWorkspaceRelativeDir(threadId: mongoose.Types.ObjectId): string {
+    return `ai-notes-xyz-shell-files/thread-${String(threadId)}`;
+}
+
+function clipShellOutput(text: string, max: number): string {
+    const t = text || '';
+    if (t.length <= max) return t;
+    return `${t.slice(0, max)}…`;
+}
+
+function shellExecuteTimeoutMs(command: string): number {
+    const c = command.toLowerCase();
+    if (c.includes('apt-get') || c.includes('apt install') || c.includes('apt update')) {
+        return 180_000;
+    }
+    if (c.includes('pip install') || c.includes('pip3 install')) {
+        return 120_000;
+    }
+    if (c.includes('npm install') || c.includes('npm i ') || c.includes('npx ')) {
+        return 120_000;
+    }
+    return 60_000;
+}
+
+type PostShellExecuteOnceOk = {
+    ok: true;
+    httpOk: boolean;
+    exitCode: number | null;
+    timedOut: boolean;
+    stdout: string;
+    stderr: string;
+};
+
+type PostShellExecuteOnceErr = {
+    ok: false;
+    message: string;
+};
+
+async function postShellExecuteOnce(params: {
+    apiBase: string;
+    token: string;
+    threadDir: string;
+    command: string;
+    timeoutMs: number;
+    axiosTimeoutMs: number;
+}): Promise<PostShellExecuteOnceOk | PostShellExecuteOnceErr> {
+    const { apiBase, token, threadDir, command, timeoutMs, axiosTimeoutMs } = params;
+    try {
+        const execRes = await axios.post(
+            `${apiBase}/shell-engine/run-shell/execute`,
+            { command, timeoutMs, cwd: threadDir },
+            {
+                timeout: axiosTimeoutMs,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Token': token,
+                },
+                validateStatus: () => true,
+            },
+        );
+
+        const body = execRes.data as Record<string, unknown>;
+        let stdout = typeof body.stdout === 'string' ? body.stdout : '';
+        let stderr = typeof body.stderr === 'string' ? body.stderr : '';
+        const exitCode = typeof body.exitCode === 'number' ? body.exitCode : null;
+        const timedOut = Boolean(body.timedOut);
+        const httpOk = execRes.status === 200;
+        if (!httpOk) {
+            const apiMsg =
+                typeof body.message === 'string' && body.message.trim() !== ''
+                    ? body.message.trim()
+                    : `${execRes.status} ${execRes.statusText || ''}`.trim();
+            const shellEngineNote = `[shell-engine HTTP ${execRes.status}] ${apiMsg}`;
+            stderr = stderr ? `${stderr}\n${shellEngineNote}` : shellEngineNote;
+        }
+        return { ok: true, httpOk, exitCode, timedOut, stdout, stderr };
+    } catch (cmdErr) {
+        return {
+            ok: false,
+            message: cmdErr instanceof Error ? cmdErr.message : 'execute error',
+        };
+    }
+}
+
+/**
+ * After a failed shell attempt (before the next retry), ask the LLM for a revised one-line command
+ * or to keep the same strategy. Only validated, changed commands are returned.
+ */
+async function llmMaybeReviseShellCommandForRetry(params: {
+    llmConfig: LlmConfigNonNull;
+    taskName: string;
+    latestUserText: string;
+    convoTail: string;
+    originalPlannerCommand: string;
+    currentCommand: string;
+    attemptIndex: number;
+    maxAttempts: number;
+    transportFailed: boolean;
+    stdout: string;
+    stderr: string;
+    exitCode: number | null;
+    timedOut: boolean;
+    httpOk: boolean;
+}): Promise<string | null> {
+    const {
+        llmConfig,
+        taskName,
+        latestUserText,
+        convoTail,
+        originalPlannerCommand,
+        currentCommand,
+        attemptIndex,
+        maxAttempts,
+        transportFailed,
+        stdout,
+        stderr,
+        exitCode,
+        timedOut,
+        httpOk,
+    } = params;
+
+    const sys = `You fix shell commands for the next retry on Ubuntu 24.04 in Docker.
+Reply with ONLY a JSON object (no markdown): {"decision":"same"|"revise","shellCommand":"<one physical line>"}.
+Rules:
+- If the failure is transient or retrying unchanged is best, set decision to "same" and shellCommand to the exact current command (character-for-character).
+- If stderr or context suggests a different approach, set decision to "revise" and shellCommand to the full replacement line for the NEXT attempt only.
+- shellCommand must pass the same constraints as production: ONE line; no backticks; no real newlines; no unquoted | ; & at the outer shell level; no $ or \${ outside single-quoted spans (use bash -c '...' for inner &&).
+- Never suggest snap or chromium-browser (snap stub in Docker). For headless web screenshots use chromium with --headless=new --no-sandbox --disable-dev-shm-usage, not chromium-browser.
+- Do not suggest pip on system Python after apt (PEP 668).
+Guidance excerpt:
+${SHELL_EXECUTE_COMMAND_GUIDANCE.slice(0, 4500)}`;
+
+    const userBody = [
+        `Todo task name: ${taskName}`,
+        `Attempt ${attemptIndex} of ${maxAttempts} failed (there will be another attempt only if you improve the command or confirm same).`,
+        `Original planner command: ${originalPlannerCommand}`,
+        `Command just executed: ${currentCommand}`,
+        `Transport layer failed (HTTP/axios): ${transportFailed ? 'yes' : 'no'}`,
+        `httpOk=${httpOk} exitCode=${exitCode === null ? 'null' : exitCode} timedOut=${timedOut}`,
+        `stdout (trunc):\n${clipShellOutput(stdout, 2500)}`,
+        `stderr (trunc):\n${clipShellOutput(stderr, 3500)}`,
+        '',
+        `Latest user message:\n${clipShellOutput(latestUserText, 2000)}`,
+        '',
+        `Thread context (tail):\n${clipShellOutput(convoTail, 3500)}`,
+    ].join('\n');
+
+    const fb = await fetchLlmUnified({
+        provider: llmConfig.provider,
+        apiKey: llmConfig.apiKey,
+        apiEndpoint: llmConfig.apiEndpoint,
+        model: llmConfig.model,
+        messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: userBody },
+        ],
+        temperature: 0.2,
+        maxTokens: 900,
+        headersExtra: llmConfig.customHeaders,
+        responseFormat: 'json_object',
+    });
+
+    if (!fb.success || !fb.content) {
+        logStep(9, 'retry LLM revise skipped', { reason: 'llm_unavailable', taskName });
+        return null;
+    }
+    let obj: unknown;
+    try {
+        obj = JSON.parse(fb.content.trim());
+    } catch {
+        logStep(9, 'retry LLM revise skipped', { reason: 'json_parse', taskName });
+        return null;
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        return null;
+    }
+    const o = obj as Record<string, unknown>;
+    const decision = o.decision === 'revise' ? 'revise' : 'same';
+    const shellCommand = typeof o.shellCommand === 'string' ? o.shellCommand.trim() : '';
+    if (decision !== 'revise' || !shellCommand) {
+        logStep(9, 'retry LLM revise same', { taskName, attemptIndex });
+        return null;
+    }
+    const v = validateShellCommand(shellCommand);
+    if (!v.ok) {
+        logStep(9, 'retry LLM revise rejected_validate', { taskName, reason: v.reason, preview: shellCommand.slice(0, 160) });
+        return null;
+    }
+    if (v.cmd === currentCommand) {
+        logStep(9, 'retry LLM revise noop', { taskName, attemptIndex });
+        return null;
+    }
+    logStep(9, 'retry LLM revise applied', {
+        taskName,
+        attemptIndex,
+        previewFrom: currentCommand.slice(0, 120),
+        previewTo: v.cmd.slice(0, 120),
+    });
+    return v.cmd;
+}
+
+function formatShellTodoResultLine(params: {
+    taskName: string;
+    safeCmd: string;
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    httpOk: boolean;
+    primaryAttemptsUsed?: number;
+    primaryMaxAttempts?: number;
+    verifyShellCommand?: string;
+    verifyOk?: boolean;
+    verifyExitCode?: number | null;
+    verifyStdout?: string;
+    verifyStderr?: string;
+}): string {
+    const {
+        taskName,
+        safeCmd,
+        exitCode,
+        stdout,
+        stderr,
+        timedOut,
+        httpOk,
+        primaryAttemptsUsed,
+        primaryMaxAttempts,
+        verifyShellCommand,
+        verifyOk,
+        verifyExitCode,
+        verifyStdout,
+        verifyStderr,
+    } = params;
+    const parts: string[] = [];
+    const exitLabel =
+        verifyOk === false
+            ? 'verify failed'
+            : !httpOk
+              ? 'HTTP error'
+              : timedOut
+                ? 'timed out'
+                : exitCode === null
+                  ? 'n/a'
+                  : String(exitCode);
+    parts.push(`- **${taskName}** (exit ${exitLabel}):`);
+    parts.push(`  \`${safeCmd}\``);
+    if (primaryAttemptsUsed !== undefined && primaryMaxAttempts !== undefined && primaryMaxAttempts > 1) {
+        parts.push(`  primary attempts: ${primaryAttemptsUsed}/${primaryMaxAttempts}`);
+    }
+    if (verifyShellCommand) {
+        if (verifyOk === true) {
+            parts.push(`  verify (exit 0): \`${clipShellOutput(verifyShellCommand, 400)}\``);
+        } else if (verifyOk === false) {
+            const vLabel =
+                verifyExitCode === null ? 'rejected or error' : `exit ${verifyExitCode}`;
+            parts.push(`  verify failed (${vLabel}): \`${clipShellOutput(verifyShellCommand, 400)}\``);
+            if (verifyStdout?.trim()) {
+                parts.push(`  verify stdout: ${clipShellOutput(verifyStdout, 800)}`);
+            }
+            if (verifyStderr?.trim()) {
+                parts.push(`  verify stderr: ${clipShellOutput(verifyStderr, 1500)}`);
+            }
+        }
+    }
+    if (stdout.trim()) {
+        parts.push(`  stdout: ${clipShellOutput(stdout, 1200)}`);
+    }
+    if (stderr.trim()) {
+        parts.push(`  stderr: ${clipShellOutput(stderr, 3500)}`);
+    }
+    if (!stdout.trim() && !stderr.trim()) {
+        parts.push('  *(no stdout/stderr)*');
+    }
+    return parts.join('\n');
+}
+
+type ShellFileListEntry = { relativePath: string; size: number; mtimeMs: number };
+
+async function fetchShellFileListing(params: {
+    apiBase: string;
+    token: string;
+    relativeDir: string;
+    maxFiles?: number;
+}): Promise<ShellFileListEntry[]> {
+    const { apiBase, token, relativeDir, maxFiles = 400 } = params;
+    try {
+        const res = await axios.get(`${apiBase}/shell-engine/file/list`, {
+            params: { relativeDir, maxFiles },
+            timeout: 60_000,
+            headers: { 'X-API-Token': token },
+            validateStatus: () => true,
+        });
+        if (res.status !== 200) {
+            return [];
+        }
+        const body = res.data as { files?: unknown };
+        if (!body || !Array.isArray(body.files)) {
+            return [];
+        }
+        const out: ShellFileListEntry[] = [];
+        for (const row of body.files) {
+            if (!row || typeof row !== 'object') continue;
+            const o = row as Record<string, unknown>;
+            const rp = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
+            if (!rp) continue;
+            const size = typeof o.size === 'number' ? o.size : 0;
+            const mtimeMs = typeof o.mtimeMs === 'number' ? o.mtimeMs : 0;
+            out.push({ relativePath: rp, size, mtimeMs });
+        }
+        return out;
+    } catch {
+        return [];
+    }
+}
+
+function fileMtimeMapFromListing(list: ShellFileListEntry[]): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const f of list) {
+        m.set(f.relativePath.replace(/\\/g, '/'), f.mtimeMs);
+    }
+    return m;
+}
+
+/** Paths that are new or have a newer mtime than the last recorded snapshot (skip user-upload inputs). */
+function collectThreadWorkspaceOutputPaths(params: {
+    preSnapshot: Map<string, number>;
+    currentListing: ShellFileListEntry[];
+    skipPaths: Set<string>;
+}): string[] {
+    const { preSnapshot, currentListing, skipPaths } = params;
+    const toImport: string[] = [];
+    for (const f of currentListing) {
+        const rel = f.relativePath.replace(/\\/g, '/');
+        if (skipPaths.has(rel)) continue;
+        const prev = preSnapshot.get(rel);
+        if (prev === undefined || f.mtimeMs > prev) {
+            toImport.push(rel);
+        }
+    }
+    return toImport;
+}
+
+const SHELL_IMPORT_MAX_BYTES = 45 * 1024 * 1024;
+
+async function tryImportShellRelativeFile(params: {
+    rel: string;
+    apiBase: string;
+    token: string;
+    group: HydratedDocument<IChatShellRunGroup>;
+    threadId: mongoose.Types.ObjectId;
+    username: string;
+    todoId: mongoose.Types.ObjectId;
+    storageType: 's3' | 'gridfs';
+    s3Config: S3Config | undefined;
+    skipPaths: Set<string>;
+}): Promise<{ ok: true; fileLine: string; normalizedPath: string } | { ok: false }> {
+    const { rel, apiBase, token, group, threadId, username, todoId, storageType, s3Config, skipPaths } = params;
+    const normalized = rel.replace(/\\/g, '/');
+    if (skipPaths.has(normalized)) {
+        return { ok: false };
+    }
+    if (normalized.includes('..')) {
+        return { ok: false };
+    }
+
+    try {
+        logStep(9, 'file/read GET', { relativePath: normalized });
+        const fileRes = await axios.get(`${apiBase}/shell-engine/file/read`, {
+            params: { relativePath: normalized },
+            responseType: 'arraybuffer',
+            timeout: 60_000,
+            headers: { 'X-API-Token': token },
+            validateStatus: () => true,
+        });
+        logStep(9, 'file/read response', { relativePath: normalized, httpStatus: fileRes.status });
+        if (fileRes.status !== 200 || !fileRes.data) {
+            return { ok: false };
+        }
+        const buf = Buffer.from(fileRes.data as ArrayBuffer);
+        if (buf.length > SHELL_IMPORT_MAX_BYTES) {
+            logStep(9, 'skip file import — too large', { relativePath: normalized, bytes: buf.length });
+            return { ok: false };
+        }
+        const ct =
+            (typeof fileRes.headers['content-type'] === 'string'
+                ? fileRes.headers['content-type']
+                : 'application/octet-stream') || 'application/octet-stream';
+        const baseName = normalized.split('/').pop() || `shell-file-${todoId}`;
+        const fileExtension = path.extname(baseName) || '.bin';
+
+        const fileRecordObj = (await ModelUserFileUpload.create({
+            username,
+            fileUploadPath: `ai-notes-xyz/${username}/temp/${Date.now()}.temp`,
+            storageType,
+        })) as IUserFileUpload;
+
+        const fileNameStem = fileRecordObj._id.toString();
+        const objectKey = constructFeatureUploadObjectKey(
+            username,
+            String(threadId),
+            fileNameStem,
+            fileExtension,
+        );
+
+        const put = await putFile({
+            fileName: objectKey,
+            fileContent: buf,
+            contentType: ct,
+            storageType,
+            s3Config,
+            metadata: {
+                source: 'chatShellRun',
+                threadId: String(threadId),
+                groupId: String(group._id),
+            },
+        });
+
+        logStep(9, 'putFile', { relativePath: normalized, success: put.success, fileId: put.fileId });
+        if (!put.success || !put.fileId) {
+            await ModelUserFileUpload.deleteOne({ _id: fileRecordObj._id });
+            return { ok: false };
+        }
+
+        let summary = `[binary ${buf.length} bytes]`;
+        if (ct.startsWith('text/') || ct.includes('json') || ct.includes('xml')) {
+            const asText = buf.toString('utf8');
+            summary = asText.slice(0, 2000);
+            if (asText.length > 2000) summary += '…';
+        }
+
+        /** Same key as uploadFile / getFile: ai-notes-xyz/{user}/features/{threadId}/{uploadId}{ext}. */
+        const downloadKey = objectKey;
+
+        const updateData: Record<string, unknown> = {
+            fileUploadPath: objectKey,
+            storageType,
+            parentEntityId: String(threadId),
+            contentType: ct,
+            originalName: baseName,
+            size: buf.length,
+        };
+        if (storageType === 'gridfs' && mongoose.Types.ObjectId.isValid(put.fileId)) {
+            updateData.gridFsId = new mongoose.Types.ObjectId(put.fileId);
+        }
+        await ModelUserFileUpload.findOneAndUpdate({ _id: fileRecordObj._id }, { $set: updateData });
+
+        await ModelChatShellGeneratedFile.create({
+            chatShellRunGroupId: group._id,
+            threadId,
+            username,
+            todoId,
+            relativePath: normalized,
+            storedFileUrl: downloadKey,
+            fileName: baseName,
+            mimeType: ct,
+            summary,
+            createdAtUtc: new Date(),
+        });
+
+        logStep(9, 'ChatShellGeneratedFile + userFileUpload', { baseName, downloadKey });
+        return {
+            ok: true,
+            fileLine: `- ${baseName} (shell \`${normalized}\`) — download: GET getFile with query \`fileName\` set to (URL-encoded) \`${downloadKey}\`.`,
+            normalizedPath: normalized,
+        };
+    } catch (fileErr) {
+        logStep(9, 'file import catch', { relativePath: normalized, err: fileErr });
+        console.error('shell file import failed', fileErr);
+        return { ok: false };
+    }
 }
 
 async function shellStep1LoadThreadAndKeys(params: {
@@ -383,13 +1113,21 @@ async function shellStep5BuildTodoPlan(params: {
         {
             role: 'system',
             content:
-                'You break down the user request into a small ordered list of tasks. Reply with ONLY a JSON array (no markdown), max 6 objects. Each object: {"taskName": string, "executeStrategyBy": one of "llm","shellExecute","browserIntegration","internalKnowledgeAndLlm", "shellCommand": string}.\n' +
+                `You break down the user request into a small ordered list of tasks. Reply with ONLY a JSON array (no markdown), max ${SHELL_PLANNER_MAX_TODOS} objects. Each object: {"taskName": string, "executeStrategyBy": one of "llm","shellExecute","browserIntegration","internalKnowledgeAndLlm", "shellCommand": string, "verifyShellCommand"?: string}.\n` +
+                'For **shellExecute** only, optional **verifyShellCommand**: a second single-line command that runs **after** shellCommand succeeds; it must **exit 0** (e.g. `test -f out.pdf`, `node -e "require(\'fs\').accessSync(\'report.html\')"`). Same validation rules as shellCommand. Omit verifyShellCommand if not needed.\n' +
+                'ENVIRONMENT: shellExecute commands run on **Ubuntu 24.04 in Docker** with Node 24, npm, Python 3, pip, apt-get, build-essential, openssl, **chromium** (real binary at `/usr/bin/chromium`; **not** Ubuntu snap stub `chromium-browser`), ffmpeg, git, curl, and typical CLI tools — you may plan apt/npm/pip installs when needed.\n' +
                 'CRITICAL routing rules for this chat (Execute shell is ON):\n' +
+                '- You may **change the approach across steps**: e.g. first **shellExecute** only **writes** a script or data file into the thread workspace (materializing it in the sandbox), a later **shellExecute** **runs** that file (`bash ./x.sh`, `node ./y.js`), then more steps verify or convert output. Prefer several small shell steps over one huge line.\n' +
                 '- If the user asks for hashes (MD5/SHA), checksums, encodings, small deterministic computation, file metadata/size, or anything verifiable with a short CLI command, you MUST set executeStrategyBy to "shellExecute" and provide a non-empty single-line shellCommand.\n' +
-                '- Use "internalKnowledgeAndLlm" or "llm" ONLY for pure reasoning that cannot be answered or verified by a one-line shell command.\n' +
+                '- **Files / images / rotation / ffmpeg / ImageMagick:** Do **not** invent filenames. Use the **exact** path or basename from `[Shell workspace: ...]` in the prompt, or from a prior `ls` / `ls -F` todo output. Example: `convert myphoto.jpg -rotate 90 myphoto_rotated.jpg` — not `input_file` or `output_file.png`.\n' +
+                '- Use "internalKnowledgeAndLlm" or "llm" ONLY for pure reasoning that cannot be answered or verified by shell commands.\n' +
                 '- Use "browserIntegration" only when the user explicitly needs a web browser.\n' +
-                '- Prefer 1 shellExecute step when possible; at most 2 shellExecute steps.\n' +
-                'When executeStrategyBy is not "shellExecute", shellCommand must be an empty string.\n' +
+                '- Prefer fewer shellExecute steps when possible; allow up to **14** shellExecute steps when you need install + write files + run + post-process pipelines.\n' +
+                '- If the user wants a PDF but prefers not to depend on heavy installs, include an "llm" or "internalKnowledgeAndLlm" step for HTML/Markdown they can print to PDF in a browser.\n' +
+                '- Every shellExecute shellCommand is validated: ONE physical line; no backticks; no real newlines; no unquoted | ; & at the outer shell level; no $ or ${ outside single-quoted spans (use bash -c \'...\' for inner scripts that need && or $). Semicolons inside node -e JavaScript are allowed while bash still sees you inside the opening ".\n' +
+                '- For **datetime HTML → weasyprint** flows, prefer the **7c Node GOLDEN one-liner** from system guidance (not python3 -c with styled HTML — inner `"` break validation).\n' +
+                '- **Install weasyprint**: apt step only (`apt-get ... weasyprint`); do not chain `pip install weasyprint` (PEP 668 / exit 1).\n' +
+                'When executeStrategyBy is not "shellExecute", shellCommand and verifyShellCommand must be empty strings.\n' +
                 SHELL_EXECUTE_COMMAND_GUIDANCE,
         },
         {
@@ -505,11 +1243,14 @@ async function shellStep6PersistTodos(params: {
             executeStrategyBy: t.executeStrategyBy,
             taskName: t.taskName,
             shellCommand: t.shellCommand,
+            verifyShellCommand: (t.verifyShellCommand || '').trim(),
             status: 'pending',
             orderIndex: i,
+            attemptCount: 0,
             stdout: '',
             stderr: '',
             exitCode: null,
+            verifyExitCode: null,
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
         });
@@ -595,12 +1336,51 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
     username: string;
     storageType: 's3' | 'gridfs';
     s3Config: S3Config | undefined;
-}): Promise<{ ok: true; data: Pick<ShellRunCtx, 'shellLines' | 'fileLines'> }> {
-    const { todos, todoDocs, apiBase, token, group, threadId, username, storageType, s3Config } = params;
+    workspaceInputPaths: string[];
+    shellPrimaryMinAttempt: number;
+    shellPrimaryMaxAttempt: number;
+    llmConfig: LlmConfigNonNull;
+    convo: string;
+    latestUserText: string;
+}): Promise<{ ok: true; data: Pick<ShellRunCtx, 'shellLines' | 'fileLines' | 'shellFailureAppendix'> }> {
+    const {
+        todos,
+        todoDocs,
+        apiBase,
+        token,
+        group,
+        threadId,
+        username,
+        storageType,
+        s3Config,
+        workspaceInputPaths,
+        shellPrimaryMinAttempt,
+        shellPrimaryMaxAttempt,
+        llmConfig,
+        convo,
+        latestUserText,
+    } = params;
 
     logStep(9, 'execute todo loop start', { todoCount: todos.length });
     const shellLines: string[] = [];
     const fileLines: string[] = [];
+    let shellExecuteAttempted = false;
+    let shellExecuteAllFailed = true;
+
+    const threadDir = shellThreadWorkspaceRelativeDir(threadId);
+    const initialListing = await fetchShellFileListing({
+        apiBase,
+        token,
+        relativeDir: threadDir,
+        maxFiles: 400,
+    });
+    const preSnapshot = fileMtimeMapFromListing(initialListing);
+    const skipPaths = new Set(workspaceInputPaths.map((p) => p.replace(/\\/g, '/')));
+    logStep(9, 'workspace snapshot', {
+        threadDir,
+        preFileCount: initialListing.length,
+        skipInputCount: skipPaths.size,
+    });
 
     for (let i = 0; i < todos.length; i++) {
         const t = todos[i];
@@ -621,155 +1401,352 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
             continue;
         }
 
-        const safeCmd = sanitizeShellCommand(t.shellCommand);
-        if (!safeCmd) {
-            logStep(9, 'rejected by sanitize', { index: i });
+        shellExecuteAttempted = true;
+
+        const validated = validateShellCommand(t.shellCommand);
+        if (!validated.ok) {
+            logStep(9, 'rejected by validateShellCommand', { index: i, reason: validated.reason });
             await ModelChatShellRunTodo.findByIdAndUpdate(todoId, {
                 $set: {
                     status: 'failed',
-                    stderr: 'Invalid or unsafe shell command',
+                    stderr: validated.reason,
+                    verifyShellCommand: (t.verifyShellCommand || '').trim(),
+                    attemptCount: 0,
+                    verifyExitCode: null,
                     updatedAtUtc: new Date(),
                 },
             });
-            shellLines.push(`- **${t.taskName}**: rejected command`);
+            shellLines.push(
+                `- **${t.taskName}** (rejected before run): ${validated.reason}\n  draft command (truncated): \`${clipShellOutput(t.shellCommand || '', 500)}\``,
+            );
             continue;
         }
+        const safeCmd = validated.cmd;
+        const minAttempt = shellPrimaryMinAttempt;
+        const maxAttempt = shellPrimaryMaxAttempt;
+        let currentCmd = safeCmd;
+        let timeoutMs = shellExecuteTimeoutMs(currentCmd);
+        let axiosTimeoutMs = Math.min(240_000, timeoutMs + 60_000);
+        const convoTail = convo.slice(-8000);
 
-        logStep(9, 'POST execute', { index: i, url: `${apiBase}/shell-engine/run-shell/execute`, commandPreview: safeCmd.slice(0, 200) });
-
-        await ModelChatShellRunTodo.findByIdAndUpdate(todoId, {
-            $set: { status: 'running', updatedAtUtc: new Date() },
+        logStep(9, 'POST execute (with retries + LLM revise)', {
+            index: i,
+            url: `${apiBase}/shell-engine/run-shell/execute`,
+            commandPreview: currentCmd.slice(0, 200),
+            timeoutMs,
+            minAttempt,
+            maxAttempt,
+            cwd: threadDir,
         });
 
-        try {
-            const execRes = await axios.post(
-                `${apiBase}/shell-engine/run-shell/execute`,
-                { command: safeCmd, timeoutMs: 60_000 },
-                {
-                    timeout: 90_000,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Token': token,
-                    },
-                    validateStatus: () => true,
-                }
-            );
+        const failedAttemptLog: string[] = [];
+        let lastStdout = '';
+        let lastStderr = '';
+        let lastExitCode: number | null = null;
+        let lastHttpOk = false;
+        let lastTimedOut = false;
+        let attemptsUsed = 0;
+        let primarySuccess = false;
 
-            logStep(9, 'execute HTTP response', { index: i, httpStatus: execRes.status });
-
-            const body = execRes.data as Record<string, unknown>;
-            const stdout = typeof body.stdout === 'string' ? body.stdout : '';
-            const stderr = typeof body.stderr === 'string' ? body.stderr : '';
-            const exitCode = typeof body.exitCode === 'number' ? body.exitCode : null;
-
+        for (let attempt = minAttempt; attempt <= maxAttempt; attempt++) {
             await ModelChatShellRunTodo.findByIdAndUpdate(todoId, {
-                $set: {
-                    status: execRes.status === 200 ? 'done' : 'failed',
-                    stdout: stdout.slice(0, 50_000),
-                    stderr: stderr.slice(0, 50_000),
-                    exitCode,
-                    updatedAtUtc: new Date(),
-                },
+                $set: { status: 'running', updatedAtUtc: new Date() },
             });
 
-            logStep(9, 'todo DB updated after execute', {
-                index: i,
-                exitCode,
-                stdoutLen: stdout.length,
-                stderrLen: stderr.length,
+            const once = await postShellExecuteOnce({
+                apiBase,
+                token,
+                threadDir,
+                command: currentCmd,
+                timeoutMs,
+                axiosTimeoutMs,
             });
+            attemptsUsed += 1;
 
-            shellLines.push(
-                `- **${t.taskName}** (exit ${exitCode ?? 'n/a'}):\n  \`${safeCmd}\`\n  stdout: ${stdout.slice(0, 1500)}${stdout.length > 1500 ? '…' : ''}`,
+            if (!once.ok) {
+                lastStdout = '';
+                lastStderr = once.message;
+                lastExitCode = null;
+                lastHttpOk = false;
+                lastTimedOut = false;
+                failedAttemptLog.push(
+                    `[attempt ${attempt}/${maxAttempt}] axios/network error\n${once.message}`,
+                );
+                if (attempt < maxAttempt) {
+                    const revised = await llmMaybeReviseShellCommandForRetry({
+                        llmConfig,
+                        taskName: t.taskName,
+                        latestUserText,
+                        convoTail,
+                        originalPlannerCommand: safeCmd,
+                        currentCommand: currentCmd,
+                        attemptIndex: attempt,
+                        maxAttempts: maxAttempt,
+                        transportFailed: true,
+                        stdout: '',
+                        stderr: once.message,
+                        exitCode: null,
+                        timedOut: false,
+                        httpOk: false,
+                    });
+                    if (revised) {
+                        failedAttemptLog.push(
+                            `[LLM retry strategy] using revised command before attempt ${attempt + 1}/${maxAttempt}: ${clipShellOutput(revised, 500)}`,
+                        );
+                        currentCmd = revised;
+                        timeoutMs = shellExecuteTimeoutMs(currentCmd);
+                        axiosTimeoutMs = Math.min(240_000, timeoutMs + 60_000);
+                    }
+                    await delay(SHELL_RETRY_BACKOFF_MS);
+                    continue;
+                }
+                break;
+            }
+
+            lastStdout = once.stdout;
+            lastStderr = once.stderr;
+            lastExitCode = once.exitCode;
+            lastHttpOk = once.httpOk;
+            lastTimedOut = once.timedOut;
+
+            const attemptOk = once.httpOk && once.exitCode === 0 && !once.timedOut;
+            if (attemptOk) {
+                primarySuccess = true;
+                break;
+            }
+            failedAttemptLog.push(
+                `[attempt ${attempt}/${maxAttempt}] exit=${once.exitCode} timedOut=${once.timedOut} httpOk=${once.httpOk}\n${clipShellOutput(`${once.stdout}\n${once.stderr}`, 2000)}`,
             );
+            if (attempt < maxAttempt) {
+                const revised = await llmMaybeReviseShellCommandForRetry({
+                    llmConfig,
+                    taskName: t.taskName,
+                    latestUserText,
+                    convoTail,
+                    originalPlannerCommand: safeCmd,
+                    currentCommand: currentCmd,
+                    attemptIndex: attempt,
+                    maxAttempts: maxAttempt,
+                    transportFailed: false,
+                    stdout: once.stdout,
+                    stderr: once.stderr,
+                    exitCode: once.exitCode,
+                    timedOut: once.timedOut,
+                    httpOk: once.httpOk,
+                });
+                if (revised) {
+                    failedAttemptLog.push(
+                        `[LLM retry strategy] using revised command before attempt ${attempt + 1}/${maxAttempt}: ${clipShellOutput(revised, 500)}`,
+                    );
+                    currentCmd = revised;
+                    timeoutMs = shellExecuteTimeoutMs(currentCmd);
+                    axiosTimeoutMs = Math.min(240_000, timeoutMs + 60_000);
+                }
+                await delay(SHELL_RETRY_BACKOFF_MS);
+            }
+        }
 
-            const combined = `${stdout}\n${stderr}`;
-            const paths = extractShellRelativePaths(combined);
-            logStep(9, 'path scan', { pathCount: paths.length, paths });
+        const mergedPrimaryStderr =
+            [...failedAttemptLog, lastStderr].filter((s) => s.trim()).join('\n---\n').slice(0, 50_000) ||
+            lastStderr.slice(0, 50_000);
 
-            for (const rel of paths) {
-                try {
-                    logStep(9, 'file/read GET', { relativePath: rel });
-                    const fileRes = await axios.get(`${apiBase}/shell-engine/file/read`, {
-                        params: { relativePath: rel },
-                        responseType: 'arraybuffer',
-                        timeout: 60_000,
-                        headers: { 'X-API-Token': token },
-                        validateStatus: () => true,
-                    });
-                    logStep(9, 'file/read response', { relativePath: rel, httpStatus: fileRes.status });
-                    if (fileRes.status !== 200 || !fileRes.data) {
-                        logStep(9, 'skip file import', { relativePath: rel });
-                        continue;
+        let finalStatus: 'done' | 'failed' = 'failed';
+        let finalStdout = lastStdout.slice(0, 50_000);
+        let finalStderr = mergedPrimaryStderr;
+        let finalExitCode = lastExitCode;
+        let verifyExitCode: number | null = null;
+        let verifyStdout = '';
+        let verifyStderr = '';
+        let verifyOk: boolean | undefined;
+        let verifyFailureTimedOut = false;
+        let verifyFailureHttpOk = false;
+        const verifyRaw = (t.verifyShellCommand || '').trim();
+
+        if (primarySuccess && verifyRaw) {
+            const vv = validateShellCommand(verifyRaw);
+            if (!vv.ok) {
+                finalStatus = 'failed';
+                verifyOk = false;
+                verifyExitCode = null;
+                verifyFailureTimedOut = false;
+                verifyFailureHttpOk = false;
+                finalStderr = `${mergedPrimaryStderr}\n[verify command rejected]\n${vv.reason}`.slice(0, 50_000);
+            } else {
+                const verifyTimeoutMs = shellExecuteTimeoutMs(vv.cmd);
+                const verifyAxiosMs = Math.min(240_000, verifyTimeoutMs + 60_000);
+                const vOnce = await postShellExecuteOnce({
+                    apiBase,
+                    token,
+                    threadDir,
+                    command: vv.cmd,
+                    timeoutMs: verifyTimeoutMs,
+                    axiosTimeoutMs: verifyAxiosMs,
+                });
+                if (!vOnce.ok) {
+                    verifyOk = false;
+                    verifyExitCode = null;
+                    verifyStderr = vOnce.message;
+                    verifyFailureTimedOut = false;
+                    verifyFailureHttpOk = false;
+                    finalStatus = 'failed';
+                    finalStderr = `${mergedPrimaryStderr}\n[verify failed] axios\n${vOnce.message}`.slice(0, 50_000);
+                } else {
+                    verifyStdout = vOnce.stdout;
+                    verifyStderr = vOnce.stderr;
+                    verifyExitCode = vOnce.exitCode;
+                    const vOk = vOnce.httpOk && vOnce.exitCode === 0 && !vOnce.timedOut;
+                    verifyOk = vOk;
+                    if (vOk) {
+                        finalStatus = 'done';
+                    } else {
+                        finalStatus = 'failed';
+                        verifyFailureTimedOut = vOnce.timedOut;
+                        verifyFailureHttpOk = vOnce.httpOk;
+                        finalStderr =
+                            `${mergedPrimaryStderr}\n[verify failed] exit=${vOnce.exitCode} timedOut=${vOnce.timedOut} httpOk=${vOnce.httpOk}\n${(vOnce.stderr || vOnce.stdout || '').slice(0, 12_000)}`.slice(
+                                0,
+                                50_000,
+                            );
                     }
-                    const buf = Buffer.from(fileRes.data as ArrayBuffer);
-                    const ct =
-                        (typeof fileRes.headers['content-type'] === 'string'
-                            ? fileRes.headers['content-type']
-                            : 'application/octet-stream') || 'application/octet-stream';
-                    const baseName = rel.split('/').pop() || `shell-file-${todoId}`;
-                    const storedName = `shell/${String(group._id)}/${baseName}`;
-
-                    const put = await putFile({
-                        fileName: storedName,
-                        fileContent: buf,
-                        contentType: ct,
-                        storageType,
-                        s3Config,
-                        metadata: {
-                            source: 'chatShellRun',
-                            threadId: String(threadId),
-                            groupId: String(group._id),
-                        },
-                    });
-
-                    logStep(9, 'putFile', { relativePath: rel, success: put.success, fileId: put.fileId });
-                    if (!put.success || !put.fileId) {
-                        continue;
-                    }
-
-                    let summary = `[binary ${buf.length} bytes]`;
-                    if (ct.startsWith('text/') || ct.includes('json') || ct.includes('xml')) {
-                        summary = buf.toString('utf8').slice(0, 2000);
-                        if (buf.toString('utf8').length > 2000) summary += '…';
-                    }
-
-                    await ModelChatShellGeneratedFile.create({
-                        chatShellRunGroupId: group._id,
-                        threadId,
-                        username,
-                        todoId,
-                        relativePath: rel,
-                        storedFileUrl: put.fileId,
-                        fileName: baseName,
-                        mimeType: ct,
-                        summary,
-                        createdAtUtc: new Date(),
-                    });
-
-                    fileLines.push(`- ${baseName} (from shell path \`${rel}\`) — file id: \`${put.fileId}\``);
-                    logStep(9, 'ChatShellGeneratedFile created', { baseName, fileId: put.fileId });
-                } catch (fileErr) {
-                    logStep(9, 'file import catch', { relativePath: rel, err: fileErr });
-                    console.error('shell file import failed', fileErr);
                 }
             }
-        } catch (cmdErr) {
-            logStep(9, 'axios execute catch', { index: i, err: cmdErr });
-            console.error('shell execute failed', cmdErr);
-            await ModelChatShellRunTodo.findByIdAndUpdate(todoId, {
-                $set: {
-                    status: 'failed',
-                    stderr: cmdErr instanceof Error ? cmdErr.message : 'execute error',
-                    updatedAtUtc: new Date(),
-                },
+        } else if (primarySuccess) {
+            finalStatus = 'done';
+            verifyOk = undefined;
+        }
+
+        if (finalStatus === 'done') {
+            shellExecuteAllFailed = false;
+        }
+
+        await ModelChatShellRunTodo.findByIdAndUpdate(todoId, {
+            $set: {
+                status: finalStatus,
+                stdout: finalStdout,
+                stderr: finalStderr,
+                exitCode: finalExitCode,
+                attemptCount: attemptsUsed,
+                verifyExitCode,
+                updatedAtUtc: new Date(),
+            },
+        });
+
+        logStep(9, 'todo DB updated after execute', {
+            index: i,
+            primarySuccess,
+            finalStatus,
+            attemptsUsed,
+            hasVerify: Boolean(verifyRaw),
+            verifyOk,
+        });
+
+        let summaryExitCode = lastExitCode;
+        let summaryTimedOut = lastTimedOut;
+        let summaryHttpOk = lastHttpOk;
+        if (primarySuccess && !verifyRaw) {
+            summaryExitCode = lastExitCode;
+            summaryTimedOut = false;
+            summaryHttpOk = true;
+        } else if (primarySuccess && verifyRaw) {
+            if (verifyOk === true) {
+                summaryExitCode = lastExitCode;
+                summaryTimedOut = false;
+                summaryHttpOk = true;
+            } else if (verifyOk === false) {
+                summaryExitCode = verifyExitCode !== null && verifyExitCode !== undefined ? verifyExitCode : 1;
+                summaryTimedOut = verifyFailureTimedOut;
+                summaryHttpOk = verifyFailureHttpOk;
+            }
+        }
+
+        shellLines.push(
+            formatShellTodoResultLine({
+                taskName: t.taskName,
+                safeCmd: currentCmd,
+                exitCode: summaryExitCode,
+                stdout: finalStdout,
+                stderr: finalStderr,
+                timedOut: summaryTimedOut,
+                httpOk: summaryHttpOk,
+                primaryAttemptsUsed: attemptsUsed,
+                primaryMaxAttempts: maxAttempt,
+                verifyShellCommand: primarySuccess && verifyRaw ? verifyRaw : undefined,
+                verifyOk: primarySuccess && verifyRaw ? verifyOk : undefined,
+                verifyExitCode: primarySuccess && verifyRaw ? verifyExitCode : undefined,
+                verifyStdout: primarySuccess && verifyRaw ? verifyStdout : undefined,
+                verifyStderr: primarySuccess && verifyRaw ? verifyStderr : undefined,
+            }),
+        );
+
+        if (finalStatus === 'done') {
+            const combined = `${finalStdout}\n${finalStderr}`;
+            const fromStdout = extractShellRelativePaths(combined);
+            const postListing = await fetchShellFileListing({
+                apiBase,
+                token,
+                relativeDir: threadDir,
+                maxFiles: 400,
             });
-            shellLines.push(`- **${t.taskName}**: command failed`);
+            const fromScan = collectThreadWorkspaceOutputPaths({
+                preSnapshot,
+                currentListing: postListing,
+                skipPaths,
+            });
+            const paths = [...new Set([...fromStdout, ...fromScan])];
+            logStep(9, 'path scan', {
+                fromStdout: fromStdout.length,
+                fromScan: fromScan.length,
+                merged: paths.length,
+                paths,
+            });
+
+            for (const rel of paths) {
+                const imp = await tryImportShellRelativeFile({
+                    rel,
+                    apiBase,
+                    token,
+                    group,
+                    threadId,
+                    username,
+                    todoId,
+                    storageType,
+                    s3Config,
+                    skipPaths,
+                });
+                if (imp.ok) {
+                    fileLines.push(imp.fileLine);
+                    const meta = postListing.find((f) => f.relativePath.replace(/\\/g, '/') === imp.normalizedPath);
+                    preSnapshot.set(imp.normalizedPath, meta?.mtimeMs ?? Date.now());
+                }
+            }
         }
     }
 
-    logStep(9, 'execute loop finished', { shellLineCount: shellLines.length, fileLineCount: fileLines.length });
-    return { ok: true, data: { shellLines, fileLines } };
+    const shellFailureAppendix =
+        shellExecuteAttempted && shellExecuteAllFailed && fileLines.length === 0
+            ? [
+                  '',
+                  '**Why shell may have failed**',
+                  '',
+                  '- **apt / npm / pip**: Ubuntu **24.04**; **PEP 668** blocks system `pip install` — use **apt**, **npm**, or **`python3 -m venv .venv && .venv/bin/pip`**. For weasyprint, **apt package only**; drop `pip install weasyprint` from the install line.',
+                  '- **PDF / heavy libs**: install in the **thread workspace** (shell cwd) before `require()` / imports. Use `bash -c \'...\'` when you need `&&` inside one shellExecute. Prefer **Node** to write HTML before weasyprint.',
+                  '- **Fallback**: ask the model in normal chat for an **HTML** or **Markdown** version you can print to PDF in the browser, or split the work into smaller shell steps.',
+                  '- **Exit 1 with no output**: often a broken `node -e` string (real newline inside the command, or `${` / `$` expanded by the shell). Commands must be one line; use `+` or `.join()` to build HTML in JavaScript.',
+                  '- **Rejected before run (`;` / chaining)**: `python3 -c "..."` plus HTML with **`style="..."`** toggles bash double-quotes — use the **Node golden one-liner** from shell guidance (no `"` inside the HTML fragment) or `bash -c \'...\'`.',
+                  '- **Python SyntaxError after backslash**: in `python3 -c "..."`, never use `strftime(\\\'...\\\')` or f-strings with mixed quotes — prefer the **Node** golden one-liner for HTML files.',
+                  '- **weasyprint FileNotFoundError**: the HTML file must exist in the **same thread cwd**; the HTML step must **exit 0** before weasyprint (often failed because the prior step was rejected or used bad quoting).',
+                  '- **ImageMagick `convert` / ffmpeg "No such file"**: the input path must be a **real basename** in the thread cwd (from `[Shell workspace: ...]` or `ls` output), not a placeholder like `input_file`.',
+                  '- **Chromium / screenshot "requires the chromium snap"**: use **`chromium`** (or `/usr/bin/chromium`) with `--headless=new --no-sandbox --disable-dev-shm-usage`, not **`chromium-browser`** (Ubuntu snap stub; snap is not available in Docker).',
+                  '- **HTTP error** on a step: the shell API rejected the request (bad cwd, auth, etc.) or returned an error body — the next line under stderr should show `[shell-engine HTTP …]` with the server message. Upgrade/restart the shell service if timeout caps mismatch.',
+              ].join('\n')
+            : '';
+
+    logStep(9, 'execute loop finished', {
+        shellLineCount: shellLines.length,
+        fileLineCount: fileLines.length,
+        shellFailureAppendixLen: shellFailureAppendix.length,
+    });
+    return { ok: true, data: { shellLines, fileLines, shellFailureAppendix } };
 }
 
 async function shellStep10WriteSummaryAndCompleteGroup(params: {
@@ -780,8 +1757,10 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
     nonShellSummary: string;
     shellLines: string[];
     fileLines: string[];
+    shellFailureAppendix: string;
 }): Promise<{ ok: true }> {
-    const { threadId, username, actionDatetimeObj, group, nonShellSummary, shellLines, fileLines } = params;
+    const { threadId, username, actionDatetimeObj, group, nonShellSummary, shellLines, fileLines, shellFailureAppendix } =
+        params;
 
     logStep(10, 'build summary message');
     const summaryBody = [
@@ -795,12 +1774,25 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
         '',
         '**Imported files**',
         fileLines.length ? fileLines.join('\n') : '(none)',
+        shellFailureAppendix,
     ].join('\n');
 
-    logStep(10, 'ModelChatLlm.create shell-run', { summaryBodyLength: summaryBody.length });
+    const artifactPlain = await buildShellRunArtifactV1({
+        chatShellRunGroupId: group._id,
+        threadId,
+        username,
+    });
+    const shellRunArtifactV1 = mapPlainArtifactToChatSubdocument({ plain: artifactPlain });
+
+    logStep(10, 'ModelChatLlm.create shell-run', {
+        summaryBodyLength: summaryBody.length,
+        artifactTodoCount: shellRunArtifactV1.todos.length,
+        artifactFileCount: shellRunArtifactV1.importedFiles.length,
+    });
     await ModelChatLlm.create({
         type: 'text',
         content: summaryBody,
+        shellRunArtifactV1,
         username,
         threadId,
         isAi: true,
@@ -851,9 +1843,41 @@ export async function runChatShellForThread(params: {
             nonShellSummary: '',
             shellLines: [],
             fileLines: [],
+            shellFailureAppendix: '',
             storageType: 'gridfs',
             s3Config: undefined,
         };
+
+        const workspaceUpload = await uploadRecentUserFilesToShellWorkspace({
+            threadId: merged.threadId,
+            username: merged.username,
+            apiBase: merged.apiBase,
+            token: merged.token,
+            userKeyDoc: merged.userKeyDoc,
+            keys: merged.keys,
+        });
+        if (workspaceUpload.hintForPlanner) {
+            logStep(3, 'upload user files to shell workspace', {
+                paths: workspaceUpload.relativePaths,
+            });
+            merged.latestUserText = `${merged.latestUserText}\n\n${workspaceUpload.hintForPlanner}`.trim();
+            merged.convo = `${merged.convo}\n\n${workspaceUpload.hintForPlanner}`.trim();
+        }
+
+        const threadWs = shellThreadWorkspaceRelativeDir(merged.threadId);
+        const uploadBasenames = workspaceUpload.relativePaths
+            .map((p) => p.split('/').pop() || p)
+            .filter(Boolean);
+        const outputDirHint =
+            `[Shell workspace cwd is ${threadWs} (commands run here). Write NEW outputs as basenames in this folder (e.g. report.pdf, out.html) so they are imported. ` +
+            (uploadBasenames.length
+                ? `**Reference these uploaded files by exact basename in shellCommand** (same cwd): ${uploadBasenames.join(', ')}. Do not use placeholders like input_file or output_file.png.`
+                : 'If the user attached a file, list with `ls -F` then use the real basename in convert/ffmpeg/node.') +
+            ' Todos run in array order: you may use one shellExecute step only to materialize a file (e.g. run.sh or data.json), then a later shellExecute to run it (e.g. bash ./run.sh or node ./tool.js).]';
+        if (!merged.latestUserText.includes('[Shell workspace cwd')) {
+            merged.latestUserText = `${merged.latestUserText}\n\n${outputDirHint}`.trim();
+            merged.convo = `${merged.convo}\n\n${outputDirHint}`.trim();
+        }
 
         const s5 = await shellStep5BuildTodoPlan({
             llmConfig: merged.llmConfig,
@@ -884,6 +1908,9 @@ export async function runChatShellForThread(params: {
         merged.storageType = s8.data.storageType;
         merged.s3Config = s8.data.s3Config;
 
+        const { minAttempt: shellPrimaryMinAttempt, maxAttempt: shellPrimaryMaxAttempt } =
+            resolvePrimaryAttemptRangeFromThread(merged.thread);
+
         const s9 = await shellStep9ExecuteTodosAndImportFiles({
             todos: merged.todos,
             todoDocs: merged.todoDocs,
@@ -894,9 +1921,16 @@ export async function runChatShellForThread(params: {
             username: merged.username,
             storageType: merged.storageType,
             s3Config: merged.s3Config,
+            workspaceInputPaths: workspaceUpload.relativePaths,
+            shellPrimaryMinAttempt,
+            shellPrimaryMaxAttempt,
+            llmConfig: merged.llmConfig,
+            convo: merged.convo,
+            latestUserText: merged.latestUserText,
         });
         merged.shellLines = s9.data.shellLines;
         merged.fileLines = s9.data.fileLines;
+        merged.shellFailureAppendix = s9.data.shellFailureAppendix;
 
         await shellStep10WriteSummaryAndCompleteGroup({
             threadId: merged.threadId,
@@ -906,6 +1940,7 @@ export async function runChatShellForThread(params: {
             nonShellSummary: merged.nonShellSummary,
             shellLines: merged.shellLines,
             fileLines: merged.fileLines,
+            shellFailureAppendix: merged.shellFailureAppendix,
         });
 
         return { success: true };

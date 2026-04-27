@@ -8,6 +8,7 @@ import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserFileUpload } from '../../schema/schemaUser/SchemaUserFileUpload.schema';
 import IUserFileUpload from '../../types/typesSchema/typesUser/SchemaUserFileUpload.types';
 import { getFile, putFile, deleteFile } from '../../utils/upload/uploadFunc';
+import { constructFeatureUploadObjectKey } from '../../utils/upload/constructFeatureUploadObjectKey';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 
@@ -57,9 +58,25 @@ router.get(
                 return res.status(404).json({ message: fileData.error || 'File not found' });
             }
 
-            const contentType = mime.getType(fileRecord.originalName || fileRecord.fileUploadPath) || 'application/octet-stream';
+            const contentType =
+                fileRecord.contentType ||
+                mime.getType(fileRecord.originalName || fileRecord.fileUploadPath) ||
+                'application/octet-stream';
             res.setHeader('Content-Type', contentType);
-            res.setHeader('Content-Disposition', `inline; filename="${fileRecord.originalName || fileRecord.fileUploadPath}"`);
+            const safeName = (fileRecord.originalName || path.basename(fileRecord.fileUploadPath) || 'file').replace(
+                /["\r\n]/g,
+                '_',
+            );
+            const isPdf =
+                contentType.toLowerCase().includes('pdf') || safeName.toLowerCase().endsWith('.pdf');
+            const isShellGenerated = fileRecord.fileUploadPath.startsWith('shell/');
+            const inlinePreview =
+                req.query.inline === '1' ||
+                req.query.preview === '1' ||
+                req.query.disposition === 'inline';
+            const disposition =
+                isPdf && isShellGenerated && !inlinePreview ? 'attachment' : 'inline';
+            res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}"`);
             res.setHeader('Content-Length', fileData.content.length.toString());
             res.send(fileData.content);
         } catch (error) {
@@ -69,24 +86,15 @@ router.get(
     }
 );
 
-// Helper function to construct file path (for backward compatibility)
 const constructFilePath = (
     username: string,
     parentEntityId: string,
     fileName: string,
     fileExtension: string
-): { filePath: string, success: boolean } => {
-    let returnObj = {
-        success: false,
-        filePath: '',
-    };
-
-    // Construct: ai-notes-xyz/{username}/features/{parentEntityId}/{fileName}{extension}
-    // Example: ai-notes-xyz/john123/features/507f1f77bcf86cd799439011/myfile.pdf
-    returnObj.filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}${fileExtension}`;
-    returnObj.success = true;
-    return returnObj;
-};
+): { filePath: string; success: boolean } => ({
+    success: true,
+    filePath: constructFeatureUploadObjectKey(username, parentEntityId, fileName, fileExtension),
+});
 
 // Upload File API
 router.post(

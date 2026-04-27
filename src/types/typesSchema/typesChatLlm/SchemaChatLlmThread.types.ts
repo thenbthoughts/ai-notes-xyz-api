@@ -54,6 +54,11 @@ export interface IChatLlmThread extends Document {
     /** Persisted on thread; older documents may omit this field */
     executeShell?: boolean;
 
+    /** Inclusive attempt index start for each shell todo primary command (default 1). */
+    shellExecuteMinAttempts?: number;
+    /** Inclusive attempt index end for each shell todo primary command (default 3; max 10). */
+    shellExecuteMaxAttempts?: number;
+
     // auth
     username: string;
 

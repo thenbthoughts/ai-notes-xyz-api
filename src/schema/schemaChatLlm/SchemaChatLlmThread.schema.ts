@@ -110,6 +110,14 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Boolean,
         default: false,
     },
+    shellExecuteMinAttempts: {
+        type: Number,
+        default: 1,
+    },
+    shellExecuteMaxAttempts: {
+        type: Number,
+        default: 3,
+    },
 
     // auth
     username: { type: String, required: true, default: '', index: true, },
