@@ -12,7 +12,10 @@ export async function validateOpencodeHealth(
 
     try {
         // Force native ESM dynamic import at runtime (TS CommonJS transform can turn import() into require()).
-        const { createOpencodeClient } = await (0, eval)('import("@opencode-ai/sdk/v2")');
+        const importOpencodeSdk = new Function(
+            'return import("@opencode-ai/sdk/v2");'
+        ) as () => Promise<typeof import('@opencode-ai/sdk/v2')>;
+        const { createOpencodeClient } = await importOpencodeSdk();
         const client = createOpencodeClient({
             baseUrl: trimmedBase,
             headers: {
