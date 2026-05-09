@@ -83,7 +83,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     // answer engine
     answerEngine: {
         type: String,
-        enum: ['conciseAnswer', 'answerMachine'],
+        enum: ['conciseAnswer', 'answerMachine', 'answerMachine3'],
         default: 'conciseAnswer',
     },
 
@@ -103,6 +103,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     answerMachineUsedWebSearch: {
         type: Boolean,
         default: false,
+    },
+    answerMachineMaxReasoningStepsPerIteration: {
+        type: Number,
+        default: 8,
+        min: 1,
+        max: 50,
     },
 
     /** When true, run shell prep before the next AI reply (concise stream or Answer Machine) */

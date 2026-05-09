@@ -6,6 +6,8 @@ import { ModelChatLlm } from '../../../schema/schemaChatLlm/SchemaChatLlm.schema
 import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema';
 import { ModelChatLlmAnswerMachine } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachine.schema';
+import { ModelAnswerMachineRequestV3 } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineRequestV3.schema';
+import { ModelAnswerMachineSubQuestionV3 } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestionV3.schema';
 
 const router = Router();
 
@@ -58,10 +60,17 @@ router.post(
                 return res.status(404).json({ message: 'Thread not found' });
             }
 
-            const latestAnswerMachineRecord = await ModelChatLlmAnswerMachine.findOne({
-                threadId,
-                username: auth_username,
-            }).sort({ createdAt: -1 });
+            const useAnswerMachineV3 = thread.answerEngine === 'answerMachine3';
+
+            const latestAnswerMachineRecord = useAnswerMachineV3
+                ? await ModelAnswerMachineRequestV3.findOne({
+                      threadId,
+                      username: auth_username,
+                  }).sort({ createdAt: -1 })
+                : await ModelChatLlmAnswerMachine.findOne({
+                      threadId,
+                      username: auth_username,
+                  }).sort({ createdAt: -1 });
 
             if (!latestAnswerMachineRecord) {
                 return res.status(200).json({
@@ -73,9 +82,13 @@ router.post(
                 } as AnswerMachinePollingResponse);
             }
 
-            const subQuestions = await ModelAnswerMachineSubQuestion.find({
-                answerMachineRecordId: latestAnswerMachineRecord._id,
-            }).sort({ createdAtUtc: 1 });
+            const subQuestions = useAnswerMachineV3
+                ? await ModelAnswerMachineSubQuestionV3.find({
+                      answerMachineRequestV3Id: latestAnswerMachineRecord._id,
+                  }).sort({ createdAtUtc: 1 })
+                : await ModelAnswerMachineSubQuestion.find({
+                      answerMachineRecordId: latestAnswerMachineRecord._id,
+                  }).sort({ createdAtUtc: 1 });
 
             const subQuestionsStatus = {
                 pending: subQuestions.filter(sq => sq.status === 'pending').length,
@@ -114,22 +127,47 @@ router.post(
                 }
             }
 
-            const answerMachineJobs = await ModelChatLlmAnswerMachine.aggregate([
-                { $match: { threadId, username: auth_username } },
-                { $sort: { createdAt: -1 } },
-                {
-                    $lookup: {
-                        from: 'answerMachineSubQuestion',
-                        let: { localAnswerMachineRecordId: '$_id' },
-                        pipeline: [
-                            { $match: { $expr: { $eq: ['$answerMachineRecordId', '$$localAnswerMachineRecordId'] } } },
-                            { $sort: { createdAtUtc: 1 } },
-                            { $project: { _id: 1, question: 1, answer: 1, status: 1 } },
-                        ],
-                        as: 'subQuestions',
-                    },
-                },
-            ]);
+            const answerMachineJobs = useAnswerMachineV3
+                ? await ModelAnswerMachineRequestV3.aggregate([
+                      { $match: { threadId, username: auth_username } },
+                      { $sort: { createdAt: -1 } },
+                      {
+                          $lookup: {
+                              from: 'answerMachineSubQuestionV3',
+                              let: { localRequestId: '$_id' },
+                              pipeline: [
+                                  {
+                                      $match: {
+                                          $expr: { $eq: ['$answerMachineRequestV3Id', '$$localRequestId'] },
+                                      },
+                                  },
+                                  { $sort: { createdAtUtc: 1 } },
+                                  { $project: { _id: 1, question: 1, answer: 1, status: 1 } },
+                              ],
+                              as: 'subQuestions',
+                          },
+                      },
+                  ])
+                : await ModelChatLlmAnswerMachine.aggregate([
+                      { $match: { threadId, username: auth_username } },
+                      { $sort: { createdAt: -1 } },
+                      {
+                          $lookup: {
+                              from: 'answerMachineSubQuestion',
+                              let: { localAnswerMachineRecordId: '$_id' },
+                              pipeline: [
+                                  {
+                                      $match: {
+                                          $expr: { $eq: ['$answerMachineRecordId', '$$localAnswerMachineRecordId'] },
+                                      },
+                                  },
+                                  { $sort: { createdAtUtc: 1 } },
+                                  { $project: { _id: 1, question: 1, answer: 1, status: 1 } },
+                              ],
+                              as: 'subQuestions',
+                          },
+                      },
+                  ]);
 
             const jobs = answerMachineJobs.map((job) => ({
                 id: job._id.toString(),

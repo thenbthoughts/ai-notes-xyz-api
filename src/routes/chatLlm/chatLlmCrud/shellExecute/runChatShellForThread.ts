@@ -15,6 +15,8 @@ import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
 import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';
 import { uploadRecentUserFilesToShellWorkspace } from './shellWorkspaceFileUpload';
+import { shellLineToSpawnArgv } from './shellLineToSpawnArgv';
+import { importAnswerMachineOutputsAfterShellExecute } from '../answerMachineShellWorkspaceOutputs';
 import type { ChatShellExecuteStrategy } from '../../../../types/typesSchema/typesChatLlm/SchemaChatShellRunTodo.types';
 import type {
     IShellRunArtifactV1,
@@ -53,6 +55,9 @@ function resolvePrimaryAttemptRangeFromThread(thread: HydratedDocument<IChatLlmT
     minAttempt: number;
     maxAttempt: number;
 } {
+    if (thread.answerEngine === 'answerMachine3' && thread.executeShell) {
+        return { minAttempt: 1, maxAttempt: 1 };
+    }
     const envDefaultMax = resolveShellExecuteMaxAttempts();
     const rawMax = thread.shellExecuteMaxAttempts;
     let maxA =
@@ -171,10 +176,11 @@ const PYTHON_WRITE_DATETIME_HTML_ONE_LINER =
 /** Planner + shell: runtime is Ubuntu 24.04 Docker; steer toward valid one-line commands and safe quoting. */
 const SHELL_EXECUTE_COMMAND_GUIDANCE =
     'RUNTIME: Commands execute on **Ubuntu 24.04** in **Docker** (glibc, GNU userland). Includes **Node.js 24**, **npm**, **Python 3**, **apt-get**, **curl**, **wget**, **git**, **build-essential**, **openssl**, **Chromium**, **ffmpeg**, **sqlite3**, **zip/unzip**, and common CLI tools.\n' +
+    'BOUNDED EXECUTION: Each run has a **server timeout** (about **60s** by default; longer when the command clearly does **apt** / **npm** / **pip** installs). You may **install packages and run arbitrary CLI tools** suitable for the task, but avoid **infinite loops** (\`while true\`), **fork bombs**, **unbounded recursion**, **long-lived daemons** or listeners that never exit, and unbounded **tail -f** / blocking reads — design pipelines that **finish** and leave stdout or files in the workspace.\n' +
     'PYTHON / PIP (**PEP 668**): System Python is **externally-managed**. **Do not** append `&& pip install ...` after apt on distro Python — it fails with **externally-managed-environment** (exit 1) even when apt succeeded. For **WeasyPrint** use **only** `apt-get update -qq && apt-get install -y --no-install-recommends weasyprint` (Debian package is enough; skip pip). For PyPI-only packages use `python3 -m venv .venv && .venv/bin/pip install ...` in the thread cwd, or **npm/Node**.\n' +
-    'TOOL PRIORITY: **Prefer Node.js first** for workspace files, HTML, JSON, and `require(\'crypto\')` hashes — fewer quoting and PEP 668 issues than Python one-liners.\n' +
+    'TOOL PREFERENCE (fixed order when more than one approach fits): **(1) Node.js** — `node -e`, `node ./script.js`, npm/npx first; **(2) Python 3** — `python3 -c` or venv **only** when Node is awkward or clearly worse; **(3) other** — chromium, curl, standard POSIX utilities, etc., when the task clearly needs them.\n' +
     'SHELL COMMAND STYLE (each shellCommand is ONE physical line; the API rejects unquoted `|;&` shell chaining, backticks, and `$` / `${` outside single-quoted spans):\n' +
-    '1) Prefer **node -e** or **node ./script.js** for generating HTML/JSON/text; use **python3**, **bash -c**, **openssl**, **apt-get**, **npm** when clearly better.\n' +
+    '1) Default to **node -e** or **node ./script.js** for generating HTML/JSON/text and small logic; use **python3** only after Node is ruled out; use **bash -c**, **openssl**, **apt-get**, **npm** when clearly better.\n' +
     '2) To run multiple shell steps in one line, wrap them in **bash -c** with a **single-quoted** inner script, e.g. `bash -c \'apt-get update -qq && apt-get install -y --no-install-recommends PKG\'` so `&&` is not unquoted at the top level.\n' +
     '3) For npm: use `npm install <pkg> --no-save --no-fund --no-audit` (or **npx -y** when appropriate), then a later shellExecute that **require()**s the package from the same thread cwd.\n' +
     '4) If the thread has **[Shell workspace: ... uploaded ...]**, those strings are **real paths** on disk — copy them **verbatim** into shellCommand (or use the **basename** only, since cwd is that folder). **Never** use placeholders like `input_file`, `output_file.png`, `YOUR_IMAGE.jpg`, or `photo.ext` — ImageMagick `convert`/`magick`, ffmpeg, and `file` will fail with "No such file or directory". If names are unclear, first shellExecute: `ls -F` then use an actual name from stdout in the next todo.\n' +
@@ -233,8 +239,8 @@ function isValidStrategy(s: string): s is ChatShellExecuteStrategy {
 }
 
 /**
- * Shell commands are passed to bash as one argv string. Newlines break parsing; `$` / `${` expand
- * outside single-quoted spans; unquoted |;& chain multiple host-level commands (rejected).
+ * One-line shell string validated then parsed into `spawn(cmd, args, { shell: false })` on the shell engine.
+ * Newlines break parsing; `$` / `${` expand outside single-quoted spans; unquoted |;& at host level (rejected).
  */
 function validateShellCommand(raw: string | undefined): { ok: true; cmd: string } | { ok: false; reason: string } {
     if (typeof raw !== 'string' || !raw.trim()) {
@@ -367,6 +373,8 @@ async function tryGenerateShellTodoWithLlm(params: {
             role: 'system',
             content: `You output exactly one JSON object with keys "taskName" and "shellCommand" only. No markdown, no code fences.
 The shell runs on Ubuntu 24.04 in Docker (see RUNTIME in guidance). shellCommand must be a SINGLE physical line.
+You may install and run what the task needs, but each invocation is **time-limited** — avoid infinite loops, daemons that never exit, or unbounded blocking; the process must **finish**.
+When choosing a runtime, use **Node.js first**, **Python 3 second**, **other tools third** (same order as TOOL PREFERENCE in guidance).
 Forbidden: backticks, real newlines, unquoted | ; & at the top shell level, and $ / \${ outside single-quoted spans (bash expands them). Prefer **node -e** for HTML files. Semicolons inside node -e "..." JavaScript are OK while the outer bash double-quote is still open.
 ${SHELL_EXECUTE_COMMAND_GUIDANCE}
 Example MD5 of a literal string (no $):
@@ -533,10 +541,24 @@ async function postShellExecuteOnce(params: {
     axiosTimeoutMs: number;
 }): Promise<PostShellExecuteOnceOk | PostShellExecuteOnceErr> {
     const { apiBase, token, threadDir, command, timeoutMs, axiosTimeoutMs } = params;
+    const parsed = shellLineToSpawnArgv(command);
+    if (!parsed.ok) {
+        return {
+            ok: false,
+            message: `Shell command parse error (${parsed.reason}). Fix quoting or use bash -c with a single-quoted inner script.`,
+        };
+    }
     try {
         const execRes = await axios.post(
             `${apiBase}/shell-engine/run-shell/execute`,
-            { command, timeoutMs, cwd: threadDir },
+            {
+                cmd: parsed.cmd,
+                args: parsed.args,
+                /** Legacy shell engines (exec + single string) read `command` only; keep in sync for rollout */
+                command: command.trim(),
+                timeoutMs,
+                cwd: threadDir,
+            },
             {
                 timeout: axiosTimeoutMs,
                 headers: {
@@ -550,9 +572,14 @@ async function postShellExecuteOnce(params: {
         const body = execRes.data as Record<string, unknown>;
         let stdout = typeof body.stdout === 'string' ? body.stdout : '';
         let stderr = typeof body.stderr === 'string' ? body.stderr : '';
-        const exitCode = typeof body.exitCode === 'number' ? body.exitCode : null;
-        const timedOut = Boolean(body.timedOut);
         const httpOk = execRes.status === 200;
+        let exitCode = typeof body.exitCode === 'number' ? body.exitCode : null;
+        if (exitCode === null && httpOk) {
+            exitCode = 0;
+        } else if (exitCode === null && !httpOk) {
+            exitCode = 1;
+        }
+        const timedOut = Boolean(body.timedOut);
         if (!httpOk) {
             const apiMsg =
                 typeof body.message === 'string' && body.message.trim() !== ''
@@ -612,7 +639,8 @@ Reply with ONLY a JSON object (no markdown): {"decision":"same"|"revise","shellC
 Rules:
 - If the failure is transient or retrying unchanged is best, set decision to "same" and shellCommand to the exact current command (character-for-character).
 - If stderr or context suggests a different approach, set decision to "revise" and shellCommand to the full replacement line for the NEXT attempt only.
-- shellCommand must pass the same constraints as production: ONE line; no backticks; no real newlines; no unquoted | ; & at the outer shell level; no $ or \${ outside single-quoted spans (use bash -c '...' for inner &&).
+- When revising implementation, prefer **Node.js** first, **Python 3** second, **other CLIs** third — same order as production shell guidance.
+- shellCommand must pass the same constraints as production: ONE line; no backticks; no real newlines; no unquoted | ; & at the outer shell level; no $ or \${ outside single-quoted spans (use bash -c '...' for inner &&); the command must **finish** within the timeout (no infinite loops, fork bombs, or never-ending daemons).
 - Never suggest snap or chromium-browser (snap stub in Docker). For headless web screenshots use chromium with --headless=new --no-sandbox --disable-dev-shm-usage, not chromium-browser.
 - Do not suggest pip on system Python after apt (PEP 668).
 Guidance excerpt:
@@ -1116,6 +1144,7 @@ async function shellStep5BuildTodoPlan(params: {
                 `You break down the user request into a small ordered list of tasks. Reply with ONLY a JSON array (no markdown), max ${SHELL_PLANNER_MAX_TODOS} objects. Each object: {"taskName": string, "executeStrategyBy": one of "llm","shellExecute","browserIntegration","internalKnowledgeAndLlm", "shellCommand": string, "verifyShellCommand"?: string}.\n` +
                 'For **shellExecute** only, optional **verifyShellCommand**: a second single-line command that runs **after** shellCommand succeeds; it must **exit 0** (e.g. `test -f out.pdf`, `node -e "require(\'fs\').accessSync(\'report.html\')"`). Same validation rules as shellCommand. Omit verifyShellCommand if not needed.\n' +
                 'ENVIRONMENT: shellExecute commands run on **Ubuntu 24.04 in Docker** with Node 24, npm, Python 3, pip, apt-get, build-essential, openssl, **chromium** (real binary at `/usr/bin/chromium`; **not** Ubuntu snap stub `chromium-browser`), ffmpeg, git, curl, and typical CLI tools — you may plan apt/npm/pip installs when needed.\n' +
+                'TOOL ORDER: **Node.js first**, **Python 3 second** (only when Node is awkward), **other CLIs third** (e.g. chromium, curl) when the task clearly requires them.\n' +
                 'CRITICAL routing rules for this chat (Execute shell is ON):\n' +
                 '- You may **change the approach across steps**: e.g. first **shellExecute** only **writes** a script or data file into the thread workspace (materializing it in the sandbox), a later **shellExecute** **runs** that file (`bash ./x.sh`, `node ./y.js`), then more steps verify or convert output. Prefer several small shell steps over one huge line.\n' +
                 '- If the user asks for hashes (MD5/SHA), checksums, encodings, small deterministic computation, file metadata/size, or anything verifiable with a short CLI command, you MUST set executeStrategyBy to "shellExecute" and provide a non-empty single-line shellCommand.\n' +
@@ -1950,4 +1979,149 @@ export async function runChatShellForThread(params: {
         await failGroup(msg);
         return { success: false, error: msg };
     }
+}
+
+/**
+ * Runs one validated shell command in the thread workspace (same `/shell-engine/run-shell/execute` API as chat shell).
+ * The API parses the one-line string into `cmd` + `args` (`spawn`, no shell); the shell engine returns 200 + `exitCode` / `timedOut`.
+ * Used by Answer Machine V3 `shell` sub-questions so arithmetic/tooling runs for real instead of LLM hallucination.
+ *
+ * Seeds recent user uploads into the sandbox (same paths as chat shell). When `answerMachineContext` is provided,
+ * newly produced workspace files are imported into storage and recorded under `answerMachineFilesV3`.
+ */
+export async function executeAnswerMachineShellCommand(params: {
+    threadId: mongoose.Types.ObjectId;
+    username: string;
+    shellCommand: string;
+    answerMachineContext?: {
+        answerMachineRequestV3Id: mongoose.Types.ObjectId;
+        answerMachineIteration?: number;
+        answerMachineSubQuestionV3Id?: mongoose.Types.ObjectId | null;
+    };
+}): Promise<
+    | {
+          ok: true;
+          stdout: string;
+          stderr: string;
+          exitCode: number | null;
+          timedOut: boolean;
+          httpOk: boolean;
+          artifactSummaryAppendix: string;
+      }
+    | { ok: false; error: string }
+> {
+    const s1 = await shellStep1LoadThreadAndKeys({
+        threadId: params.threadId,
+        username: params.username,
+    });
+    if (!s1.ok) {
+        return { ok: false, error: s1.error };
+    }
+
+    const validated = validateShellCommand(params.shellCommand);
+    if (!validated.ok) {
+        return { ok: false, error: validated.reason };
+    }
+
+    const threadDir = shellThreadWorkspaceRelativeDir(params.threadId);
+    const workspaceUpload = await uploadRecentUserFilesToShellWorkspace({
+        threadId: params.threadId,
+        username: params.username,
+        apiBase: s1.data.apiBase,
+        token: s1.data.token,
+        userKeyDoc: s1.data.userKeyDoc,
+        keys: s1.data.keys,
+    });
+
+    const skipWorkspaceInputs = new Set(workspaceUpload.relativePaths);
+
+    const listingBeforeExecute = await axios
+        .get(`${s1.data.apiBase}/shell-engine/file/list`, {
+            params: { relativeDir: threadDir, maxFiles: 400 },
+            timeout: 60_000,
+            headers: { 'X-API-Token': s1.data.token },
+            validateStatus: () => true,
+        })
+        .catch(() => null);
+
+    const preExecuteMtimes = new Map<string, number>();
+    if (
+        listingBeforeExecute &&
+        listingBeforeExecute.status === 200 &&
+        listingBeforeExecute.data &&
+        typeof listingBeforeExecute.data === 'object'
+    ) {
+        const files = (listingBeforeExecute.data as { files?: unknown }).files;
+        if (Array.isArray(files)) {
+            for (const row of files) {
+                if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+                const o = row as Record<string, unknown>;
+                const rp = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
+                if (!rp) continue;
+                const mtimeMs = typeof o.mtimeMs === 'number' ? o.mtimeMs : 0;
+                preExecuteMtimes.set(rp, mtimeMs);
+            }
+        }
+    }
+
+    const timeoutMs = shellExecuteTimeoutMs(validated.cmd);
+    const axiosTimeoutMs = Math.min(240_000, timeoutMs + 60_000);
+
+    const once = await postShellExecuteOnce({
+        apiBase: s1.data.apiBase,
+        token: s1.data.token,
+        threadDir,
+        command: validated.cmd,
+        timeoutMs,
+        axiosTimeoutMs,
+    });
+
+    if (!once.ok) {
+        return { ok: false, error: once.message };
+    }
+
+    let artifactSummaryAppendix = '';
+
+    if (params.answerMachineContext) {
+        const storageType = s1.data.userKeyDoc.fileStorageType === 's3' ? 's3' : 'gridfs';
+        const k = s1.data.keys;
+        const s3Config: S3Config | undefined =
+            storageType === 's3'
+                ? {
+                      region: k.apiKeyS3Region || 'auto',
+                      endpoint: k.apiKeyS3Endpoint || '',
+                      accessKeyId: k.apiKeyS3AccessKeyId || '',
+                      secretAccessKey: k.apiKeyS3SecretAccessKey || '',
+                      bucketName: k.apiKeyS3BucketName || '',
+                  }
+                : undefined;
+
+        const importedBatch = await importAnswerMachineOutputsAfterShellExecute({
+            apiBase: s1.data.apiBase,
+            token: s1.data.token,
+            threadId: params.threadId,
+            username: params.username,
+            threadWorkspaceRelativeDir: threadDir,
+            stdout: once.stdout,
+            stderr: once.stderr,
+            workspaceSkipPaths: skipWorkspaceInputs,
+            preExecuteMtimes,
+            storageType,
+            s3Config,
+            answerMachineRequestV3Id: params.answerMachineContext.answerMachineRequestV3Id,
+            answerMachineIteration: params.answerMachineContext.answerMachineIteration,
+            answerMachineSubQuestionV3Id: params.answerMachineContext.answerMachineSubQuestionV3Id ?? null,
+        });
+        artifactSummaryAppendix = importedBatch.summaryAppendix;
+    }
+
+    return {
+        ok: true,
+        stdout: once.stdout,
+        stderr: once.stderr,
+        exitCode: once.exitCode,
+        timedOut: once.timedOut,
+        httpOk: once.httpOk,
+        artifactSummaryAppendix,
+    };
 }
