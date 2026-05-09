@@ -71,6 +71,18 @@ interface IUserApiKey extends Document {
     shellEngineUrl: string;
     shellEngineToken: string;
 
+    /** OpenCode HTTP API (Basic auth) */
+    apiKeyOpencodeValid: boolean;
+    opencodeUrl: string;
+    opencodeUsername: string;
+    opencodePassword: string;
+
+    /** OpenCode + ai-notes-xyz-shell token */
+    apiKeyOpencodeWithShellValid: boolean;
+    opencodeWithShellUrl: string;
+    opencodeWithShellShellUrl: string;
+    opencodeWithShellShellToken: string;
+
     // user-email-verify
     userEmailVerifyOtp: number;
     userEmailVerifyEmail: string;

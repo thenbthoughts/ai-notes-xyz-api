@@ -37,6 +37,8 @@ router.post(
                 smtpValid: false,
                 telegramValid: false,
                 shellEngineValid: false,
+                apiKeyOpencodeValid: false,
+                apiKeyOpencodeWithShellValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -74,6 +76,8 @@ router.post(
                             smtpValid: false,
                             telegramValid: false,
                             shellEngineValid: false,
+                            apiKeyOpencodeValid: false,
+                            apiKeyOpencodeWithShellValid: false,
                         }
                     },
                     {
@@ -164,6 +168,21 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.shellEngineValid === 'boolean') {
                     resultApiKey.shellEngineValid = resultUserInfoApi.shellEngineValid;
+                }
+            }
+
+            // OpenCode
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyOpencodeValid === 'boolean') {
+                    resultApiKey.apiKeyOpencodeValid = resultUserInfoApi.apiKeyOpencodeValid;
+                }
+            }
+
+            // OpenCode with shell
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.apiKeyOpencodeWithShellValid === 'boolean') {
+                    resultApiKey.apiKeyOpencodeWithShellValid =
+                        resultUserInfoApi.apiKeyOpencodeWithShellValid;
                 }
             }
 
