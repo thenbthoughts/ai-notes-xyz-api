@@ -14,8 +14,13 @@ import { validateOpencodeHealth } from '../../../../utils/opencode/validateOpenc
 import { getLlmConfig } from '../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
 import { trackAnswerMachineTokens } from '../answerMachineV2/helperFunction/tokenTracking';
 import { AM4_OPENCODE_DEFAULT_EXECUTOR_MODEL, AM4_OPENCODE_EXECUTOR_SYSTEM } from './am4OpencodeConstants';
-import { getAm4OpencodeConfig } from './am4ShellAndOpencodeConfig';
+import { getAm4OpencodeConfig, getAm4ShellUploadConfig } from './am4ShellAndOpencodeConfig';
 import { createAm4OpencodeClient, runAm4SessionPromptAndCollectAssistant, syncAm4OpencodeProviderCredentials } from './am4OpencodeClient';
+import {
+    ensureAm4ShellWorkDirectoryMarker,
+    syncAm4RequestAttachmentsIntoCanonicalShellLayout,
+    syncAm4AssistantOutputFilesFromShellToUserStorage,
+} from './am4FileTransferTools';
 import { opencodeModelFromLlmConfig } from './mapLlmConfigToOpencodeModel';
 
 const MAX_VERIFY_RETRIES_PER_STEP = 3;
@@ -387,6 +392,7 @@ const runSequentialReasoningLoopV4 = async ({
 
         const userApiKeyDoc = await ModelUserApiKey.findOne({ username: answerMachineRecord.username });
         const apiKey = getApiKeyByObject(userApiKeyDoc);
+        const shellEngineConfig = getAm4ShellUploadConfig(apiKey);
         const ocCfg = getAm4OpencodeConfig(apiKey);
         if (!ocCfg || !ocCfg.password) {
             return {
@@ -425,6 +431,45 @@ const runSequentialReasoningLoopV4 = async ({
             .filter((a) => a && typeof a === 'string' && a.trim())
             .map((a, i) => `${i + 1}. ${a.trim()}`)
             .join('\n');
+
+        const attachedDocsForSync = await ModelAnswerMachineFileV4.find({
+            answerMachineRequestV4Id,
+            uploadStatus: 'saved_to_shell',
+        }).lean();
+
+        if (shellEngineConfig && userApiKeyDoc) {
+            const am4UserProfileDocumentId = String(userApiKeyDoc._id);
+            try {
+                await ensureAm4ShellWorkDirectoryMarker({
+                    shellCfg: shellEngineConfig,
+                    userObjectId: am4UserProfileDocumentId,
+                    threadId: String(answerMachineRecord.threadId),
+                });
+                const canonicalInputSyncResult = await syncAm4RequestAttachmentsIntoCanonicalShellLayout({
+                    shellCfg: shellEngineConfig,
+                    apiKey,
+                    username: answerMachineRecord.username,
+                    userObjectId: am4UserProfileDocumentId,
+                    threadId: answerMachineRecord.threadId,
+                    attachments: attachedDocsForSync.map((d) => ({
+                        _id: d._id as mongoose.Types.ObjectId,
+                        storedFileUrl: d.storedFileUrl,
+                        fileName: d.fileName,
+                        mimeType: d.mimeType,
+                        shellRelativePath: d.shellRelativePath,
+                        uploadStatus: d.uploadStatus,
+                    })),
+                });
+                if (canonicalInputSyncResult.errors.length > 0) {
+                    console.warn(
+                        '[AM4] Canonical shell input sync:',
+                        canonicalInputSyncResult.errors.slice(0, 8).join(' | '),
+                    );
+                }
+            } catch (err) {
+                console.error('[AM4] Canonical shell input sync failed:', err);
+            }
+        }
 
         const attachedDocs = await ModelAnswerMachineFileV4.find({
             answerMachineRequestV4Id,
@@ -573,11 +618,18 @@ const runSequentialReasoningLoopV4 = async ({
                 `CURRENT STEP:\n${qText}\n\n` +
                 `Constraints: Use OpenCode capabilities only. Do not delegate file reading to an external “shell upload” service. Prefer deterministic tool use. Avoid infinite loops.`;
 
+            const am4ShellOutputDirectoryHint =
+                shellEngineConfig && userApiKeyDoc
+                    ? `\n\nDELIVERABLE FILES: Save any new user-visible artifacts under \`/ai-notes-xyz-shell-files/${String(userApiKeyDoc._id)}/chat/${String(answerMachineRecord.threadId)}/outputfile/<filename.ext>\` (same path as shell relative key \`ai-notes-xyz-shell-files/${String(userApiKeyDoc._id)}/chat/${String(answerMachineRecord.threadId)}/outputfile/<filename.ext>\`). Mention each filename in your final answer text.`
+                    : '';
+
+            const executorSystemWithWorkspaceHints = `${AM4_OPENCODE_EXECUTOR_SYSTEM}${am4ShellOutputDirectoryHint}`;
+
             const promptOutcome = await runAm4SessionPromptAndCollectAssistant({
                 client: opencodeClient,
                 sessionID: sessionId,
                 promptBody,
-                system: AM4_OPENCODE_EXECUTOR_SYSTEM,
+                system: executorSystemWithWorkspaceHints,
                 model: opencodeExecutorModel,
                 executorModelSource: mappedExecutorModel ? 'thread' : 'default',
                 threadLlmModelRaw: llmConfig.model,
@@ -604,6 +656,25 @@ const runSequentialReasoningLoopV4 = async ({
                     updatedAtUtc: new Date(),
                 },
             });
+
+            if (shellEngineConfig && userApiKeyDoc) {
+                try {
+                    const outputSync = await syncAm4AssistantOutputFilesFromShellToUserStorage({
+                        shellCfg: shellEngineConfig,
+                        apiKey,
+                        username: answerMachineRecord.username,
+                        userObjectId: String(userApiKeyDoc._id),
+                        threadId: answerMachineRecord.threadId,
+                        answerMachineRequestV4Id,
+                        assistantAnswerText: assistantText,
+                    });
+                    if (outputSync.attemptLog.length > 0) {
+                        console.log('[AM4] Output file sync:', outputSync.attemptLog.join('; '));
+                    }
+                } catch (err) {
+                    console.error('[AM4] Output file sync error:', err);
+                }
+            }
 
             const aText = assistantText;
             const ver = await verifySequentialStepAm4({

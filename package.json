@@ -6,7 +6,8 @@
     "start": "node -r dotenv/config build/index.js",
     "dev": "nodemon",
     "build": "tsc",
-    "dev:swc": "nodemon --config nodemon-swc.json"
+    "dev:swc": "nodemon --config nodemon-swc.json",
+    "verify:am4-paths": "ts-node --transpile-only scripts/verifyAm4FileTransferPaths.ts"
   },
   "keywords": [],
   "author": "",

@@ -49,6 +49,37 @@ export async function uploadBufferToShellEngine(params: {
     }
 }
 
+export async function readBufferFromShellEngine(params: {
+    baseUrl: string;
+    token: string;
+    relativePath: string;
+    timeoutMs?: number;
+}): Promise<
+    | { ok: true; buffer: Buffer; status: number }
+    | { ok: false; error: string; status?: number }
+> {
+    const url = `${params.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/read`;
+    try {
+        const res = await axios.get(url, {
+            params: { relativePath: params.relativePath },
+            responseType: 'arraybuffer',
+            timeout: params.timeoutMs ?? 120_000,
+            headers: { 'X-API-Token': params.token },
+            validateStatus: () => true,
+        });
+        if (res.status === 200 && res.data) {
+            return { ok: true, buffer: Buffer.from(res.data as ArrayBuffer), status: res.status };
+        }
+        const msg =
+            res.data && typeof res.data === 'object' && 'message' in (res.data as object)
+                ? String((res.data as { message?: unknown }).message)
+                : `HTTP ${res.status}`;
+        return { ok: false, error: msg, status: res.status };
+    } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
 export function sanitizePathSegment(name: string): string {
     const base = name.replace(/[/\\]/g, '_').replace(/\.\./g, '_').trim();
     const cleaned = base.replace(/[^\w.\-()+@[\] ]+/g, '_').slice(0, 200);
