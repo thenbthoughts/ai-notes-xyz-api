@@ -329,7 +329,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3' || answerEngine === 'answerMachine4') {
                     addData.answerEngine = answerEngine;
                 }
             };
@@ -598,7 +598,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3' || answerEngine === 'answerMachine4') {
                     updateData.answerEngine = answerEngine;
                 }
             };
