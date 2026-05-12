@@ -1,4 +1,4 @@
-import type { LlmConfig } from '../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
+import type { LlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { AM4_OPENROUTER_AUTO_FALLBACK_MODEL_ID } from './am4OpencodeConstants';
 
 /** Best-effort map from thread LLM config to OpenCode `model` selector shape. */

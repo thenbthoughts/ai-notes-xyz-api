@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
+import { ModelChatLlmAnswerMachineTokenRecord } from "../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema";
 
 
 /**

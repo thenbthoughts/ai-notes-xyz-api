@@ -7,8 +7,8 @@ import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.
 import { ModelChatLlmAnswerMachineTokenRecord } from '../../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema';
 import { IChatLlm } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
 import fetchLlmUnified, { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { trackAnswerMachineTokens } from '../../answerMachineV2/helperFunction/tokenTracking';
-import { getLlmConfig, LlmConfig } from '../../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
+import { trackAnswerMachineTokens } from '../../answerMachineShared/tokenTracking';
+import { getLlmConfig, LlmConfig } from '../../answerMachineShared/answerMachineGetLlmConfig';
 
 interface EvaluationResult {
     isSatisfactory: boolean;

@@ -11,8 +11,8 @@ import { AnswerMachineVerificationVerdictV4 } from '../../../../types/typesSchem
 import fetchLlmUnified from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { validateOpencodeHealth } from '../../../../utils/opencode/validateOpencodeHealth';
-import { getLlmConfig } from '../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
-import { trackAnswerMachineTokens } from '../answerMachineV2/helperFunction/tokenTracking';
+import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { trackAnswerMachineTokens } from '../answerMachineShared/tokenTracking';
 import { AM4_OPENCODE_DEFAULT_EXECUTOR_MODEL, AM4_OPENCODE_EXECUTOR_SYSTEM } from './am4OpencodeConstants';
 import { getAm4OpencodeConfig, getAm4ShellUploadConfig } from './am4ShellAndOpencodeConfig';
 import { createAm4OpencodeClient, runAm4SessionPromptAndCollectAssistant, syncAm4OpencodeProviderCredentials } from './am4OpencodeClient';

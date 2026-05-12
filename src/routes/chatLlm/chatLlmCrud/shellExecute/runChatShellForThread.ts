@@ -10,13 +10,12 @@ import { ModelChatShellRunTodo } from '../../../../schema/schemaChatLlm/SchemaSh
 import { ModelChatShellGeneratedFile } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellGeneratedFile.schema';
 import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
-import { getLlmConfig } from '../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
+import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
 import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';
 import { uploadRecentUserFilesToShellWorkspace } from './shellWorkspaceFileUpload';
 import { shellLineToSpawnArgv } from './shellLineToSpawnArgv';
-import { importAnswerMachineOutputsAfterShellExecute } from '../answerMachineShellWorkspaceOutputs';
 import type { ChatShellExecuteStrategy } from '../../../../types/typesSchema/typesChatLlm/SchemaChatShellRunTodo.types';
 import type {
     IShellRunArtifactV1,
@@ -55,9 +54,6 @@ function resolvePrimaryAttemptRangeFromThread(thread: HydratedDocument<IChatLlmT
     minAttempt: number;
     maxAttempt: number;
 } {
-    if (thread.answerEngine === 'answerMachine3' && thread.executeShell) {
-        return { minAttempt: 1, maxAttempt: 1 };
-    }
     const envDefaultMax = resolveShellExecuteMaxAttempts();
     const rawMax = thread.shellExecuteMaxAttempts;
     let maxA =
@@ -1979,149 +1975,4 @@ export async function runChatShellForThread(params: {
         await failGroup(msg);
         return { success: false, error: msg };
     }
-}
-
-/**
- * Runs one validated shell command in the thread workspace (same `/shell-engine/run-shell/execute` API as chat shell).
- * The API parses the one-line string into `cmd` + `args` (`spawn`, no shell); the shell engine returns 200 + `exitCode` / `timedOut`.
- * Used by Answer Machine V3 `shell` sub-questions so arithmetic/tooling runs for real instead of LLM hallucination.
- *
- * Seeds recent user uploads into the sandbox (same paths as chat shell). When `answerMachineContext` is provided,
- * newly produced workspace files are imported into storage and recorded under `answerMachineFilesV3`.
- */
-export async function executeAnswerMachineShellCommand(params: {
-    threadId: mongoose.Types.ObjectId;
-    username: string;
-    shellCommand: string;
-    answerMachineContext?: {
-        answerMachineRequestV3Id: mongoose.Types.ObjectId;
-        answerMachineIteration?: number;
-        answerMachineSubQuestionV3Id?: mongoose.Types.ObjectId | null;
-    };
-}): Promise<
-    | {
-          ok: true;
-          stdout: string;
-          stderr: string;
-          exitCode: number | null;
-          timedOut: boolean;
-          httpOk: boolean;
-          artifactSummaryAppendix: string;
-      }
-    | { ok: false; error: string }
-> {
-    const s1 = await shellStep1LoadThreadAndKeys({
-        threadId: params.threadId,
-        username: params.username,
-    });
-    if (!s1.ok) {
-        return { ok: false, error: s1.error };
-    }
-
-    const validated = validateShellCommand(params.shellCommand);
-    if (!validated.ok) {
-        return { ok: false, error: validated.reason };
-    }
-
-    const threadDir = shellThreadWorkspaceRelativeDir(params.threadId);
-    const workspaceUpload = await uploadRecentUserFilesToShellWorkspace({
-        threadId: params.threadId,
-        username: params.username,
-        apiBase: s1.data.apiBase,
-        token: s1.data.token,
-        userKeyDoc: s1.data.userKeyDoc,
-        keys: s1.data.keys,
-    });
-
-    const skipWorkspaceInputs = new Set(workspaceUpload.relativePaths);
-
-    const listingBeforeExecute = await axios
-        .get(`${s1.data.apiBase}/shell-engine/file/list`, {
-            params: { relativeDir: threadDir, maxFiles: 400 },
-            timeout: 60_000,
-            headers: { 'X-API-Token': s1.data.token },
-            validateStatus: () => true,
-        })
-        .catch(() => null);
-
-    const preExecuteMtimes = new Map<string, number>();
-    if (
-        listingBeforeExecute &&
-        listingBeforeExecute.status === 200 &&
-        listingBeforeExecute.data &&
-        typeof listingBeforeExecute.data === 'object'
-    ) {
-        const files = (listingBeforeExecute.data as { files?: unknown }).files;
-        if (Array.isArray(files)) {
-            for (const row of files) {
-                if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-                const o = row as Record<string, unknown>;
-                const rp = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
-                if (!rp) continue;
-                const mtimeMs = typeof o.mtimeMs === 'number' ? o.mtimeMs : 0;
-                preExecuteMtimes.set(rp, mtimeMs);
-            }
-        }
-    }
-
-    const timeoutMs = shellExecuteTimeoutMs(validated.cmd);
-    const axiosTimeoutMs = Math.min(240_000, timeoutMs + 60_000);
-
-    const once = await postShellExecuteOnce({
-        apiBase: s1.data.apiBase,
-        token: s1.data.token,
-        threadDir,
-        command: validated.cmd,
-        timeoutMs,
-        axiosTimeoutMs,
-    });
-
-    if (!once.ok) {
-        return { ok: false, error: once.message };
-    }
-
-    let artifactSummaryAppendix = '';
-
-    if (params.answerMachineContext) {
-        const storageType = s1.data.userKeyDoc.fileStorageType === 's3' ? 's3' : 'gridfs';
-        const k = s1.data.keys;
-        const s3Config: S3Config | undefined =
-            storageType === 's3'
-                ? {
-                      region: k.apiKeyS3Region || 'auto',
-                      endpoint: k.apiKeyS3Endpoint || '',
-                      accessKeyId: k.apiKeyS3AccessKeyId || '',
-                      secretAccessKey: k.apiKeyS3SecretAccessKey || '',
-                      bucketName: k.apiKeyS3BucketName || '',
-                  }
-                : undefined;
-
-        const importedBatch = await importAnswerMachineOutputsAfterShellExecute({
-            apiBase: s1.data.apiBase,
-            token: s1.data.token,
-            threadId: params.threadId,
-            username: params.username,
-            threadWorkspaceRelativeDir: threadDir,
-            stdout: once.stdout,
-            stderr: once.stderr,
-            workspaceSkipPaths: skipWorkspaceInputs,
-            preExecuteMtimes,
-            storageType,
-            s3Config,
-            answerMachineRequestV3Id: params.answerMachineContext.answerMachineRequestV3Id,
-            answerMachineIteration: params.answerMachineContext.answerMachineIteration,
-            answerMachineSubQuestionV3Id: params.answerMachineContext.answerMachineSubQuestionV3Id ?? null,
-        });
-        artifactSummaryAppendix = importedBatch.summaryAppendix;
-    }
-
-    return {
-        ok: true,
-        stdout: once.stdout,
-        stderr: once.stderr,
-        exitCode: once.exitCode,
-        timedOut: once.timedOut,
-        httpOk: once.httpOk,
-        artifactSummaryAppendix,
-    };
 }
