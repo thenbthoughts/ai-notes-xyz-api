@@ -329,7 +329,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3' || answerEngine === 'answerMachine4') {
                     addData.answerEngine = answerEngine;
                 }
             };
@@ -427,6 +427,11 @@ router.post(
                     addData.shellExecuteMinAttempts = shellMaxA;
                     addData.shellExecuteMaxAttempts = shellMaxA;
                 }
+            }
+
+            if (addData.answerEngine === 'answerMachine3' && addData.executeShell) {
+                addData.shellExecuteMinAttempts = 1;
+                addData.shellExecuteMaxAttempts = 1;
             }
 
             let systemPrompt = systemPromptForChatLlmThread;
@@ -593,7 +598,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine' || answerEngine === 'answerMachine3' || answerEngine === 'answerMachine4') {
                     updateData.answerEngine = answerEngine;
                 }
             };
@@ -699,6 +704,24 @@ router.post(
                 } else {
                     updateData.shellExecuteMinAttempts = effMax;
                     updateData.shellExecuteMaxAttempts = effMax;
+                }
+            }
+
+            const threadSnap = await ModelChatLlmThread.findOne({
+                _id: threadId,
+                username: res.locals.auth_username,
+            })
+                .select('answerEngine executeShell')
+                .lean();
+            if (threadSnap) {
+                const mergedEngine = (updateData.answerEngine as string | undefined) ?? threadSnap.answerEngine;
+                const mergedExecuteShell =
+                    typeof updateData.executeShell === 'boolean'
+                        ? updateData.executeShell
+                        : Boolean(threadSnap.executeShell);
+                if (mergedEngine === 'answerMachine3' && mergedExecuteShell) {
+                    updateData.shellExecuteMinAttempts = 1;
+                    updateData.shellExecuteMaxAttempts = 1;
                 }
             }
 

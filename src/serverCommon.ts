@@ -72,7 +72,7 @@ mongoose
     .connect(envKeys.MONGODB_URI)
     .then(() => {
         console.log('Connected to MongoDB');
-        initCron();
+        // initCron();
     })
     .catch((err) => {
         console.log('Error connecting to MongoDB', err);

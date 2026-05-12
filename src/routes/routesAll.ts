@@ -25,6 +25,7 @@ import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCru
 import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThreadsContextCrud.route';
 import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAutoNextMessage.route';
 import routesChatLlmPolling from './chatLlm/chatLlmPolling/answerMachinePolling.route';
+import routesAnswerMachineRequestV3Timeline from './chatLlm/chatLlmPolling/answerMachineRequestV3Timeline.route';
 import routesChatLlmTts from './chatLlm/chatLlmCrud/chatLlmTts.route';
 
 // dynamic data
@@ -118,6 +119,7 @@ router.use('/chat-llm/threads-crud', routesChatLlmThreadsCrud);
 router.use('/chat-llm/threads-context-crud', routesChatLlmThreadsContextCrud);
 router.use('/chat-llm/add-auto-next-message', routesChatLlmAddAutoNextMessage);
 router.use('/chat-llm/polling', routesChatLlmPolling);
+router.use('/chat-llm/polling', routesAnswerMachineRequestV3Timeline);
 router.use('/chat-llm/tts', routesChatLlmTts);
 
 // routes -> task

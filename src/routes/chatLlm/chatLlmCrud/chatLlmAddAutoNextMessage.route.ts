@@ -11,6 +11,8 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
 import answerMachineInitiateFunc from './answerMachineV2/answerMachineInitiateFunc';
+import answerMachineInitiateFuncV3 from './answerMachineV3/answerMachineInitiateFunc';
+import answerMachineInitiateFuncV4 from './answerMachineV4/answerMachineInitiateFuncV4';
 import { runChatShellForThread } from './shellExecute/runChatShellForThread';
 
 // Router
@@ -203,6 +205,132 @@ router.post(
             // answer machine
             const result = await answerMachineInitiateFunc({
                 messageId: messageId,
+                abortSignal: abortController.signal,
+            });
+
+            if (result.success === false) {
+                return res.status(500).json({ message: 'Server error', error: result.errorReason });
+            }
+
+            if (!abortController.signal.aborted) {
+                await ModelLlmPendingTaskCron.create({
+                    username: auth_username,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
+                    targetRecordId: threadId,
+                });
+            }
+
+            if (!abortController.signal.aborted && !res.writableEnded) {
+                return res.status(200).json({ message: 'Success' });
+            }
+            return;
+        } catch (error) {
+            if (abortController.signal.aborted) {
+                return;
+            }
+            console.error(error);
+            return res.status(500).json({ message: 'Server error', error: error });
+        } finally {
+            req.off('close', abortIfClientGone);
+        }
+    }
+);
+
+// Answer Machine 3 API (separate Mongoose collections / pipeline)
+router.post(
+    '/answerMachineV3',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        const abortController = new AbortController();
+        const abortIfClientGone = () => {
+            if (!res.writableEnded) {
+                abortController.abort();
+            }
+        };
+        req.on('close', abortIfClientGone);
+        try {
+            const auth_username = res.locals.auth_username;
+
+            let threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const lastMessage = await ModelChatLlm.findOne({
+                threadId: threadId,
+                username: auth_username,
+                isAi: false,
+            }).sort({ createdAt: -1 });
+            if (!lastMessage) {
+                return res.status(400).json({ message: 'Last message not found' });
+            }
+
+            const result = await answerMachineInitiateFuncV3({
+                messageId: lastMessage._id,
+                abortSignal: abortController.signal,
+            });
+
+            if (result.success === false) {
+                return res.status(500).json({ message: 'Server error', error: result.errorReason });
+            }
+
+            if (!abortController.signal.aborted) {
+                await ModelLlmPendingTaskCron.create({
+                    username: auth_username,
+                    taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
+                    targetRecordId: threadId,
+                });
+            }
+
+            if (!abortController.signal.aborted && !res.writableEnded) {
+                return res.status(200).json({ message: 'Success' });
+            }
+            return;
+        } catch (error) {
+            if (abortController.signal.aborted) {
+                return;
+            }
+            console.error(error);
+            return res.status(500).json({ message: 'Server error', error: error });
+        } finally {
+            req.off('close', abortIfClientGone);
+        }
+    }
+);
+
+// Answer Machine 4 (OpenCode + Shell file bridge)
+router.post(
+    '/answerMachineV4',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        const abortController = new AbortController();
+        const abortIfClientGone = () => {
+            if (!res.writableEnded) {
+                abortController.abort();
+            }
+        };
+        req.on('close', abortIfClientGone);
+        try {
+            const auth_username = res.locals.auth_username;
+
+            let threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const lastMessage = await ModelChatLlm.findOne({
+                threadId: threadId,
+                username: auth_username,
+                isAi: false,
+            }).sort({ createdAt: -1 });
+            if (!lastMessage) {
+                return res.status(400).json({ message: 'Last message not found' });
+            }
+
+            const result = await answerMachineInitiateFuncV4({
+                messageId: lastMessage._id,
                 abortSignal: abortController.signal,
             });
 

@@ -48,6 +48,18 @@ export interface tsUserApiKey {
     shellEngineValid: boolean;
     shellEngineUrl: string;
     shellEngineToken: string;
+
+    // OpenCode
+    apiKeyOpencodeValid: boolean;
+    opencodeUrl: string;
+    opencodeUsername: string;
+    opencodePassword: string;
+
+    // OpenCode + shell
+    apiKeyOpencodeWithShellValid: boolean;
+    opencodeWithShellUrl: string;
+    opencodeWithShellShellUrl: string;
+    opencodeWithShellShellToken: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -101,6 +113,18 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         shellEngineValid: false,
         shellEngineUrl: '',
         shellEngineToken: '',
+
+        // OpenCode
+        apiKeyOpencodeValid: false,
+        opencodeUrl: '',
+        opencodeUsername: '',
+        opencodePassword: '',
+
+        // OpenCode + shell
+        apiKeyOpencodeWithShellValid: false,
+        opencodeWithShellUrl: '',
+        opencodeWithShellShellUrl: '',
+        opencodeWithShellShellToken: '',
     } as tsUserApiKey;
 
     try {
@@ -232,6 +256,38 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.shellEngineToken === 'string') {
                 apiKey.shellEngineToken = apiKeyObject.shellEngineToken;
+            }
+
+            // OpenCode
+            if (typeof apiKeyObject.apiKeyOpencodeValid === 'boolean') {
+                if (apiKeyObject.apiKeyOpencodeValid) {
+                    apiKey.apiKeyOpencodeValid = true;
+                }
+            }
+            if (typeof apiKeyObject.opencodeUrl === 'string') {
+                apiKey.opencodeUrl = apiKeyObject.opencodeUrl;
+            }
+            if (typeof apiKeyObject.opencodeUsername === 'string') {
+                apiKey.opencodeUsername = apiKeyObject.opencodeUsername;
+            }
+            if (typeof apiKeyObject.opencodePassword === 'string') {
+                apiKey.opencodePassword = apiKeyObject.opencodePassword;
+            }
+
+            // OpenCode + shell
+            if (typeof apiKeyObject.apiKeyOpencodeWithShellValid === 'boolean') {
+                if (apiKeyObject.apiKeyOpencodeWithShellValid) {
+                    apiKey.apiKeyOpencodeWithShellValid = true;
+                }
+            }
+            if (typeof apiKeyObject.opencodeWithShellUrl === 'string') {
+                apiKey.opencodeWithShellUrl = apiKeyObject.opencodeWithShellUrl;
+            }
+            if (typeof apiKeyObject.opencodeWithShellShellUrl === 'string') {
+                apiKey.opencodeWithShellShellUrl = apiKeyObject.opencodeWithShellShellUrl;
+            }
+            if (typeof apiKeyObject.opencodeWithShellShellToken === 'string') {
+                apiKey.opencodeWithShellShellToken = apiKeyObject.opencodeWithShellShellToken;
             }
         }
         return apiKey;

@@ -8,6 +8,11 @@ import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema
 import { ModelUserTelegramConversationCache } from '../../schema/schemaUser/SchemaUserTelegramConversationCache';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
+import { validateOpencodeHealth } from '../../utils/opencode/validateOpencodeHealth';
+import {
+    parseOpenCodeServiceOrigin,
+    validateShellEngineEndpoints,
+} from '../../utils/shell/validateShellEngine';
 import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
@@ -407,134 +412,11 @@ router.post(
         try {
             const { shellEngineUrl, shellEngineToken } = req.body;
 
-            if (typeof shellEngineUrl !== 'string' || typeof shellEngineToken !== 'string') {
+            const shellCheck = await validateShellEngineEndpoints(shellEngineUrl, shellEngineToken);
+            if (!shellCheck.ok) {
                 return res.status(400).json({
                     success: '',
-                    error: 'Invalid request body',
-                });
-            }
-
-            const rawUrl = shellEngineUrl.trim();
-            const token = shellEngineToken.trim();
-
-            if (!rawUrl || !token) {
-                return res.status(400).json({
-                    success: '',
-                    error: 'Shell URL and token are required',
-                });
-            }
-
-            let parsed: URL;
-            try {
-                parsed = new URL(rawUrl);
-            } catch {
-                return res.status(400).json({
-                    success: '',
-                    error: 'Invalid shell service URL',
-                });
-            }
-
-            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-                return res.status(400).json({
-                    success: '',
-                    error: 'URL must use http or https',
-                });
-            }
-
-            const pathNorm = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
-            if (pathNorm !== '/' && pathNorm !== '/api') {
-                return res.status(400).json({
-                    success: '',
-                    error: 'Use the shell server origin only (e.g. http://localhost:2001/), not a subpath other than /api.',
-                });
-            }
-
-            const origin = `${parsed.protocol}//${parsed.host}`;
-            const apiBase = `${origin}/api`;
-
-            try {
-                const aboutRes = await axios.get<unknown>(`${apiBase}/shell-engine/about`, {
-                    timeout: 12_000,
-                    validateStatus: () => true,
-                });
-
-                const payload = aboutRes.data;
-                const isShellApp =
-                    aboutRes.status === 200 &&
-                    payload !== null &&
-                    typeof payload === 'object' &&
-                    !Array.isArray(payload) &&
-                    (payload as { app?: unknown }).app === 'ai-notes-xyz-shell';
-
-                if (!isShellApp) {
-                    return res.status(400).json({
-                        success: '',
-                        error:
-                            'Shell service validation failed. GET /api/shell-engine/about must return {"app":"ai-notes-xyz-shell"} (e.g. curl -s http://localhost:2001/api/shell-engine/about).',
-                    });
-                }
-            } catch (error) {
-                if (isAxiosError(error)) {
-                    console.error('Shell engine public about check:', error.message);
-                } else {
-                    console.error(error);
-                }
-                return res.status(400).json({
-                    success: '',
-                    error: 'Could not reach the shell service. Ensure ai-notes-xyz-shell is running at that origin (e.g. http://localhost:2001/).',
-                });
-            }
-
-            try {
-                const privateRes = await axios.get<unknown>(`${apiBase}/shell-engine/about/private`, {
-                    timeout: 12_000,
-                    headers: {
-                        'X-API-Token': token,
-                    },
-                    validateStatus: () => true,
-                });
-
-                if (privateRes.status === 503) {
-                    return res.status(400).json({
-                        success: '',
-                        error:
-                            'Shell service has no API_TOKEN configured. Set API_TOKEN in ai-notes-xyz-shell .env and restart (protected routes return 503 until then).',
-                    });
-                }
-
-                if (privateRes.status === 401) {
-                    return res.status(400).json({
-                        success: '',
-                        error:
-                            'Invalid shell token. Use the same value as API_TOKEN on ai-notes-xyz-shell in the X-API-Token header (see GET /api/shell-engine/about/private).',
-                    });
-                }
-
-                const privatePayload = privateRes.data;
-                const privateOk =
-                    privateRes.status === 200 &&
-                    privatePayload !== null &&
-                    typeof privatePayload === 'object' &&
-                    !Array.isArray(privatePayload) &&
-                    (privatePayload as { app?: unknown }).app === 'ai-notes-xyz-shell' &&
-                    (privatePayload as { validateToken?: unknown }).validateToken === true;
-
-                if (!privateOk) {
-                    return res.status(400).json({
-                        success: '',
-                        error:
-                            'Shell token check failed. GET /api/shell-engine/about/private must return 200 with {"app":"ai-notes-xyz-shell","validateToken":true} when the token is valid.',
-                    });
-                }
-            } catch (error) {
-                if (isAxiosError(error)) {
-                    console.error('Shell engine private about check:', error.message);
-                } else {
-                    console.error(error);
-                }
-                return res.status(400).json({
-                    success: '',
-                    error: 'Could not reach the shell service for the token check. Ensure ai-notes-xyz-shell is running.',
+                    error: shellCheck.error,
                 });
             }
 
@@ -544,12 +426,159 @@ router.post(
                 },
                 {
                     shellEngineValid: true,
-                    shellEngineUrl: origin,
-                    shellEngineToken: token,
+                    shellEngineUrl: shellCheck.origin,
+                    shellEngineToken: shellCheck.token,
                 },
                 {
                     new: true,
                 }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API OpenCode (HTTP Basic + SDK health)
+router.post(
+    '/updateUserApiOpencode',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const { opencodeUrl, opencodeUsername, opencodePassword } = req.body as {
+                opencodeUrl?: string;
+                opencodeUsername?: string;
+                opencodePassword?: string;
+            };
+
+            const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl : '';
+            const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
+            const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
+
+            const originParsed = parseOpenCodeServiceOrigin(urlRaw);
+            if ('error' in originParsed) {
+                return res.status(400).json({
+                    success: '',
+                    error: originParsed.error,
+                });
+            }
+
+            if (!user || !pass) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'OpenCode username and password are required',
+                });
+            }
+
+            const health = await validateOpencodeHealth(originParsed.origin, user, pass);
+            if (!health.ok) {
+                return res.status(400).json({
+                    success: '',
+                    error: health.error,
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { username: res.locals.auth_username },
+                {
+                    apiKeyOpencodeValid: true,
+                    opencodeUrl: originParsed.origin,
+                    opencodeUsername: user,
+                    opencodePassword: pass,
+                },
+                { new: true }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User API OpenCode with Shell (OpenCode health + shell about/private)
+router.post(
+    '/updateUserApiOpencodeWithShell',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const {
+                opencodeWithShellUrl,
+                opencodeUsername,
+                opencodePassword,
+                opencodeWithShellShellUrl,
+                opencodeWithShellShellToken,
+            } = req.body as {
+                opencodeWithShellUrl?: string;
+                opencodeUsername?: string;
+                opencodePassword?: string;
+                opencodeWithShellShellUrl?: string;
+                opencodeWithShellShellToken?: string;
+            };
+
+            const urlRaw = typeof opencodeWithShellUrl === 'string' ? opencodeWithShellUrl : '';
+            const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
+            const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
+
+            const originParsed = parseOpenCodeServiceOrigin(urlRaw);
+            if ('error' in originParsed) {
+                return res.status(400).json({
+                    success: '',
+                    error: originParsed.error,
+                });
+            }
+
+            if (!user || !pass) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'OpenCode username and password are required',
+                });
+            }
+
+            const health = await validateOpencodeHealth(originParsed.origin, user, pass);
+            if (!health.ok) {
+                return res.status(400).json({
+                    success: '',
+                    error: health.error,
+                });
+            }
+
+            const shellUrl =
+                typeof opencodeWithShellShellUrl === 'string' ? opencodeWithShellShellUrl : '';
+            const shellTok =
+                typeof opencodeWithShellShellToken === 'string'
+                    ? opencodeWithShellShellToken
+                    : '';
+
+            const shellCheck = await validateShellEngineEndpoints(shellUrl, shellTok);
+            if (!shellCheck.ok) {
+                return res.status(400).json({
+                    success: '',
+                    error: shellCheck.error,
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { username: res.locals.auth_username },
+                {
+                    apiKeyOpencodeWithShellValid: true,
+                    opencodeWithShellUrl: originParsed.origin,
+                    opencodeWithShellShellUrl: shellCheck.origin,
+                    opencodeWithShellShellToken: shellCheck.token,
+                    opencodeUsername: user,
+                    opencodePassword: pass,
+                },
+                { new: true }
             );
 
             return res.json({
@@ -1735,6 +1764,8 @@ router.post(
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
                 'shellEngine',
+                'opencode',
+                'opencodeWithShell',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1806,6 +1837,18 @@ router.post(
                     shellEngineValid: false,
                     shellEngineUrl: '',
                     shellEngineToken: '',
+                },
+                opencode: {
+                    apiKeyOpencodeValid: false,
+                    opencodeUrl: '',
+                    opencodeUsername: '',
+                    opencodePassword: '',
+                },
+                opencodeWithShell: {
+                    apiKeyOpencodeWithShellValid: false,
+                    opencodeWithShellUrl: '',
+                    opencodeWithShellShellUrl: '',
+                    opencodeWithShellShellToken: '',
                 },
             };
 
