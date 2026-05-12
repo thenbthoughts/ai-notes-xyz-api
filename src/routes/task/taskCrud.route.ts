@@ -690,6 +690,69 @@ router.post(
     }
 );
 
+// Open (not archived, not completed) task counts per status list — aggregation only
+router.post(
+    '/taskGetOpenCountsByTaskStatus',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_username = res.locals.auth_username;
+
+            await revalidateAllTaskWorkspace({
+                auth_username: auth_username,
+            });
+
+            let taskWorkspaceIdObj: mongoose.Types.ObjectId | null = null;
+
+            if (typeof req.body?.taskWorkspaceId === 'string') {
+                if (req.body.taskWorkspaceId.length === 24) {
+                    taskWorkspaceIdObj =
+                        mongoose.Types.ObjectId.createFromHexString(req.body.taskWorkspaceId) || null;
+                }
+            }
+
+            if (!taskWorkspaceIdObj) {
+                return res.json({
+                    message: 'Open counts by task status retrieved successfully',
+                    docs: [] as { taskStatusId: string; count: number }[],
+                });
+            }
+
+            const grouped = await ModelTask.aggregate([
+                {
+                    $match: {
+                        username: auth_username,
+                        taskWorkspaceId: taskWorkspaceIdObj,
+                        isArchived: false,
+                        isCompleted: false,
+                    },
+                },
+                {
+                    $group: {
+                        _id: '$taskStatusId',
+                        count: { $sum: 1 },
+                    },
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        taskStatusId: { $toString: '$_id' },
+                        count: 1,
+                    },
+                },
+            ]);
+
+            return res.json({
+                message: 'Open counts by task status retrieved successfully',
+                docs: grouped as { taskStatusId: string; count: number }[],
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    },
+);
+
 const taskEditTriggerAddComment = async ({
     taskId,
     taskStatusIdOld,
