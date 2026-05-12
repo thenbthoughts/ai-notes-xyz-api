@@ -6,8 +6,8 @@ import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.
 import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { IChatLlm } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
 import fetchLlmUnified, { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { trackAnswerMachineTokens } from '../../answerMachineV2/helperFunction/tokenTracking';
-import { getLlmConfig } from '../../answerMachineV2/helperFunction/answerMachineGetLlmConfig';
+import { trackAnswerMachineTokens } from '../../answerMachineShared/tokenTracking';
+import { getLlmConfig } from '../../answerMachineShared/answerMachineGetLlmConfig';
 
 async function getConversationMessages(threadId: mongoose.Types.ObjectId, username: string): Promise<IChatLlm[]> {
     return (await ModelChatLlm.aggregate([
