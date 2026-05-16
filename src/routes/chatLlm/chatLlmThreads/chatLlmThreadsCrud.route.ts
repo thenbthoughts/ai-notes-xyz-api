@@ -284,7 +284,7 @@ router.post(
 
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
-                shellExecuteMaxAttempts: 3,
+                shellExecuteMaxAttempts: 1,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -689,7 +689,7 @@ router.post(
                 );
                 const existingShellMax = Math.min(
                     10,
-                    Math.max(1, Math.round(Number(existingShell?.shellExecuteMaxAttempts) || 3)),
+                    Math.max(1, Math.round(Number(existingShell?.shellExecuteMaxAttempts) || 1)),
                 );
                 const effMin = shellMinB !== undefined ? shellMinB : existingShellMin;
                 const effMax = shellMaxB !== undefined ? shellMaxB : existingShellMax;

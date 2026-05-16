@@ -40,11 +40,11 @@ const SHELL_RETRY_BACKOFF_MS = 600;
 function resolveShellExecuteMaxAttempts(): number {
     const raw = process.env.SHELL_EXECUTE_MAX_ATTEMPTS;
     if (raw === undefined || raw === '') {
-        return 3;
+        return 1;
     }
     const n = parseInt(raw, 10);
     if (Number.isNaN(n)) {
-        return 3;
+        return 1;
     }
     return Math.min(10, Math.max(SHELL_EXECUTE_MIN_ATTEMPTS, n));
 }
