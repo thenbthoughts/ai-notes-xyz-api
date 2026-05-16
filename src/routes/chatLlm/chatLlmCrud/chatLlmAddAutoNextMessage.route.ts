@@ -206,14 +206,6 @@ router.post(
                 return res.status(500).json({ message: 'Server error', error: result.errorReason });
             }
 
-            if (!abortController.signal.aborted) {
-                await ModelLlmPendingTaskCron.create({
-                    username: auth_username,
-                    taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
-                    targetRecordId: threadId,
-                });
-            }
-
             if (!abortController.signal.aborted && !res.writableEnded) {
                 return res.status(200).json({ message: 'Success' });
             }

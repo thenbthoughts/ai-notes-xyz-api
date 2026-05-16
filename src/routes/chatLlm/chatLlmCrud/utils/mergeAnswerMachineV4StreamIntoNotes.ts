@@ -159,7 +159,9 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             threadId,
             username,
         })
-            .select('intermediateAnswers globalTaskDescription maxNumberOfIterations attachedFiles opencodeSessionId')
+            .select(
+                'intermediateAnswers globalTaskDescription maxNumberOfIterations attachedFiles opencodeSessionId status currentIteration createdAt cancellationRequestedUtc',
+            )
             .lean(),
         ModelAnswerMachineFileV4.find({
             answerMachineRequestV4Id: { $in: requestIds },
@@ -265,6 +267,43 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             errorReason: (firstErr || '').slice(0, 2000),
         });
     }
+
+    const synthIterKey = (requestId: string, iterationNumber: number) => `${requestId}|${iterationNumber}`;
+    const coveredBySubQuestions = new Set(synthIters.map((s) => synthIterKey(s.requestId, s.iterationNumber)));
+
+    let pendingOnlySeq = 0;
+    for (const row of am4RequestSnapshots) {
+        const rid = String((row as { _id: unknown })._id);
+        const rowStatus = (row as { status?: string }).status;
+        if (rowStatus !== 'pending') {
+            continue;
+        }
+        const curRaw = (row as { currentIteration?: number }).currentIteration;
+        const curIt =
+            typeof curRaw === 'number' && Number.isFinite(curRaw) ? Math.max(1, Math.floor(curRaw)) : 1;
+        if (coveredBySubQuestions.has(synthIterKey(rid, curIt))) {
+            continue;
+        }
+
+        pendingOnlySeq += 1;
+        const createdAt = (row as { createdAt?: Date }).createdAt;
+        const tsMs =
+            createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : Date.now();
+        const sortMs = Math.max(tsMs, tMax.getTime()) + pendingOnlySeq;
+        const cancelAt = (row as { cancellationRequestedUtc?: Date | null }).cancellationRequestedUtc;
+        const cancelPending = cancelAt != null && cancelAt instanceof Date && !Number.isNaN(cancelAt.getTime());
+
+        synthIters.push({
+            iterDocId: am4SyntheticIterationDocId(rid, curIt),
+            requestId: rid,
+            iterationNumber: curIt,
+            ts: new Date(sortMs),
+            status: cancelPending ? 'in_progress' : 'queued',
+            errorReason: '',
+        });
+        coveredBySubQuestions.add(synthIterKey(rid, curIt));
+    }
+
     synthIters.sort((a, b) => {
         if (a.requestId !== b.requestId) {
             return a.requestId.localeCompare(b.requestId);

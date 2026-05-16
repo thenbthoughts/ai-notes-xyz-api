@@ -12,6 +12,9 @@ export interface IAnswerMachineRequestV4 extends Document {
     status: 'pending' | 'answered' | 'error';
     errorReason: string;
 
+    /** Set when the client requests cancellation; worker finalizes via tryFinalizeAnswerMachineV4Cancellation. */
+    cancellationRequestedUtc: Date | null;
+
     minNumberOfIterations: number;
     maxNumberOfIterations: number;
     currentIteration: number;

@@ -11,6 +11,7 @@ import { AnswerMachineVerificationVerdictV4 } from '../../../../types/typesSchem
 import fetchLlmUnified from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { validateOpencodeHealth } from '../../../../utils/opencode/validateOpencodeHealth';
+import tryFinalizeAnswerMachineV4Cancellation from './tryFinalizeAnswerMachineV4Cancellation';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { trackAnswerMachineTokens } from '../answerMachineShared/tokenTracking';
 import { AM4_OPENCODE_DEFAULT_EXECUTOR_MODEL, AM4_OPENCODE_EXECUTOR_SYSTEM } from './am4OpencodeConstants';
@@ -377,6 +378,10 @@ const runSequentialReasoningLoopV4 = async ({
             return { success: false, errorReason: 'Answer Machine V4 request not found', data: null };
         }
 
+        if (await tryFinalizeAnswerMachineV4Cancellation({ answerMachineRequestV4Id })) {
+            return { success: false, errorReason: 'CancelledByUser', data: null };
+        }
+
         const thread = await ModelChatLlmThread.findOne({
             _id: answerMachineRecord.threadId,
             username: answerMachineRecord.username,
@@ -561,6 +566,10 @@ const runSequentialReasoningLoopV4 = async ({
         while (attempt < maxVerifyAttemptsForStep && !advanceStep && !forceSynthesize) {
             if (abortSignal?.aborted) {
                 return { success: false, errorReason: 'Cancelled', data: null };
+            }
+
+            if (await tryFinalizeAnswerMachineV4Cancellation({ answerMachineRequestV4Id })) {
+                return { success: false, errorReason: 'CancelledByUser', data: null };
             }
 
             attempt += 1;
