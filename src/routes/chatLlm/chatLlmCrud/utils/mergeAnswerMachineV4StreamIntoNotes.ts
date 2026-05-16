@@ -32,9 +32,7 @@ export type AnswerMachineV4StreamPayload =
           globalTaskDescriptionExcerpt: string;
           outerIterationMax: number;
           outerIterationsRemaining: number;
-          /** OpenCode session reused for all iterations of this AM4 request (when created). */
           opencodeSessionId: string;
-          /** User attachments and other files available to OpenCode for this request (workspace paths). */
           attachedFiles: AnswerMachineV4AttachedFileMeta[];
       }
     | {
@@ -405,10 +403,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             threadId,
             streamPayload: {
                 kind: 'sub_question',
-                iterationDocId: am4SyntheticIterationDocId(
-                    String(sq.answerMachineRequestV4Id),
-                    sq.answerMachineIteration
-                ),
+                iterationDocId: am4SyntheticIterationDocId(String(sq.answerMachineRequestV4Id), sq.answerMachineIteration),
                 requestId: String(sq.answerMachineRequestV4Id),
                 iterationNumber: sq.answerMachineIteration,
                 question: q,
@@ -457,7 +452,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             updatedAtUtc: ts,
             updatedAtIpAddress: '',
             updatedAtUserAgent: '',
-            promptTokens: sq.totalTokens ?? 0,
+            promptTokens: sq.promptTokens ?? 0,
             completionTokens: sq.completionTokens ?? 0,
             reasoningTokens: sq.reasoningTokens ?? 0,
             totalTokens: sq.totalTokens ?? 0,
@@ -542,6 +537,19 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
     let bump = 0;
     if (activeRequestIdStrings.size > 0) {
         const reqObjectIds = [...activeRequestIdStrings].map((id) => new mongoose.Types.ObjectId(id));
+
+        const evalRowsWithChatNote = await ModelAnswerMachineEvaluateAnswerV4.find({
+            answerMachineRequestV4Id: { $in: reqObjectIds },
+            username,
+            threadId,
+            insertedChatMessageId: { $ne: null },
+        })
+            .select('answerMachineRequestV4Id')
+            .lean();
+        const skipAm4FinalBecauseChatNoteExists = new Set(
+            evalRowsWithChatNote.map((r) => String(r.answerMachineRequestV4Id)),
+        );
+
         const reqsWithFinal = await ModelAnswerMachineRequestV4.find({
             _id: { $in: reqObjectIds },
             username,
@@ -554,6 +562,9 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
         for (const req of sortedFinalReqs) {
             const fa = (req.finalAnswer || '').trim();
             if (!fa) continue;
+            if (skipAm4FinalBecauseChatNoteExists.has(String(req._id))) {
+                continue;
+            }
             bump += 1;
             const ts = new Date(Math.max(latestPipelineTs, tMax.getTime()) + bump);
             streamRows.push({
