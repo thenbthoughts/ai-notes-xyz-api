@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import { ModelAnswerMachineRequestV4 } from '../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineRequestV4.schema';
 
+import tryFinalizeAnswerMachineV4Cancellation from './tryFinalizeAnswerMachineV4Cancellation';
 import runSequentialReasoningLoopV4 from './runSequentialReasoningLoopV4';
 import step4GenerateFinalAnswerV4 from './step4GenerateFinalAnswer/step4GenerateFinalAnswerV4';
 import step5EvaluateAnswerV4 from './step5EvaluateAnswer/step5EvaluateAnswerV4';
@@ -21,6 +22,10 @@ const executeIterationV4 = async ({
         const answerMachineRecord = await ModelAnswerMachineRequestV4.findById(answerMachineRequestV4Id);
         if (!answerMachineRecord) {
             return { success: false, errorReason: 'Answer Machine V4 request not found', data: null };
+        }
+
+        if (await tryFinalizeAnswerMachineV4Cancellation({ answerMachineRequestV4Id })) {
+            return { success: false, errorReason: 'CancelledByUser', data: null };
         }
 
         const resultReasoning = await runSequentialReasoningLoopV4({

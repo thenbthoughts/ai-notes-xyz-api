@@ -32,6 +32,11 @@ const answerMachineRequestV4Schema = new Schema<IAnswerMachineRequestV4>({
         index: true,
     },
     errorReason: { type: String, default: '' },
+    cancellationRequestedUtc: {
+        type: Date,
+        default: null,
+        index: true,
+    },
     minNumberOfIterations: { type: Number, default: 1 },
     maxNumberOfIterations: { type: Number, default: 10 },
     currentIteration: { type: Number, default: 1 },
@@ -50,6 +55,8 @@ const answerMachineRequestV4Schema = new Schema<IAnswerMachineRequestV4>({
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
 });
+
+answerMachineRequestV4Schema.index({ status: 1, _id: -1 });
 
 const ModelAnswerMachineRequestV4 = mongoose.model<IAnswerMachineRequestV4>(
     'answerMachineRequestV4',

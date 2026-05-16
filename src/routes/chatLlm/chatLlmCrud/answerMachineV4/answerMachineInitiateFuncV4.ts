@@ -4,12 +4,9 @@ import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import { ModelChatLlmThread } from '../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { ModelAnswerMachineRequestV4 } from '../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineRequestV4.schema';
 import { ModelAnswerMachineFileV4 } from '../../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineFileV4.schema';
-
-import executeIterationV4 from './executeIterationV4';
-
 const answerMachineInitiateFuncV4 = async ({
     messageId,
-    abortSignal,
+    abortSignal: _abortSignal,
 }: {
     messageId: mongoose.Types.ObjectId;
     abortSignal?: AbortSignal;
@@ -84,54 +81,7 @@ const answerMachineInitiateFuncV4 = async ({
             });
         }
 
-        for (let i = 1; i <= answerMachineRecord.maxNumberOfIterations; i++) {
-            if (abortSignal?.aborted) {
-                await ModelAnswerMachineRequestV4.findByIdAndUpdate(answerMachineRecord._id, {
-                    $set: { status: 'error', errorReason: 'Cancelled by user', updatedAt: new Date() },
-                });
-                return { success: true, errorReason: '', data: null };
-            }
-
-            const iterationResult = await executeIterationV4({
-                answerMachineRequestV4Id: answerMachineRecord._id,
-                abortSignal,
-            });
-
-            if (iterationResult.errorReason === 'Cancelled' || abortSignal?.aborted) {
-                await ModelAnswerMachineRequestV4.findByIdAndUpdate(answerMachineRecord._id, {
-                    $set: { status: 'error', errorReason: 'Cancelled by user', updatedAt: new Date() },
-                });
-                return { success: true, errorReason: '', data: null };
-            }
-
-            if (!iterationResult.success) {
-                await ModelAnswerMachineRequestV4.findByIdAndUpdate(answerMachineRecord._id, {
-                    $set: {
-                        status: 'error',
-                        errorReason: iterationResult.errorReason || 'Iteration failed',
-                        updatedAt: new Date(),
-                    },
-                });
-                return { success: false, errorReason: iterationResult.errorReason || 'Iteration failed', data: null };
-            }
-
-            const refreshed = await ModelAnswerMachineRequestV4.findById(answerMachineRecord._id);
-            if (refreshed?.status === 'answered') {
-                break;
-            }
-
-            await ModelAnswerMachineRequestV4.findByIdAndUpdate(answerMachineRecord._id, {
-                $set: {
-                    currentIteration: i + 1,
-                    updatedAt: new Date(),
-                },
-            });
-        }
-
-        const finalRow = await ModelAnswerMachineRequestV4.findById(answerMachineRecord._id);
-        if (finalRow?.status === 'answered') {
-            return { success: true, errorReason: '', data: null };
-        }
+        /** Background work is polled from `answerMachineRequestV4` (`status: 'pending'`). */
 
         return { success: true, errorReason: '', data: null };
     } catch (error) {

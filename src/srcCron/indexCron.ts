@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 
+import answerMachineV4CronTick from '../routes/chatLlm/chatLlmCrud/answerMachineV4/answerMachineV4Cron';
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
@@ -55,6 +56,16 @@ const initCron = () => {
             } catch (error) {
                 console.log('error in cron: ', error);
             }
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/10 * * * * *',
+        async () => {
+            await answerMachineV4CronTick();
         },
         {
             noOverlap: true,

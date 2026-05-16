@@ -122,7 +122,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     },
     shellExecuteMaxAttempts: {
         type: Number,
-        default: 3,
+        default: 1,
     },
 
     // auth

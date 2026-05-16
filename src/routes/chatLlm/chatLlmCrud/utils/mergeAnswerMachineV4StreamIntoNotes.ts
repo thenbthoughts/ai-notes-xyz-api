@@ -32,9 +32,7 @@ export type AnswerMachineV4StreamPayload =
           globalTaskDescriptionExcerpt: string;
           outerIterationMax: number;
           outerIterationsRemaining: number;
-          /** OpenCode session reused for all iterations of this AM4 request (when created). */
           opencodeSessionId: string;
-          /** User attachments and other files available to OpenCode for this request (workspace paths). */
           attachedFiles: AnswerMachineV4AttachedFileMeta[];
       }
     | {
@@ -159,7 +157,9 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             threadId,
             username,
         })
-            .select('intermediateAnswers globalTaskDescription maxNumberOfIterations attachedFiles opencodeSessionId')
+            .select(
+                'intermediateAnswers globalTaskDescription maxNumberOfIterations attachedFiles opencodeSessionId status currentIteration createdAt cancellationRequestedUtc',
+            )
             .lean(),
         ModelAnswerMachineFileV4.find({
             answerMachineRequestV4Id: { $in: requestIds },
@@ -265,6 +265,43 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             errorReason: (firstErr || '').slice(0, 2000),
         });
     }
+
+    const synthIterKey = (requestId: string, iterationNumber: number) => `${requestId}|${iterationNumber}`;
+    const coveredBySubQuestions = new Set(synthIters.map((s) => synthIterKey(s.requestId, s.iterationNumber)));
+
+    let pendingOnlySeq = 0;
+    for (const row of am4RequestSnapshots) {
+        const rid = String((row as { _id: unknown })._id);
+        const rowStatus = (row as { status?: string }).status;
+        if (rowStatus !== 'pending') {
+            continue;
+        }
+        const curRaw = (row as { currentIteration?: number }).currentIteration;
+        const curIt =
+            typeof curRaw === 'number' && Number.isFinite(curRaw) ? Math.max(1, Math.floor(curRaw)) : 1;
+        if (coveredBySubQuestions.has(synthIterKey(rid, curIt))) {
+            continue;
+        }
+
+        pendingOnlySeq += 1;
+        const createdAt = (row as { createdAt?: Date }).createdAt;
+        const tsMs =
+            createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : Date.now();
+        const sortMs = Math.max(tsMs, tMax.getTime()) + pendingOnlySeq;
+        const cancelAt = (row as { cancellationRequestedUtc?: Date | null }).cancellationRequestedUtc;
+        const cancelPending = cancelAt != null && cancelAt instanceof Date && !Number.isNaN(cancelAt.getTime());
+
+        synthIters.push({
+            iterDocId: am4SyntheticIterationDocId(rid, curIt),
+            requestId: rid,
+            iterationNumber: curIt,
+            ts: new Date(sortMs),
+            status: cancelPending ? 'in_progress' : 'queued',
+            errorReason: '',
+        });
+        coveredBySubQuestions.add(synthIterKey(rid, curIt));
+    }
+
     synthIters.sort((a, b) => {
         if (a.requestId !== b.requestId) {
             return a.requestId.localeCompare(b.requestId);
@@ -366,10 +403,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             threadId,
             streamPayload: {
                 kind: 'sub_question',
-                iterationDocId: am4SyntheticIterationDocId(
-                    String(sq.answerMachineRequestV4Id),
-                    sq.answerMachineIteration
-                ),
+                iterationDocId: am4SyntheticIterationDocId(String(sq.answerMachineRequestV4Id), sq.answerMachineIteration),
                 requestId: String(sq.answerMachineRequestV4Id),
                 iterationNumber: sq.answerMachineIteration,
                 question: q,
@@ -418,7 +452,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             updatedAtUtc: ts,
             updatedAtIpAddress: '',
             updatedAtUserAgent: '',
-            promptTokens: sq.totalTokens ?? 0,
+            promptTokens: sq.promptTokens ?? 0,
             completionTokens: sq.completionTokens ?? 0,
             reasoningTokens: sq.reasoningTokens ?? 0,
             totalTokens: sq.totalTokens ?? 0,
@@ -503,6 +537,19 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
     let bump = 0;
     if (activeRequestIdStrings.size > 0) {
         const reqObjectIds = [...activeRequestIdStrings].map((id) => new mongoose.Types.ObjectId(id));
+
+        const evalRowsWithChatNote = await ModelAnswerMachineEvaluateAnswerV4.find({
+            answerMachineRequestV4Id: { $in: reqObjectIds },
+            username,
+            threadId,
+            insertedChatMessageId: { $ne: null },
+        })
+            .select('answerMachineRequestV4Id')
+            .lean();
+        const skipAm4FinalBecauseChatNoteExists = new Set(
+            evalRowsWithChatNote.map((r) => String(r.answerMachineRequestV4Id)),
+        );
+
         const reqsWithFinal = await ModelAnswerMachineRequestV4.find({
             _id: { $in: reqObjectIds },
             username,
@@ -515,6 +562,9 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
         for (const req of sortedFinalReqs) {
             const fa = (req.finalAnswer || '').trim();
             if (!fa) continue;
+            if (skipAm4FinalBecauseChatNoteExists.has(String(req._id))) {
+                continue;
+            }
             bump += 1;
             const ts = new Date(Math.max(latestPipelineTs, tMax.getTime()) + bump);
             streamRows.push({

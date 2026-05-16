@@ -152,7 +152,15 @@ router.post(
             let status: 'pending' | 'answered' | 'error' | 'not_started' = 'not_started';
             let isProcessing = false;
             if (subQuestions.length === 0) {
-                status = hasFinalAnswer ? 'answered' : 'not_started';
+                /** Request row exists before iterations create subquestions (AM4 cron may not have picked up yet). */
+                if (latestAnswerMachineRecord.status === 'pending') {
+                    status = 'pending';
+                    isProcessing = true;
+                } else if (latestAnswerMachineRecord.status === 'error') {
+                    status = 'error';
+                } else {
+                    status = hasFinalAnswer ? 'answered' : 'not_started';
+                }
             } else {
                 if (hasFinalAnswer) {
                     status = 'answered';
@@ -212,6 +220,70 @@ router.post(
             return res.status(200).json(response);
         } catch (error) {
             console.error('Error in answerMachineStatus polling:', error);
+            return res.status(500).json({
+                message: 'Server error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    }
+);
+
+router.post(
+    '/answerMachineV4Cancel',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_username = res.locals.auth_username;
+            const threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const thread = await ModelChatLlmThread.findOne({
+                _id: threadId,
+                username: auth_username,
+            }).select('_id answerEngine');
+            if (!thread) {
+                return res.status(404).json({ message: 'Thread not found' });
+            }
+            if (thread.answerEngine !== 'answerMachine4') {
+                return res.status(400).json({ message: 'Thread is not using Answer Machine 4' });
+            }
+
+            const latestPending = await ModelAnswerMachineRequestV4.findOne({
+                threadId,
+                username: auth_username,
+                status: 'pending',
+            }).sort({ createdAt: -1 });
+
+            if (!latestPending) {
+                return res.status(404).json({ message: 'No active Answer Machine 4 run to cancel' });
+            }
+
+            const upd = await ModelAnswerMachineRequestV4.updateOne(
+                {
+                    _id: latestPending._id,
+                    username: auth_username,
+                    status: 'pending',
+                },
+                {
+                    $set: {
+                        cancellationRequestedUtc: new Date(),
+                        updatedAt: new Date(),
+                    },
+                },
+            );
+
+            if (upd.matchedCount === 0) {
+                return res.status(200).json({
+                    success: true,
+                    message: 'Run already completed or cancelled.',
+                });
+            }
+
+            return res.status(200).json({ success: true, message: 'Cancellation requested.' });
+        } catch (error) {
+            console.error('Error in answerMachineV4Cancel:', error);
             return res.status(500).json({
                 message: 'Server error',
                 error: error instanceof Error ? error.message : 'Unknown error',
