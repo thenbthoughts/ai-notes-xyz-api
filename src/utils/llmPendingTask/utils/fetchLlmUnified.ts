@@ -491,7 +491,7 @@ export async function fetchLlmUnified(params: FetchLlmParams): Promise<FetchLlmR
       usageStats
     };
   } catch (error: any) {
-    console.error('Llm failed error: ', error);
+    // console.error('Llm failed error: ', error);
     console.error('Llm failed error data: ', error?.response?.data);
     if (isAxiosError(error)) {
       return {
