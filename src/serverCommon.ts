@@ -14,17 +14,32 @@ app.use(express.json({
 }));
 app.use(cookieParser());
 
+const CAPACITOR_WEBVIEW_ORIGINS = [
+    'capacitor://localhost',
+    'http://localhost',
+    'https://localhost',
+    'ionic://localhost',
+];
+
 app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'localhost:3000',
-        envKeys.FRONTEND_CLIENT_URL,
-        `https://${envKeys.FRONTEND_CLIENT_URL}`,
-        envKeys.API_URL,
-        `https://${envKeys.API_URL}`,
-    ],
+    origin: (origin, callback) => {
+        const allowed = new Set([
+            'http://localhost:3000',
+            'localhost:3000',
+            envKeys.FRONTEND_CLIENT_URL,
+            `https://${envKeys.FRONTEND_CLIENT_URL}`,
+            envKeys.API_URL,
+            `https://${envKeys.API_URL}`,
+            ...CAPACITOR_WEBVIEW_ORIGINS,
+        ]);
+        if (!origin || allowed.has(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(null, false);
+    },
     methods: 'GET,POST,PUT,DELETE,PATCH',
-    allowedHeaders: ['Content-Type', 'Set-Cookie'],
+    allowedHeaders: ['Content-Type', 'Set-Cookie', 'Authorization'],
     credentials: true,
 }));
 
