@@ -12,7 +12,7 @@ const init = async () => {
         const resultVision = await ollamaInsertModelModality({
             modelName: "qwen3-vl:2b",
             provider: "ollama",
-            userId: "ollama",
+            userId: new mongoose.Types.ObjectId(),
         });
         console.log('Vision model (qwen3-vl:2b):', resultVision);
 
@@ -20,7 +20,7 @@ const init = async () => {
         const resultTextOnly = await ollamaInsertModelModality({
             modelName: "llama3.2:1b",
             provider: "ollama",
-            userId: "ollama",
+            userId: new mongoose.Types.ObjectId(),
         });
         console.log('Text-only model (llama3.2:1b):', resultTextOnly);
 

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { ModelAiListLocalai } from '../../schema/schemaDynamicData/SchemaLocalaiModel.schema';
@@ -160,7 +161,7 @@ const getModalitySettingsByType = (modelType: LocalaiModelType): {
 const localaiPullAllModelsFunc = async ({
     userId,
 }: {
-    userId: string;
+    userId: mongoose.Types.ObjectId;
 }): Promise<{
     success: boolean;
     message: string;

@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 // Chat Interface
 export interface tsSchemaOllamaModelStoreModality extends Document {
     // ai
-    userId: string;
+    userId: Types.ObjectId;
     modelName: string;
 
     // input modalities

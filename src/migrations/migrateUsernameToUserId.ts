@@ -4,9 +4,6 @@ import { ModelUser } from '../schema/schemaUser/SchemaUser.schema';
 
 const LOG_PREFIX = '[migrateUsernameToUserId]';
 
-/** Collections where `userId` is stored as a hex string, not BSON ObjectId. */
-const STRING_USER_ID_COLLECTIONS = new Set(['aiModelListOllama', 'aiModelStoreModalityOllama']);
-
 /** `username` on the user collection is the login handle — never migrate it. */
 const SKIP_COLLECTIONS = new Set(['user']);
 
@@ -26,13 +23,6 @@ function normalizeUsername(value: unknown): string | null {
     }
     const trimmed = value.trim().toLowerCase();
     return trimmed.length > 0 ? trimmed : null;
-}
-
-function resolveMigratedUserId(
-    objectId: Types.ObjectId,
-    valueKind: 'objectId' | 'string'
-): Types.ObjectId | string {
-    return valueKind === 'objectId' ? objectId : objectId.toString();
 }
 
 async function buildUsernameToObjectIdMap(): Promise<Map<string, Types.ObjectId>> {
@@ -78,14 +68,44 @@ async function dropLegacyUsernameIndexes(collectionName: string): Promise<string
     return dropped;
 }
 
+async function migrateStringUserIdToObjectId(collectionName: string): Promise<number> {
+    const db = mongoose.connection.db;
+    if (!db) {
+        return 0;
+    }
+
+    const collection = db.collection(collectionName);
+    const stringUserIdDocs = await collection
+        .find({ userId: { $type: 'string' } })
+        .project({ _id: 1, userId: 1 })
+        .toArray();
+
+    let updated = 0;
+
+    for (const doc of stringUserIdDocs) {
+        const rawUserId = doc.userId;
+        if (typeof rawUserId !== 'string' || !Types.ObjectId.isValid(rawUserId)) {
+            continue;
+        }
+
+        const objectId = new Types.ObjectId(rawUserId);
+        const result = await collection.updateOne(
+            { _id: doc._id },
+            { $set: { userId: objectId } }
+        );
+        updated += result.modifiedCount;
+    }
+
+    return updated;
+}
+
 async function migrateLegacyUsernameToUserId(params: {
     collectionName: string;
     usernamePath: string;
     userIdPath: string;
-    valueKind: 'objectId' | 'string';
     usernameMap: Map<string, Types.ObjectId>;
 }): Promise<number> {
-    const { collectionName, usernamePath, userIdPath, valueKind, usernameMap } = params;
+    const { collectionName, usernamePath, userIdPath, usernameMap } = params;
     const db = mongoose.connection.db;
     if (!db) {
         return 0;
@@ -95,14 +115,12 @@ async function migrateLegacyUsernameToUserId(params: {
     let updated = 0;
 
     for (const [loginHandle, objectId] of usernameMap) {
-        const migratedUserId = resolveMigratedUserId(objectId, valueKind);
-
         const result = await collection.updateMany(
             {
                 [usernamePath]: loginHandle,
                 [userIdPath]: { $exists: false },
             },
-            { $set: { [userIdPath]: migratedUserId } }
+            { $set: { [userIdPath]: objectId } }
         );
 
         updated += result.modifiedCount;
@@ -156,7 +174,6 @@ export async function migrateUsernameToUserId(): Promise<void> {
             continue;
         }
 
-        const valueKind = STRING_USER_ID_COLLECTIONS.has(collectionName) ? 'string' : 'objectId';
         const legacyPaths = getLegacyUsernamePaths(collectionName);
 
         const droppedIndexes = await dropLegacyUsernameIndexes(collectionName);
@@ -173,11 +190,13 @@ export async function migrateUsernameToUserId(): Promise<void> {
                 collectionName,
                 usernamePath: pathPair.usernamePath,
                 userIdPath: pathPair.userIdPath,
-                valueKind,
                 usernameMap,
             });
             collectionUpdated += pathUpdated;
         }
+
+        const stringUserIdUpdated = await migrateStringUserIdToObjectId(collectionName);
+        collectionUpdated += stringUserIdUpdated;
 
         if (collectionUpdated > 0) {
             collectionsTouched += 1;

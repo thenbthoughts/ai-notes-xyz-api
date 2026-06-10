@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 // Chat Interface
 export interface tsSchemaAiModelListOllama extends Document {
     // ai
-    userId: string;
+    userId: Types.ObjectId;
     modelLabel: string;
     modelName: string;
 

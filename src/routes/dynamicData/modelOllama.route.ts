@@ -13,7 +13,7 @@ const router = Router();
 const ollamaPullAllModelsFunc = async ({
     userId,
 }: {
-    userId: string;
+    userId: mongoose.Types.ObjectId;
 }): Promise<{
     success: boolean;
     message: string;
@@ -118,7 +118,7 @@ export const ollamaInsertModelModality = async ({
 }: {
     modelName: string;
     provider: string;
-    userId: string;
+    userId: mongoose.Types.ObjectId;
 }) => {
     try {
         // Get user API key
