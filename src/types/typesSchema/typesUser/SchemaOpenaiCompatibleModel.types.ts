@@ -3,7 +3,7 @@ import mongoose, { Document } from 'mongoose';
 interface IOpenaiCompatibleModel extends Document {
     _id: mongoose.Types.ObjectId;
 
-    username: string;
+    userId: mongoose.Types.ObjectId;
     providerName?: string;
     baseUrl: string;
     apiKey: string;

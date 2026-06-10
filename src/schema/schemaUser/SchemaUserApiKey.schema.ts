@@ -3,7 +3,7 @@ import IUserApiKey from '../../types/typesSchema/typesUser/SchemaUserApiKey.type
 
 // User api key schema
 const userApiKeySchema = new Schema<IUserApiKey>({
-    username: { type: String, required: true, unique: true, lowercase: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, unique: true },
 
     // client frontend url
     clientFrontendUrl: { type: String, default: '' },

@@ -20,7 +20,7 @@ export const funcSearchReindexLifeEventsById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface ILifeEventAggregate extends ILifeEvents {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: mongoose.Types.ObjectId;
         category: ILifeEventCategory[];
         categorySub: ILifeEventCategory[];
         comments: ISchemaCommentCommon[];
@@ -206,7 +206,7 @@ export const funcSearchReindexLifeEventsById = async ({
         // insert new record
         await ModelGlobalSearch.create({
             entityId: lifeEvent._id,
-            username: lifeEvent.username,
+            userId: lifeEvent.userId,
             text: searchableText,
             collectionName: 'lifeEvents',
             lifeEventIsDiary: isDiary,

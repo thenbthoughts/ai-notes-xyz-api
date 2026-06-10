@@ -39,7 +39,7 @@ const taskScheduleAddTask = async ({
         // step 3: get task workspace
         const taskWorkspaceObj = await ModelTaskWorkspace.findOne({
             _id: taskAddObj.taskWorkspaceId,
-            username: taskInfo.username,
+            userId: taskInfo.userId,
         }) as tsTaskListSchedule;
         if (!taskWorkspaceObj) {
             return true;
@@ -48,7 +48,7 @@ const taskScheduleAddTask = async ({
         // step 4: get task status
         const taskStatusObj = await ModelTaskStatusList.findOne({
             _id: taskAddObj.taskStatusId,
-            username: taskInfo.username,
+            userId: taskInfo.userId,
         }) as tsTaskStatusList;
         if (!taskStatusObj) {
             return true;
@@ -68,7 +68,7 @@ const taskScheduleAddTask = async ({
 
         // insert task
         const taskInsert = await ModelTask.create({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             taskWorkspaceId: taskWorkspaceObj?._id || null,
             taskStatusId: taskStatusObj?._id || null,
             title: taskTitle,
@@ -88,15 +88,13 @@ const taskScheduleAddTask = async ({
                 title: subtask,
                 parentTaskId: taskInsert._id,
                 taskPosition: 0,
-                username: taskInfo.username,
+                userId: taskInfo.userId,
             });
             console.log('newSubtask: ', newSubtask);
         }
 
         // create a mail
-        const userInfo = await ModelUser.findOne({
-            username: taskInfo.username,
-        });
+        const userInfo = await ModelUser.findById(taskInfo.userId);
         if (!userInfo) {
             return true;
         }
@@ -113,7 +111,7 @@ const taskScheduleAddTask = async ({
 
         // send mail
         await funcSendMail({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             smtpTo: userInfo.email,
             subject: `Task schedule - ${taskTitle} | AI Notes XYZ`,
             text: '',

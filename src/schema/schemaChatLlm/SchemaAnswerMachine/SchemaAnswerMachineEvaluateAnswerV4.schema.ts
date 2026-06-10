@@ -15,7 +15,7 @@ const answerMachineEvaluateAnswerV4Schema = new Schema<IAnswerMachineEvaluateAns
         index: true,
         ref: 'chatLlmThread',
     },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     isSatisfactory: { type: Boolean, default: false },
     confidence: { type: Number, default: 0 },
     evaluationReason: { type: String, default: '' },

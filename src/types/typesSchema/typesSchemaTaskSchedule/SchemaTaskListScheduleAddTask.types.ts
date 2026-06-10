@@ -2,7 +2,7 @@ import mongoose, { Document } from 'mongoose';
 
 export interface tsTaskListScheduleAddTask extends Document {
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // identification
     taskScheduleId: mongoose.Types.ObjectId;

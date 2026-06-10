@@ -6,7 +6,7 @@ import { IInfoVaultAddress } from '../../types/typesSchema/typesSchemaInfoVault/
 const infoVaultAddressSchema = new Schema<IInfoVaultAddress>({
     // identification
     infoVaultId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     countryRegion: { type: String, default: '' },

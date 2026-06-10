@@ -28,7 +28,7 @@ router.post('/login', middlewareActionDatetime, async (req: Request, res: Respon
         const actionDatetimeObj = normalizeDateTimeIpAddress(res.locals.actionDatetime);
         console.log(actionDatetimeObj);
 
-        // Find user by username
+        // Login credential is the 'username' handle (string). userId in the system means User._id (ObjectId).
         const user = await ModelUser.findOne({ username }).select('+password');
         if (!user) {
             return res.status(400).json({ message: 'Invalid username or password' });
@@ -38,16 +38,16 @@ router.post('/login', middlewareActionDatetime, async (req: Request, res: Respon
         console.log('password: ', password);
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid username or password' });
+            return res.status(400).json({ message: 'Invalid user ID or password' });
         }
         console.log('isMatch: ', isMatch);
 
         // Generate random device id
         const randomDeviceId = crypto.randomBytes(64).toString('hex');
 
-        // Save user device list
+        // Save user device list — store the real User._id as userId (the reference used everywhere else)
         const userDeviceList = await ModelUserDeviceList.create({
-            username: user.username,
+            userId: user._id,
             randomDeviceId,
             isExpired: false,
 
@@ -78,7 +78,7 @@ router.post('/login', middlewareActionDatetime, async (req: Request, res: Respon
                 console.log('text send sms: ', text);
 
                 const sendStatus = await funcSendMail({
-                    username: user.username,
+                    userId: user._id,
                     smtpTo: user.email,
                     subject: 'AI Notes XYZ - Login Successfully',
                     text,
@@ -119,7 +119,7 @@ router.post('/register', async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
     try {
-        // Check if the user already exists
+        // Check if the user already exists (by the unique login handle)
         const existingUser = await ModelUser.findOne({ username });
         if (existingUser) {
             return res.status(400).json({ message: 'Username already exists' });
@@ -128,7 +128,7 @@ router.post('/register', async (req: Request, res: Response) => {
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Save the user to the database
+        // Save the user to the database — 'username' is the login handle; the document _id will be used as userId reference elsewhere
         const newUser = await ModelUser.create({
             username,
             password: hashedPassword,
@@ -139,7 +139,7 @@ router.post('/register', async (req: Request, res: Response) => {
             message: 'User registered successfully',
             data: {
                 user: {
-                    username: newUser.username,
+                    userId: newUser._id,   // userId = the Mongo _id reference
                 },
             }
         });
@@ -205,15 +205,15 @@ router.post(
     middlewareExpressValidator,
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
-        const { auth_username } = res.locals;
+        const { auth_userId } = res.locals;
 
         try {
             const { oldPassword, newPassword } = req.body;
 
-            // Find user by username
-            const user = await ModelUser.findOne({ username: auth_username }).select('+password');
+            // Find user by its _id (auth_userId is the User._id reference)
+            const user = await ModelUser.findById(auth_userId).select('+password');
             if (!user) {
-                return res.status(400).json({ message: 'Invalid username or password' });
+                return res.status(400).json({ message: 'Invalid user ID or password' });
             }
 
             // Check old password
@@ -227,14 +227,14 @@ router.post(
             const hashedPassword = await bcrypt.hash(newPassword, 10);
 
             // Update user password
-            await ModelUser.findOneAndUpdate(
-                { username: auth_username },
+            await ModelUser.findByIdAndUpdate(
+                auth_userId,
                 { password: hashedPassword },
                 { new: true }
             );
 
             // send mail
-            const userApiKey = await ModelUserApiKey.findOne({ username: auth_username });
+            const userApiKey = await ModelUserApiKey.findOne({ userId: auth_userId });
             if (userApiKey) {
                 if (user.emailVerified && userApiKey.smtpValid) {
                     try {
@@ -255,7 +255,7 @@ router.post(
                         text += `Thank you for using AI Notes XYZ.`;
 
                         const sendStatus = await funcSendMail({
-                            username: auth_username,
+                            userId: auth_userId,
                             smtpTo: user.email,
                             subject: 'AI Notes XYZ - Password Changed',
                             text,

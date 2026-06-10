@@ -16,17 +16,17 @@ import fetchLlmUnified from "../../../utils/fetchLlmUnified";
 import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
 
 const getLifeEventsStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
     try {
         const lifeEventsRecords = await ModelLifeEvents.find({
-            username,
+            userId,
             $or: [
                 {
                     eventDateUtc: {
@@ -80,16 +80,16 @@ const getLifeEventsStr = async ({
 };
 
 const generateWeeklySummaryByUserId = async ({
-    username,
+    userId,
     summaryDate,
 }: {
-    username: string;
+    userId: string;
     summaryDate: Date;
 }) => {
     try {
-        console.log('generateWeeklySummaryByUserId: ', username, summaryDate);
+        console.log('generateWeeklySummaryByUserId: ', userId, summaryDate);
         const userRecords = await ModelUser.find({
-            username,
+            _id: userId,
         }) as IUser[];
         if (!userRecords || userRecords.length !== 1) {
             return true;
@@ -117,13 +117,13 @@ const generateWeeklySummaryByUserId = async ({
         const summaryDateUtc = startOfWeek.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(userFirst.username);
+        const llmConfig = await getDefaultLlmModel(userFirst._id);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         const lifeEventsStr = await getLifeEventsStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
@@ -180,14 +180,14 @@ Be selective. Only include what matters for future reference.`;
         let weeklyNotesTitle = `Weekly Summary by AI - ${weekNumber} - From ${weekStartDate} to ${weekEndDate}`;
         console.log('weeklyNotesTitle: create weekly summary: ', weeklyNotesTitle);
         await ModelLifeEvents.deleteMany({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             title: weeklyNotesTitle,
         });
 
         const now = new Date();
         // update in life events record
         await ModelLifeEvents.create({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
 
             // identification - pagination
             eventDateUtc: weekStartDate,
@@ -237,7 +237,7 @@ const executeWeeklySummaryByUserId = async ({
         }
 
         const userRecords = await ModelUser.find({
-            username: taskScheduleRecord.username,
+            _id: taskScheduleRecord._id,
         }) as IUser[];
 
         if (!userRecords || userRecords.length !== 1) {
@@ -255,7 +255,7 @@ const executeWeeklySummaryByUserId = async ({
 
         // generate weekly summary by user id
         await generateWeeklySummaryByUserId({
-            username: taskScheduleRecord.username,
+            userId: taskScheduleRecord._id.toString(),
             summaryDate: new Date(currentDateOnly + 'T00:00:00.000Z'),
         });
 

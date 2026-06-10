@@ -34,7 +34,7 @@ router.post('/infoVaultPhoneGet', middlewareUserAuth, async (req: Request, res: 
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -187,7 +187,7 @@ router.post('/infoVaultPhoneDelete', middlewareUserAuth, async (req: Request, re
 
         const infoVaultPhone = await ModelInfoVaultPhone.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultPhone) {
@@ -219,7 +219,7 @@ router.post('/infoVaultPhoneAdd', middlewareUserAuth, async (req: Request, res: 
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -228,7 +228,7 @@ router.post('/infoVaultPhoneAdd', middlewareUserAuth, async (req: Request, res: 
         const now = new Date();
         const newInfoVaultPhone = await ModelInfoVaultPhone.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             phoneNumber: req.body.phoneNumber || '',
             countryCode: req.body.countryCode || '+1',
             label: req.body.label || 'mobile',
@@ -284,7 +284,7 @@ router.post('/infoVaultPhoneEdit', middlewareUserAuth, async (req: Request, res:
             await ModelInfoVaultPhone.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

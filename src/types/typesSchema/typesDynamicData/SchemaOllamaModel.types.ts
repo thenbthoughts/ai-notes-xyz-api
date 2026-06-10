@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // Chat Interface
 export interface tsSchemaAiModelListOllama extends Document {
     // ai
-    username: string;
+    userId: string;
     modelLabel: string;
     modelName: string;
 

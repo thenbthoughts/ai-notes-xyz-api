@@ -1,18 +1,18 @@
-import { Document, ObjectId } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 interface IUserFileUpload extends Document {
     // _id
-    _id: ObjectId;
+    _id: Types.ObjectId;
     
     // file upload field (legacy S3 path or GridFS identifier)
     fileUploadPath: string;
 
     // auth
-    username: string;
+    userId: Types.ObjectId;
 
     // GridFS metadata
     storageType?: 'gridfs' | 's3';
-    gridFsId?: ObjectId;
+    gridFsId?: Types.ObjectId;
     parentEntityId?: string;
     contentType?: string;
     originalName?: string;

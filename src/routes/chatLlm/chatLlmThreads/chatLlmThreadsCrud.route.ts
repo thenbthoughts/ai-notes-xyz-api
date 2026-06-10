@@ -43,9 +43,9 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
         // stateDocument -> match
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             } as {
-                username: string;
+                userId: string;
                 isFavourite?: boolean;
             }
         }
@@ -182,26 +182,26 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
 
         // delete all chat related to the thread
         await ModelChatLlm.deleteMany({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             threadId: threadId,
         });
 
         // delete all context related to the thread
         await ModelChatLlmThreadContextReference.deleteMany({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             threadId: threadId,
         });
 
         const deletedThread = await ModelChatLlmThread.findOneAndDelete({
             _id: threadId,
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         });
         if (!deletedThread) {
             return res.status(404).json({ message: 'Thread not found' });
         }
 
         await deleteFilesByParentEntityId({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             parentEntityId: threadId.toString(),
         });
 
@@ -437,7 +437,7 @@ router.post(
                 ...addData,
 
                 // auth
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
 
                 // created at
                 ...actionDatetimeObj,
@@ -640,7 +640,7 @@ router.post(
                 // Only min provided - check against existing max
                 const existingThread = await ModelChatLlmThread.findOne({
                     _id: threadId,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 });
                 const existingMax = existingThread?.answerMachineMaxNumberOfIterations || 1;
                 if (minIterations <= existingMax) {
@@ -654,7 +654,7 @@ router.post(
                 // Only max provided - check against existing min
                 const existingThread = await ModelChatLlmThread.findOne({
                     _id: threadId,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 });
                 const existingMin = existingThread?.answerMachineMinNumberOfIterations || 1;
                 if (existingMin <= maxIterations) {
@@ -681,7 +681,7 @@ router.post(
             if (shellMinB !== undefined || shellMaxB !== undefined) {
                 const existingShell = await ModelChatLlmThread.findOne({
                     _id: threadId,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 });
                 const existingShellMin = Math.min(
                     10,
@@ -714,7 +714,7 @@ router.post(
             };
 
             const updatedThread = await ModelChatLlmThread.findOneAndUpdate(
-                { _id: threadId, username: res.locals.auth_username },
+                { _id: threadId, userId: res.locals.auth_userId },
                 {
                     $set: {
                         ...updateData,
@@ -750,7 +750,7 @@ router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, 
         const recentlyUsedLlm = await ModelChatLlmThread.aggregate([
             {
                 $match: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 }
             },
             {
@@ -784,7 +784,7 @@ router.get('/topLlmConversationModel', middlewareUserAuth, async (req: Request, 
         const topLlmModelArr = await ModelChatLlmThread.aggregate([
             {
                 $match: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 }
             },
             {
@@ -858,7 +858,7 @@ router.get('/lastUsedLlmModel', middlewareUserAuth, async (req: Request, res: Re
         const lastUsedModel = await ModelChatLlmThread.aggregate([
             {
                 $match: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 }
             },
             {

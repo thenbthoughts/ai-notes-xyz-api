@@ -6,10 +6,10 @@ import autoContextSelectByMethodSearch from "./autoContextSelect/autoContextSele
 
 const selectAutoContextByThreadId = async ({
     threadId,
-    username,
+    userId,
 }: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }) : Promise<{
     success: boolean;
     errorReason: string;
@@ -31,7 +31,7 @@ const selectAutoContextByThreadId = async ({
                 }
             };
         }
-        if (thread.username !== username) {
+        if (String(thread.userId) !== String(userId)) {
             return {
                 success: false,
                 errorReason: 'Thread does not belong to user',

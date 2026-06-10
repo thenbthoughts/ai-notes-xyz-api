@@ -2,7 +2,7 @@ import mongoose, { Document } from 'mongoose';
 
 export interface tsTaskListScheduleSendMyselfEmail extends Document {
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // identification
     taskScheduleId: mongoose.Types.ObjectId;

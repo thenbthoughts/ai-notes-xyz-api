@@ -30,11 +30,11 @@ import fetchLlmUnified from "../../../utils/fetchLlmUnified";
 import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
 
 const getDataNotesStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
@@ -46,7 +46,7 @@ const getDataNotesStr = async ({
         const notesRecords = await ModelNotes.aggregate([
             {
                 $match: {
-                    username,
+                    userId,
                     $or: [
                         {
                             createdAtUtc: {
@@ -66,7 +66,7 @@ const getDataNotesStr = async ({
             {
                 $project: {
                     _id: 1,
-                    username: 1,
+                    userId: 1,
                     title: 1,
                     description: 1,
                     isStar: 1,
@@ -137,11 +137,11 @@ const getDataNotesStr = async ({
 };
 
 const getDataTaskStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
@@ -154,7 +154,7 @@ const getDataTaskStr = async ({
         const taskRecords = await ModelTask.aggregate([
             {
                 $match: {
-                    username,
+                    userId,
                     $or: [
                         {
                             createdAtUtc: {
@@ -256,17 +256,17 @@ const getDataTaskStr = async ({
 };
 
 const getLifeEventsStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
     try {
         const lifeEventsRecords = await ModelLifeEvents.find({
-            username,
+            userId,
             $or: [
                 {
                     eventDateUtc: {
@@ -320,17 +320,17 @@ const getLifeEventsStr = async ({
 };
 
 const getChatStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
     try {
         const chatThreadRecords = await ModelChatLlmThread.find({
-            username,
+            userId,
             updatedAtUtc: {
                 $gte: dateUtcStart,
                 $lte: dateUtcEnd,
@@ -365,16 +365,16 @@ const getChatStr = async ({
 }
 
 const generateDailySummaryByUserId = async ({
-    username,
+    userId,
     summaryDate,
 }: {
-    username: string;
+    userId: string;
     summaryDate: Date;
 }) => {
     try {
-        console.log('generateDailySummaryByUserId: ', username, summaryDate);
+        console.log('generateDailySummaryByUserId: ', userId, summaryDate);
         const userRecords = await ModelUser.find({
-            username,
+            _id: userId,
         }) as IUser[];
         if (!userRecords || userRecords.length !== 1) {
             return true;
@@ -389,28 +389,28 @@ const generateDailySummaryByUserId = async ({
         let dateUtcEnd = new Date(summaryDateUtc.setHours(23, 59, 59, 999));
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(userFirst.username);
+        const llmConfig = await getDefaultLlmModel(userFirst._id);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         const notesStr = await getDataNotesStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
         const taskStr = await getDataTaskStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
         const lifeEventsStr = await getLifeEventsStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
         const chatStr = await getChatStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
@@ -466,14 +466,14 @@ Be selective. Only include what matters for future reference.`;
         // delete notes with title 'Daily Summary - summaryDateOnly'
         let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
         await ModelLifeEvents.deleteMany({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             title: dailyNotesTitle,
         });
 
         const now = new Date();
         // update in life events record
         await ModelLifeEvents.create({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
 
             // identification - pagination
             eventDateUtc: summaryDateUtc,
@@ -523,7 +523,7 @@ const executeDailySummaryByUserId = async ({
         }
 
         const userRecords = await ModelUser.find({
-            username: taskScheduleRecord.username,
+            _id: taskScheduleRecord._id,
         }) as IUser[];
 
         if (!userRecords || userRecords.length !== 1) {
@@ -541,7 +541,7 @@ const executeDailySummaryByUserId = async ({
 
         // generate daily summary by user id
         await generateDailySummaryByUserId({
-            username: taskScheduleRecord.username,
+            userId: taskScheduleRecord._id.toString(),
             summaryDate: new Date(currentDateOnly + 'T00:00:00.000Z'),
         });
 

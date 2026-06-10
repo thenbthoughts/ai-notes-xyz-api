@@ -37,7 +37,7 @@ const taskScheduleAddNotes = async ({
 
         // Insert note
         const noteInsert = await ModelNotes.create({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             notesWorkspaceId: notesWorkspaceId,
             title: noteTitle,
             description: noteDescription,
@@ -46,9 +46,7 @@ const taskScheduleAddNotes = async ({
         });
 
         // Get user info for email
-        const userInfo = await ModelUser.findOne({
-            username: taskInfo.username,
-        });
+        const userInfo = await ModelUser.findById(taskInfo.userId);
         if (!userInfo) {
             return true;
         }
@@ -64,7 +62,7 @@ const taskScheduleAddNotes = async ({
         // Send mail if configured
         if (taskInfo.shouldSendEmail) {
             await funcSendMail({
-                username: taskInfo.username,
+                userId: taskInfo.userId,
                 smtpTo: userInfo.email,
                 subject: `Note schedule - ${noteTitle} | AI Notes XYZ`,
                 text: '',

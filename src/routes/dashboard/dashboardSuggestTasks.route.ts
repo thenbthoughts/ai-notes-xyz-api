@@ -12,7 +12,7 @@ router.get(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
@@ -20,7 +20,7 @@ router.get(
             // auth
             tempStage = {
                 $match: {
-                    username: auth_username,
+                    userId: auth_userId,
                 }
             }
             stateDocument.push(tempStage);
@@ -130,7 +130,7 @@ router.get(
                                 $expr: {
                                     $and: [
                                         {
-                                            $eq: ['$username', auth_username]
+                                            $eq: ['$userId', auth_userId]
                                         },
                                         {
                                             $eq: ['$_id', '$$let_taskStatusId']

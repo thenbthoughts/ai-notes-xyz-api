@@ -32,14 +32,14 @@ interface IChatLlmThreadExtended extends IChatLlmThread {
 
 // Function to get the last 20 conversations from MongoDB
 const getConversationListByNotes = async ({
-    username,
+    userId,
 }: {
-    username: string,
+    userId: string,
 }): Promise<string> => {
     const conversations = await ModelChatLlmThread.aggregate<IChatLlmThreadExtended>([
         {
             $match: {
-                username,
+                userId,
             }
         },
         {
@@ -92,13 +92,13 @@ const getConversationListByNotes = async ({
 }
 
 // Function to get user info from the database
-const getUserInfo = async (username: string) => {
+const getUserInfo = async (userId: string) => {
     try {
-        if (!username) return '';
+        if (!userId) return '';
 
         let promptUserInfo = '';
 
-        const userInfo = await ModelUser.findOne({ username }).exec();
+        const userInfo = await ModelUser.findById(userId).exec();
         if (userInfo) {
             if (userInfo.name !== '') {
                 promptUserInfo += `My name is ${userInfo.name}. `;
@@ -133,9 +133,9 @@ const getUserInfo = async (username: string) => {
 }
 
 const generateTaskSuggestionsFromConversations = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }) => {
     try {
         const messages = [] as Message[];
@@ -196,7 +196,7 @@ const generateTaskSuggestionsFromConversations = async ({
 
 
         const taskWorkspaceArr = await ModelTaskWorkspace.find({
-            username,
+            userId,
         }).exec() as ITaskWorkspace[];
         if (taskWorkspaceArr.length > 0) {
             systemPrompt += `If the task is related to a workspace, provide the workspace ID in taskWorkspaceId and workspace name in taskWorkspaceName. \n`;
@@ -214,7 +214,7 @@ const generateTaskSuggestionsFromConversations = async ({
             "content": systemPrompt,
         })
 
-        const promptUserInfo = await getUserInfo(username);
+        const promptUserInfo = await getUserInfo(userId);
         if (promptUserInfo.length > 0) {
             messages.push({
                 role: "user",
@@ -224,7 +224,7 @@ const generateTaskSuggestionsFromConversations = async ({
 
         // last conversations
         const lastConversationsDesc = await getConversationListByNotes({
-            username,
+            userId,
         });
         messages.push({
             role: "user",
@@ -232,7 +232,7 @@ const generateTaskSuggestionsFromConversations = async ({
         });
 
         // get user info
-        const userInfoApiKey = await ModelUserApiKey.findOne({ username }).exec();
+        const userInfoApiKey = await ModelUserApiKey.findOne({ userId }).exec();
         if (!userInfoApiKey) {
             return [];
         }

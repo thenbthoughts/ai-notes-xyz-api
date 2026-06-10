@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
@@ -33,9 +34,9 @@ const findLifeEventsRecord = async (targetRecordId: string | null): Promise<ILif
 /**
  * Validate user API keys for Ollama and Qdrant
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | ObjectId) => {
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
@@ -159,17 +160,17 @@ const generateEmbeddingByLifeEventsId = async ({
 
         // Step 2: Check if AI features are enabled for this user
         const user = await ModelUser.findOne({
-            username: lifeEventsRecord.username,
+            _id: lifeEventsRecord.userId,
             featureAiActionsEnabled: true,
             featureAiActionsLifeEvents: true
         });
         if (!user) {
-            console.log('Life Events AI or AI features not enabled for user:', lifeEventsRecord.username);
+            console.log('Life Events AI or AI features not enabled for user:', lifeEventsRecord.userId);
             return true; // Skip embedding generation if AI features or Life Events AI is not enabled
         }
 
         // Step 4: Validate API keys
-        const apiKeys = await validateApiKeys(lifeEventsRecord.username);
+        const apiKeys = await validateApiKeys(lifeEventsRecord.userId);
         if (!apiKeys) {
             return true;
         }
@@ -194,7 +195,7 @@ const generateEmbeddingByLifeEventsId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${lifeEventsRecord.username}`;
+        const collectionName = `index-user-${lifeEventsRecord.userId}`;
 
         // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

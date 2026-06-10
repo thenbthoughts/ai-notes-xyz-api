@@ -4,7 +4,7 @@ import mongoose, { Document } from 'mongoose';
 export interface IInfoVaultEmail extends Document {
     // identification
     infoVaultId: mongoose.Schema.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // fields
     email: string;

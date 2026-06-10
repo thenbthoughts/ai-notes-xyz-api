@@ -9,8 +9,8 @@ const router = Router();
 
 router.post('/memoLabelList', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
-    const docs = await ModelMemoLabel.find({ username }).sort({ name: 1 }).lean();
+    const userId = res.locals.auth_userId as string;
+    const docs = await ModelMemoLabel.find({ userId }).sort({ name: 1 }).lean();
     return res.json({ message: 'Labels retrieved successfully', docs });
   } catch (error) {
     console.error(error);
@@ -20,7 +20,7 @@ router.post('/memoLabelList', middlewareUserAuth, async (req: Request, res: Resp
 
 router.post('/memoLabelAdd', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     if (name.length < 1 || name.length > 80) {
       return res.status(400).json({ message: 'Label name must be 1–80 characters' });
@@ -29,7 +29,7 @@ router.post('/memoLabelAdd', middlewareUserAuth, async (req: Request, res: Respo
     const now = new Date();
     try {
       const doc = await ModelMemoLabel.create({
-        username,
+        userId,
         name,
         createdAtUtc: now,
         updatedAtUtc: now,
@@ -49,7 +49,7 @@ router.post('/memoLabelAdd', middlewareUserAuth, async (req: Request, res: Respo
 
 router.post('/memoLabelEdit', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const _id = getMongodbObjectOrNull(req.body?._id);
     if (!_id) {
       return res.status(400).json({ message: 'Label ID is invalid' });
@@ -61,7 +61,7 @@ router.post('/memoLabelEdit', middlewareUserAuth, async (req: Request, res: Resp
 
     try {
       const doc = await ModelMemoLabel.findOneAndUpdate(
-        { _id, username },
+        { _id, userId },
         { $set: { name, updatedAtUtc: new Date() } },
         { new: true },
       ).lean();
@@ -84,19 +84,19 @@ router.post('/memoLabelEdit', middlewareUserAuth, async (req: Request, res: Resp
 
 router.post('/memoLabelDelete', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const _id = getMongodbObjectOrNull(req.body?._id);
     if (!_id) {
       return res.status(400).json({ message: 'Label ID is invalid' });
     }
 
-    const owned = await ModelMemoLabel.findOne({ _id, username });
+    const owned = await ModelMemoLabel.findOne({ _id, userId });
     if (!owned) {
       return res.status(404).json({ message: 'Label not found' });
     }
 
-    await ModelMemoNote.updateMany({ username, labelIds: _id }, { $pull: { labelIds: _id } });
-    await ModelMemoLabel.deleteOne({ _id, username });
+    await ModelMemoNote.updateMany({ userId, labelIds: _id }, { $pull: { labelIds: _id } });
+    await ModelMemoLabel.deleteOne({ _id, userId });
 
     return res.json({ message: 'Label deleted successfully' });
   } catch (error) {

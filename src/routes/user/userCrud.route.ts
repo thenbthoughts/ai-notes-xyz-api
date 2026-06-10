@@ -18,11 +18,11 @@ router.post(
         req: Request, res: Response
     ) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             // const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
             const resultApiKey = {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 clientFrontendUrl: '',
                 apiKeyGroqValid: false,
                 apiKeyOpenrouterValid: false,
@@ -45,13 +45,11 @@ router.post(
                 timeZoneUtcOffset: 330,
             };
 
-            const resultUserInfo = await ModelUser.findOne({
-                username: auth_username,
-            })
+            const resultUserInfo = await ModelUser.findById(auth_userId)
 
             const resultUserInfoApi = await ModelUserApiKey.findOne(
                 {
-                    username: auth_username,
+                    userId: auth_userId,
                 }
             );
 
@@ -59,7 +57,7 @@ router.post(
             if (!resultUserInfoApi) {
                 await ModelUserApiKey.findOneAndUpdate(
                     {
-                        username: auth_username,
+                        userId: auth_userId,
                     },
                     {
                         $set: {
@@ -234,15 +232,16 @@ router.post(
         req: Request, res: Response
     ) => {
         try {
-            const user = await ModelUser.findOne({
-                username: res.locals.auth_username
-            }).select(
+            const user = await ModelUser.findById(res.locals.auth_userId).select(
                 '-password'
             );
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
             }
-            return res.json(user);
+            // Expose the canonical userId (the _id reference) alongside the doc for clients
+            const userObj: any = user.toObject ? user.toObject() : { ...user };
+            userObj.userId = user._id;
+            return res.json(userObj);
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
@@ -258,7 +257,7 @@ router.post(
         req: Request, res: Response
     ) => {
         try {
-            const { username, ...updateData } = req.body;
+            const { userId, ...updateData } = req.body;
 
             let updateObj = {} as Partial<IUser>;
             if (typeof updateData.name === 'string') {
@@ -346,8 +345,8 @@ router.post(
                 return res.status(400).json({ message: 'No valid fields provided for update' });
             }
 
-            const updatedUser = await ModelUser.findOneAndUpdate(
-                { username: res.locals.auth_username },
+            const updatedUser = await ModelUser.findByIdAndUpdate(
+                res.locals.auth_userId,
                 { $set: updateObj },
                 {
                     new: true
@@ -356,7 +355,9 @@ router.post(
             if (!updatedUser) {
                 return res.status(404).json({ message: 'User not found' });
             }
-            return res.json(updatedUser);
+            const updatedObj: any = updatedUser.toObject ? updatedUser.toObject() : { ...updatedUser };
+            updatedObj.userId = updatedUser._id;
+            return res.json(updatedObj);
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });

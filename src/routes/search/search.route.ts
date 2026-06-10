@@ -11,7 +11,7 @@ import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 const router = Router();
 
 const getUnionPipeline = ({
-    username,
+    userId,
     collectionName,
     filterTaskIsCompleted,
     filterTaskIsArchived,
@@ -19,7 +19,7 @@ const getUnionPipeline = ({
     filterNotesWorkspaceIds,
     filterLifeEventSearchDiary,
 }: {
-    username: string;
+    userId: string;
     collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'memoNotes';
     filterTaskIsCompleted: 'all' | 'completed' | 'not-completed';
     filterTaskIsArchived: 'all' | 'archived' | 'not-archived';
@@ -29,10 +29,10 @@ const getUnionPipeline = ({
 }) => {
     if (collectionName === 'tasks') {
         let tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
             taskIsCompleted?: boolean;
             taskIsArchived?: boolean;
@@ -85,10 +85,10 @@ const getUnionPipeline = ({
 
     if (collectionName === 'notes') {
         let tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
             notesWorkspaceId?: {
                 $in: mongoose.Types.ObjectId[];
@@ -129,10 +129,10 @@ const getUnionPipeline = ({
 
     if (collectionName === 'lifeEvents') {
         let tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
             lifeEventIsDiary?: boolean;
         };
@@ -163,10 +163,10 @@ const getUnionPipeline = ({
 
     if (collectionName === 'infoVault') {
         let tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
         };
         return {
@@ -190,10 +190,10 @@ const getUnionPipeline = ({
 
     if (collectionName === 'memoNotes') {
         const tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
         };
         return {
@@ -217,10 +217,10 @@ const getUnionPipeline = ({
 
     if (collectionName === 'chatLlmThread') {
         let tempStage = {
-            username: username,
+            userId: userId,
             collectionName: collectionName,
         } as {
-            username: string;
+            userId: string;
             collectionName: string;
         };
         return {
@@ -349,7 +349,7 @@ router.post(
             // union pipeline -> task
             if (filterEventTypeTasks) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'tasks',
                     filterTaskIsCompleted,
                     filterTaskIsArchived,
@@ -366,7 +366,7 @@ router.post(
             // union pipeline -> note
             if (filterEventTypeNotes) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'notes',
 
                     // filter
@@ -385,7 +385,7 @@ router.post(
             // union pipeline -> lifeEvent
             if (filterEventTypeLifeEvents) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'lifeEvents',
 
                     // filter
@@ -404,7 +404,7 @@ router.post(
             // union pipeline -> infoVault
             if (filterEventTypeInfoVault) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'infoVault',
 
                     // filter
@@ -423,7 +423,7 @@ router.post(
             // union pipeline -> chatLlmThread
             if (filterEventTypeChatLlm) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'chatLlmThread',
 
                     // filter
@@ -442,7 +442,7 @@ router.post(
             // union pipeline -> memo (Memo page)
             if (filterEventTypeMemo) {
                 const unionPipeline = getUnionPipeline({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     collectionName: 'memoNotes',
 
                     filterTaskIsCompleted,
@@ -459,9 +459,9 @@ router.post(
 
             // Build search query conditions
             let matchConditionsSearch = {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             } as {
-                username: string;
+                userId: string;
                 $and?: { text: { $regex: string; $options: string } }[] | undefined;
             };
             if (searchQuery && searchQuery.length >= 1) {
@@ -670,10 +670,10 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
 
             // Start reindexing
-            await reindexAll({ username })
+            await reindexAll({ userId })
 
             return res.json({
                 message: 'Reindexing started. This may take a few minutes.',

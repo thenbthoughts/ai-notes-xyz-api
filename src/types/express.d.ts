@@ -1,5 +1,5 @@
 // src/types/express.d.ts
-import { Response } from 'express';
+import mongoose from 'mongoose';
 
 declare global {
     namespace Express {
@@ -17,7 +17,8 @@ declare global {
                     apiKeyS3SecretAccessKey: string;
                     apiKeyS3BucketName: string;
                 };
-                auth_username?: string; // Optional if you want to keep it
+                auth_userId?: mongoose.Types.ObjectId;
+                timeZoneUtcOffset?: number;
             };
         }
     }

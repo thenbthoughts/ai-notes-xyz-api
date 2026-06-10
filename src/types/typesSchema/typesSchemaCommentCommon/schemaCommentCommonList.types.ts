@@ -18,7 +18,7 @@ export interface ISchemaCommentCommon extends Document {
     aiTags: string[];
 
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // Reference to the notes, task, lifeEvent, infoVault
     commentType: string; // notes, task, lifeEvent, infoVault

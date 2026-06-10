@@ -27,20 +27,20 @@ export function getAm4ShellUploadConfig(apiKey: tsUserApiKey): { baseUrl: string
 
 export function getAm4OpencodeConfig(apiKey: tsUserApiKey): {
     baseUrl: string;
-    username: string;
+    userId: string;
     password: string;
 } | null {
     if (apiKey.apiKeyOpencodeWithShellValid && apiKey.opencodeWithShellUrl?.trim()) {
         return {
             baseUrl: apiKey.opencodeWithShellUrl.replace(/\/+$/, ''),
-            username: apiKey.opencodeUsername?.trim() || 'opencode',
+            userId: apiKey.opencodeUsername?.trim() || 'opencode',
             password: apiKey.opencodePassword || '',
         };
     }
     if (apiKey.apiKeyOpencodeValid && apiKey.opencodeUrl?.trim()) {
         return {
             baseUrl: apiKey.opencodeUrl.replace(/\/+$/, ''),
-            username: apiKey.opencodeUsername?.trim() || 'opencode',
+            userId: apiKey.opencodeUsername?.trim() || 'opencode',
             password: apiKey.opencodePassword || '',
         };
     }

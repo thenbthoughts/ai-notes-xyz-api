@@ -17,7 +17,7 @@ router.post('/lifeEventCategoryGet', middlewareUserAuth, async (req: Request, re
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -137,7 +137,7 @@ router.post('/lifeEventCategoryDelete', middlewareUserAuth, async (req: Request,
 
         const lifeEvent = await ModelLifeEventCategory.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!lifeEvent) {
@@ -154,7 +154,7 @@ router.post('/lifeEventCategoryDelete', middlewareUserAuth, async (req: Request,
 // Add Life Event API
 router.post('/lifeEventCategoryAdd', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const {
             name,
@@ -191,7 +191,7 @@ router.post('/lifeEventCategoryAdd', middlewareUserAuth, async (req: Request, re
             }
 
             const newLifeEvent = await ModelLifeEventCategory.create({
-                username: auth_username,
+                userId: auth_userId,
 
                 name,
                 isSubCategory,
@@ -215,7 +215,7 @@ router.post('/lifeEventCategoryAdd', middlewareUserAuth, async (req: Request, re
             }
 
             const newLifeEvent = await ModelLifeEventCategory.create({
-                username: auth_username,
+                userId: auth_userId,
 
                 name,
                 isSubCategory,
@@ -237,7 +237,7 @@ router.post('/lifeEventCategoryAdd', middlewareUserAuth, async (req: Request, re
 // Edit Life Event API
 router.post('/lifeEventCategoryEdit', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         let _id = null as mongoose.Types.ObjectId | null;
         const arg_id = req.body._id;
@@ -258,7 +258,7 @@ router.post('/lifeEventCategoryEdit', middlewareUserAuth, async (req: Request, r
 
         const result = await ModelLifeEventCategory.findOne({
             _id: _id,
-            username: auth_username,
+            userId: auth_userId,
         }) as ILifeEventCategory;
         if (!result) {
             return res.status(400).json({ error: 'Record does not exist' });
@@ -288,7 +288,7 @@ router.post('/lifeEventCategoryEdit', middlewareUserAuth, async (req: Request, r
         const newLifeEvent = await ModelLifeEventCategory.updateOne(
             {
                 _id: _id,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             },
             {
                 $set: {

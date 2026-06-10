@@ -6,7 +6,7 @@ export interface IGlobalSearch extends Document {
 
     // Reference fields
     entityId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
     collectionName: '' | 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread' | 'chatLlm' | 'memoNotes';
 
     // Metadata fields for filtering

@@ -89,7 +89,7 @@ function normalizePlannedAm4(raw: unknown): { readyToSynthesize: boolean; workin
 
 async function planNextAm4Step(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     globalTask: string;
     conversationText: string;
     intermediateAnswersText: string;
@@ -104,7 +104,7 @@ async function planNextAm4Step(params: {
 > {
     const {
         threadId,
-        username,
+        userId,
         globalTask,
         conversationText,
         intermediateAnswersText,
@@ -158,7 +158,7 @@ async function planNextAm4Step(params: {
     }
 
     try {
-        await trackAnswerMachineTokens(threadId, llmResult.usageStats, username, 'question_generation');
+        await trackAnswerMachineTokens(threadId, llmResult.usageStats, userId, 'question_generation');
     } catch {
         /* empty */
     }
@@ -179,7 +179,7 @@ async function planNextAm4Step(params: {
 
 async function verifySequentialStepAm4(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     globalTaskDescription: string;
     cumulativePriorStepsText: string;
     maxOuterIterations: number;
@@ -202,7 +202,7 @@ async function verifySequentialStepAm4(params: {
 > {
     const {
         threadId,
-        username,
+        userId,
         globalTaskDescription,
         cumulativePriorStepsText,
         maxOuterIterations,
@@ -271,7 +271,7 @@ async function verifySequentialStepAm4(params: {
     }
 
     try {
-        await trackAnswerMachineTokens(threadId, llmResult.usageStats, username, 'sub_question_answer');
+        await trackAnswerMachineTokens(threadId, llmResult.usageStats, userId, 'sub_question_answer');
     } catch {
         /* empty */
     }
@@ -384,7 +384,7 @@ const runSequentialReasoningLoopV4 = async ({
 
         const thread = await ModelChatLlmThread.findOne({
             _id: answerMachineRecord.threadId,
-            username: answerMachineRecord.username,
+            userId: answerMachineRecord.userId.toString(),
         });
         if (!thread) {
             return { success: false, errorReason: 'Thread not found', data: null };
@@ -395,7 +395,7 @@ const runSequentialReasoningLoopV4 = async ({
             return { success: false, errorReason: 'No LLM configuration found', data: null };
         }
 
-        const userApiKeyDoc = await ModelUserApiKey.findOne({ username: answerMachineRecord.username });
+        const userApiKeyDoc = await ModelUserApiKey.findOne({ userId: answerMachineRecord.userId });
         const apiKey = getApiKeyByObject(userApiKeyDoc);
         const shellEngineConfig = getAm4ShellUploadConfig(apiKey);
         const ocCfg = getAm4OpencodeConfig(apiKey);
@@ -407,7 +407,7 @@ const runSequentialReasoningLoopV4 = async ({
             };
         }
 
-        const health = await validateOpencodeHealth(ocCfg.baseUrl, ocCfg.username, ocCfg.password);
+        const health = await validateOpencodeHealth(ocCfg.baseUrl, ocCfg.userId, ocCfg.password);
         if (!health.ok) {
             return { success: false, errorReason: health.error || 'OpenCode health check failed', data: null };
         }
@@ -453,7 +453,7 @@ const runSequentialReasoningLoopV4 = async ({
                 const canonicalInputSyncResult = await syncAm4RequestAttachmentsIntoCanonicalShellLayout({
                     shellCfg: shellEngineConfig,
                     apiKey,
-                    username: answerMachineRecord.username,
+                    userId: answerMachineRecord.userId.toString(),
                     userObjectId: am4UserProfileDocumentId,
                     threadId: answerMachineRecord.threadId,
                     attachments: attachedDocsForSync.map((d) => ({
@@ -508,7 +508,7 @@ const runSequentialReasoningLoopV4 = async ({
 
         const planResult = await planNextAm4Step({
             threadId: answerMachineRecord.threadId,
-            username: answerMachineRecord.username,
+            userId: answerMachineRecord.userId.toString(),
             globalTask: globalTaskText,
             conversationText,
             intermediateAnswersText,
@@ -539,7 +539,7 @@ const runSequentialReasoningLoopV4 = async ({
         let forceSynthesize = false;
         let advanceStep = false;
 
-        const opencodeClient = await createAm4OpencodeClient(ocCfg.baseUrl, ocCfg.username, ocCfg.password);
+        const opencodeClient = await createAm4OpencodeClient(ocCfg.baseUrl, ocCfg.userId, ocCfg.password);
         const mappedExecutorModel = opencodeModelFromLlmConfig(llmConfig);
         const opencodeExecutorModel = mappedExecutorModel ?? {
             providerID: AM4_OPENCODE_DEFAULT_EXECUTOR_MODEL.providerID,
@@ -578,7 +578,7 @@ const runSequentialReasoningLoopV4 = async ({
                 const created = await ModelAnswerMachineSubQuestionV4.create({
                     threadId: answerMachineRecord.threadId,
                     parentMessageId: answerMachineRecord.parentMessageId,
-                    username: answerMachineRecord.username,
+                    userId: answerMachineRecord.userId.toString(),
                     answerMachineRequestV4Id,
                     answerMachineIteration: answerMachineRecord.currentIteration,
                     question: workingQuestion,
@@ -671,7 +671,7 @@ const runSequentialReasoningLoopV4 = async ({
                     const outputSync = await syncAm4AssistantOutputFilesFromShellToUserStorage({
                         shellCfg: shellEngineConfig,
                         apiKey,
-                        username: answerMachineRecord.username,
+                        userId: answerMachineRecord.userId.toString(),
                         userObjectId: String(userApiKeyDoc._id),
                         threadId: answerMachineRecord.threadId,
                         answerMachineRequestV4Id,
@@ -688,7 +688,7 @@ const runSequentialReasoningLoopV4 = async ({
             const aText = assistantText;
             const ver = await verifySequentialStepAm4({
                 threadId: answerMachineRecord.threadId,
-                username: answerMachineRecord.username,
+                userId: answerMachineRecord.userId.toString(),
                 globalTaskDescription: globalTaskText,
                 cumulativePriorStepsText: priorText,
                 maxOuterIterations: answerMachineRecord.maxNumberOfIterations,

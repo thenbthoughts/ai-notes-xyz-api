@@ -23,14 +23,14 @@ const router = Router();
 
 const generateTags = async ({
     mongodbRecordId,
-    auth_username,
+    auth_userId,
 }: {
     mongodbRecordId: string,
-    auth_username: string,
+    auth_userId: string,
 }) => {
     try {
         await ModelLlmPendingTaskCron.create({
-            username: auth_username,
+            userId: auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: mongodbRecordId,
         });
@@ -42,16 +42,16 @@ const generateTags = async ({
 const getContentFromDocument = async ({
     fileUrl,
     apiKeys,
-    username,
+    userId,
 }: {
     fileUrl: string;
     apiKeys: any;
-    username: string;
+    userId: string;
 }) => {
     const extension = fileUrl.split('.').pop();
 
     try {
-        const userApiKeyDb = await ModelUserApiKey.findOne({ username });
+        const userApiKeyDb = await ModelUserApiKey.findOne({ userId });
 
         const s3Config: S3Config = {
             region: apiKeys.apiKeyS3Region,
@@ -132,7 +132,7 @@ const handleUploadTypeDocument = async ({
     tags,
     threadId,
     actionDatetimeObj,
-    auth_username,
+    auth_userId,
 }: {
     fileUrl: string;
     apiKeys: any;
@@ -141,7 +141,7 @@ const handleUploadTypeDocument = async ({
     tags: any;
     threadId: any;
     actionDatetimeObj: any;
-    auth_username: string;
+    auth_userId: string;
 }): Promise<{
     success: boolean;
     doc?: any;
@@ -152,7 +152,7 @@ const handleUploadTypeDocument = async ({
         const extractedText = await getContentFromDocument({
             fileUrl,
             apiKeys,
-            username: auth_username,
+            userId: auth_userId,
         });
 
         if (!extractedText || extractedText.length < 1) {
@@ -169,7 +169,7 @@ const handleUploadTypeDocument = async ({
         const result = await ModelChatLlm.create({
             type,
             content,
-            username: auth_username,
+            userId: auth_userId,
             tags,
             fileUrl,
             fileContentText: extractedText,
@@ -181,12 +181,12 @@ const handleUploadTypeDocument = async ({
 
         await generateTags({
             mongodbRecordId: result._id.toString(),
-            auth_username,
+            auth_userId,
         });
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: auth_username,
+            userId: auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: result._id,
         });
@@ -210,7 +210,7 @@ router.post(
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             const { type, content, tags, fileUrl, fileUrlArr } = req.body; // Added threadId
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
@@ -223,7 +223,7 @@ router.post(
             // get thread info
             const threadInfo = await ModelChatLlmThread.findOne({
                 _id: threadId,
-                username: auth_username,
+                userId: auth_userId,
             });
             if (!threadInfo) {
                 return res.status(400).json({ message: 'Thread not found' });
@@ -237,7 +237,7 @@ router.post(
                 const result = await ModelChatLlm.create({
                     type,
                     content,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     tags,
                     fileUrl,
                     fileUrlArr,
@@ -247,7 +247,7 @@ router.post(
                 });
 
                 // get image
-                const userApiKeyDb = await ModelUserApiKey.findOne({ username: res.locals.auth_username });
+                const userApiKeyDb = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId });
 
                 const s3Config: S3Config = {
                     region: apiKeys.apiKeyS3Region,
@@ -309,7 +309,7 @@ router.post(
                         // add tags
                         await generateTags({
                             mongodbRecordId: result._id.toString(),
-                            auth_username,
+                            auth_userId,
                         });
                     }
                 }
@@ -323,7 +323,7 @@ router.post(
                 const result = await ModelChatLlm.create({
                     type,
                     content,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     tags,
                     fileUrl,
                     fileUrlArr,
@@ -339,7 +339,7 @@ router.post(
                 const newNote = await ModelChatLlm.create({
                     type,
                     content,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     tags,
                     fileUrl,
                     fileUrlArr,
@@ -350,12 +350,12 @@ router.post(
                 // add tags
                 await generateTags({
                     mongodbRecordId: newNote._id.toString(),
-                    auth_username,
+                    auth_userId,
                 });
 
                 // generate keywords by id
                 await ModelLlmPendingTaskCron.create({
-                    username: auth_username,
+                    userId: auth_userId,
                     taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
                     targetRecordId: newNote._id,
                 });
@@ -372,7 +372,7 @@ router.post(
                     tags,
                     threadId,
                     actionDatetimeObj,
-                    auth_username,
+                    auth_userId,
                 });
                 if (result.success === false) {
                     return res.status(400).json({ message: 'Failed to add file as file type not supported' });

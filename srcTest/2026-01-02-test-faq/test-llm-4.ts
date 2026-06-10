@@ -18,11 +18,11 @@ const init = async () => {
 
         const threadInfo = await ModelChatLlmThread.findOne({
             _id: mongoose.Types.ObjectId.createFromHexString("6966799e30832d58c112a451"),
-            username: "gridfstest",
+            userId: "gridfstest",
         }) as IChatLlmThread;
 
         const userApiKey = await ModelUserApiKey.findOne({
-            username: "gridfstest",
+            userId: "gridfstest",
         });
 
         if (!threadInfo || !userApiKey) {
@@ -32,7 +32,7 @@ const init = async () => {
         const resultFromLastConversation = await ModelChatLlm.create({
             type: 'text',
             content: 'AI generating in progress...',
-            username: "gridfstest",
+            userId: "gridfstest",
             tags: [],
             fileUrl: '',
             fileUrlArr: '',
@@ -56,7 +56,7 @@ const init = async () => {
         const result = await getNextMessageFromLast30Conversation({
             threadId: threadInfo._id as mongoose.Types.ObjectId,
             threadInfo,
-            username: "gridfstest",
+            userId: "gridfstest",
             aiModelProvider: "ollama",
             aiModelName: "qwen3-vl:2b",
             userApiKey: userApiKey,

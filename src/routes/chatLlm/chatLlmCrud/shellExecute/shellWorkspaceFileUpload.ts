@@ -50,7 +50,7 @@ function buildS3Config(keys: {
  */
 export async function uploadRecentUserFilesToShellWorkspace(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     apiBase: string;
     token: string;
     userKeyDoc: IUserApiKey;
@@ -62,12 +62,12 @@ export async function uploadRecentUserFilesToShellWorkspace(params: {
         apiKeyS3BucketName: string;
     };
 }): Promise<{ relativePaths: string[]; hintForPlanner: string }> {
-    const { threadId, username, apiBase, token, userKeyDoc, keys } = params;
+    const { threadId, userId, apiBase, token, userKeyDoc, keys } = params;
     const relativePaths: string[] = [];
 
     const recent = await ModelChatLlm.find({
         threadId,
-        username,
+        userId,
         isAi: false,
     })
         .sort({ createdAtUtc: -1 })

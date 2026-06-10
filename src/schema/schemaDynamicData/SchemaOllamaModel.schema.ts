@@ -4,7 +4,7 @@ import type { tsSchemaAiModelListOllama } from '../../types/typesSchema/typesDyn
 
 // AI Model Schema
 const aiModelListOllamaSchema = new Schema<tsSchemaAiModelListOllama>({
-    username: {
+    userId: {
         type: String,
         default: '',
     },

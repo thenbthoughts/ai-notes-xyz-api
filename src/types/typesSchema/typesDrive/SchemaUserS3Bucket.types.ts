@@ -1,7 +1,7 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 interface IUserS3Bucket extends Document {
-    username: string;
+    userId: Types.ObjectId;
     bucketName: string;
     endpoint: string;
     region: string;

@@ -34,9 +34,9 @@ const buildMapsSearchMatch = (raw: string): PipelineStage.Match | null => {
 };
 
 const getMapsLocationInfoVault = ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project | PipelineStage.Unwind | PipelineStage.Set;
 
@@ -46,7 +46,7 @@ const getMapsLocationInfoVault = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
         }
     };
     stateDocument.push(tempStage);
@@ -189,7 +189,7 @@ router.post(
                 $unionWith: {
                     coll: 'infoVault',
                     pipeline: getMapsLocationInfoVault({
-                        username: res.locals.auth_username,
+                        userId: res.locals.auth_userId,
                     }),
                 }
             };

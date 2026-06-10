@@ -3,10 +3,10 @@ import { tsTaskListScheduleSendMyselfEmail } from '../../types/typesSchema/types
 
 const taskScheduleSendMyselfEmailSchema = new Schema<tsTaskListScheduleSendMyselfEmail>({
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
 

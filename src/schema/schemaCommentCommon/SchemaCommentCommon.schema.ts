@@ -31,9 +31,10 @@ const commentsCommonSchema = new Schema<ISchemaCommentCommon>({
     aiTags: { type: [String], default: [] },
 
     // auth
-    username: {
-        type: String,
-        default: '',
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        default: null,
         index: true,
     },
 

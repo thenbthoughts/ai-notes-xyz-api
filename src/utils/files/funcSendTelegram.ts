@@ -29,14 +29,14 @@ function htmlToPlain(html: string): string {
 }
 
 export const funcSendTelegram = async ({
-    username,
+    userId,
     subject,
     text,
     html,
     overrideChatId,
     overrideMessageThreadId,
 }: {
-    username: string;
+    userId: string;
     subject: string;
     text: string;
     html?: string;
@@ -45,12 +45,12 @@ export const funcSendTelegram = async ({
     overrideMessageThreadId?: number | null;
 }): Promise<boolean> => {
     try {
-        if (!username || !subject) {
+        if (!userId || !subject) {
             return false;
         }
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!apiKeys) {
@@ -92,7 +92,7 @@ export const funcSendTelegram = async ({
         }
 
         await ModelUserNotification.create({
-            username: username,
+            userId: userId,
             smtpTo: '',
             subject: subject,
             text: message,

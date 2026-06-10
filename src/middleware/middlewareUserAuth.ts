@@ -41,14 +41,12 @@ const middlewareUserAuth = async (req: Request, res: Response, next: NextFunctio
             return res.status(400).json({ message: 'User agent is not match' });
         }
 
-        // Find user by username
-        const user = await ModelUser.findOne({ username: userDeviceList.username });
+        const user = await ModelUser.findById(userDeviceList.userId);
         if (!user) {
             return res.status(400).json({ message: 'User not found' });
         }
 
-        // Set user in request
-        res.locals.auth_username = user.username;
+        res.locals.auth_userId = user._id;
         if(typeof user.timeZoneUtcOffset === 'number') {
             res.locals.timeZoneUtcOffset = user.timeZoneUtcOffset;
         } else {
@@ -56,7 +54,7 @@ const middlewareUserAuth = async (req: Request, res: Response, next: NextFunctio
         }
 
         const resultApiKey = await ModelUserApiKey.findOne({
-            username: user.username
+            userId: user._id
         });
         const apiKey = getApiKeyByObject(resultApiKey);
         res.locals.apiKey = apiKey;

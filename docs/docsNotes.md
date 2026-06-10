@@ -24,7 +24,7 @@
 - tags: An array of tags associated with the note.
 
 ## Auth fields
-- username: string
+- userId: string
 
 ## Options
 - tags: An array of tags associated with the note.

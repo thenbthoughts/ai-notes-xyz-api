@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { DateTime } from 'luxon';
 import { PipelineStage } from 'mongoose';
 
@@ -14,9 +15,9 @@ import fetchLlmUnified from '../../utils/fetchLlmUnified';
 
 
 const getTaskList = async ({
-    auth_username,
+    auth_userId,
 }: {
-    auth_username: string;
+    auth_userId: string | mongoose.Types.ObjectId;
 }) => {
     try {
         let tempStage = {} as PipelineStage;
@@ -25,7 +26,7 @@ const getTaskList = async ({
         // auth
         tempStage = {
             $match: {
-                username: auth_username,
+                userId: auth_userId,
             }
         }
         stateDocument.push(tempStage);
@@ -135,7 +136,7 @@ const getTaskList = async ({
                             $expr: {
                                 $and: [
                                     {
-                                        $eq: ['$username', auth_username]
+                                        $eq: ['$userId', auth_userId]
                                     },
                                     {
                                         $eq: ['$_id', '$$let_taskStatusId']
@@ -218,18 +219,18 @@ const getTaskList = async ({
 
 const sendAiGeneratedMail = async ({
     taskStr,
-    username,
+    userId,
     smtpTo,
     dateStr,
 }: {
     taskStr: string;
-    username: string;
+    userId: string | mongoose.Types.ObjectId;
     smtpTo: string;
     dateStr: string;
 }) => {
     try {
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(username);
+        const llmConfig = await getDefaultLlmModel(userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             console.log('No LLM available for user, skipping AI-generated email');
             return false;
@@ -318,7 +319,7 @@ ${html}
         // Send the email
         const subject = `Your AI-Generated Daily Task Report (${dateStr})`;
         const sendResult = await funcSendMail({
-            username,
+            userId: userId.toString(),
             smtpTo,
             subject,
             text: "Your daily task report is attached as an HTML email.",
@@ -348,7 +349,7 @@ const suggestDailyTasksByAi = async ({
         
         // Step 2: Get task list by task schedule ID
         const taskStr = await getTaskList({
-            auth_username: taskInfo.username,
+            auth_userId: taskInfo.userId,
         });
 
         if(taskStr === '') {
@@ -357,7 +358,7 @@ const suggestDailyTasksByAi = async ({
 
         // Step 3: validate api keys
         const apiKeys = await ModelUserApiKey.findOne({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             smtpValid: true,
         });
         if (!apiKeys) {
@@ -365,9 +366,7 @@ const suggestDailyTasksByAi = async ({
         }
 
         // Step 4: get user email
-        const userInfo = await ModelUser.findOne({
-            username: taskInfo.username,
-        });
+        const userInfo = await ModelUser.findById(taskInfo.userId);
         if (!userInfo) {
             return true;
         }
@@ -379,7 +378,7 @@ const suggestDailyTasksByAi = async ({
 
         // Step 5.2: send mail
         await funcSendMail({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             smtpTo: userInfo.email,
             subject: `Daily Tasks Suggestion - ${dateStr}`,
             text: taskStr,
@@ -388,7 +387,7 @@ const suggestDailyTasksByAi = async ({
         // step 5.3: send mail with ai generated html
         await sendAiGeneratedMail({
             taskStr,
-            username: taskInfo.username,
+            userId: taskInfo.userId,
             smtpTo: userInfo.email,
             dateStr,
         });

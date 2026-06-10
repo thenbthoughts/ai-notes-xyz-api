@@ -22,13 +22,13 @@ const  generateLifeEventAiSummaryById = async ({
         const lifeEventFirst = lifeEventRecords[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(lifeEventFirst.username);
+        const llmConfig = await getDefaultLlmModel(lifeEventFirst.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         // Check if Life Events AI feature is enabled for this user
-        const user = await ModelUser.findOne({ username: lifeEventFirst.username });
+        const user = await ModelUser.findById(lifeEventFirst.userId);
         if (!user || !user.featureAiActionsLifeEvents) {
             return true; // Skip if Life Events AI is not enabled for this user
         }

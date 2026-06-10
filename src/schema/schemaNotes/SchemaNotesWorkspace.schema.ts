@@ -5,7 +5,7 @@ import { INotesWorkspace } from '../../types/typesSchema/typesSchemaNotes/Schema
 // Notes Schema
 const notesWorkspaceSchema = new Schema<INotesWorkspace>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     title: { type: String, default: '' },

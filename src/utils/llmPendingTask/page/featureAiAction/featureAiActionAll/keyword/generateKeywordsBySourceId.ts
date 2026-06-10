@@ -237,7 +237,7 @@ const generateKeywordsBySourceId = async ({
 
         // Try to find the record in each model
         let sourceType = '';
-        let username = '';
+        let userId = '';
         let content = '';
 
         // Try Notes
@@ -273,7 +273,7 @@ const generateKeywordsBySourceId = async ({
             if (noteAggregate && noteAggregate.length > 0) {
                 const note = noteAggregate[0];
                 sourceType = 'notes';
-                username = note.username;
+                userId = note.userId;
                 content = `Title: ${note.title}\n`;
                 if (note.description) {
                     content += `Description: ${note.description}\n`;
@@ -332,7 +332,7 @@ const generateKeywordsBySourceId = async ({
             if (taskAggregate && taskAggregate.length > 0) {
                 const task = taskAggregate[0];
                 sourceType = 'tasks';
-                username = task.username;
+                userId = task.userId;
                 content = `Title: ${task.title}\n`;
                 content += `Description: ${task.description}\n`;
                 if (task.labels && task.labels.length > 0) {
@@ -379,7 +379,7 @@ const generateKeywordsBySourceId = async ({
             if (chatLlmAggregate && chatLlmAggregate.length > 0) {
                 const chatLlm = chatLlmAggregate[0];
                 sourceType = 'chatLlm';
-                username = chatLlm.username;
+                userId = chatLlm.userId;
                 content = `Content: ${chatLlm.content}\n`;
                 if (chatLlm.tags && chatLlm.tags.length > 0) {
                     content += `Tags: ${chatLlm.tags.join(', ')}\n`;
@@ -427,7 +427,7 @@ const generateKeywordsBySourceId = async ({
             if (lifeEventAggregate && lifeEventAggregate.length > 0) {
                 const lifeEvent = lifeEventAggregate[0];
                 sourceType = 'lifeEvents';
-                username = lifeEvent.username;
+                userId = lifeEvent.userId;
                 content = `Title: ${lifeEvent.title}\n`;
                 content += `Description: ${lifeEvent.description}\n`;
                 if (lifeEvent.tags && lifeEvent.tags.length > 0) {
@@ -474,7 +474,7 @@ const generateKeywordsBySourceId = async ({
             if (infoVaultAggregate && infoVaultAggregate.length > 0) {
                 const infoVault = infoVaultAggregate[0];
                 sourceType = 'infoVault';
-                username = infoVault.username;
+                userId = infoVault.userId;
                 content = `Name: ${infoVault.name}\n`;
                 if (infoVault.nickname) {
                     content += `Nickname: ${infoVault.nickname}\n`;
@@ -504,18 +504,18 @@ const generateKeywordsBySourceId = async ({
             }
         }
 
-        if (!sourceType || !username || !content.trim()) {
+        if (!sourceType || !userId || !content.trim()) {
             return true; // Record not found or no content
         }
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(username);
+        const llmConfig = await getDefaultLlmModel(userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available or AI features disabled
         }
 
         // Check AI feature toggle based on source type
-        const user = await ModelUser.findOne({ username });
+        const user = await ModelUser.findById(userId);
         if (!user) {
             return true;
         }
@@ -544,12 +544,12 @@ const generateKeywordsBySourceId = async ({
         }
 
         if (!featureEnabled) {
-            console.log(`${sourceType} AI not enabled for user: ${username}`);
+            console.log(`${sourceType} AI not enabled for user: ${userId}`);
             return true; // Skip keyword generation if specific feature AI is not enabled
         }
 
         // Get user languages
-        const userInfo = await ModelUser.findOne({ username });
+        const userInfo = await ModelUser.findById(userId);
         if (!userInfo) {
             return true; // User not found
         }
@@ -582,13 +582,13 @@ const generateKeywordsBySourceId = async ({
 
         // Delete existing keywords for this source
         await ModelLlmContextKeyword.deleteMany({
-            username,
+            userId,
             metadataSourceType: sourceType,
             metadataSourceId: targetRecordIdObj,
         });
 
         const bulkInsert = uniqueKeywords.map(keyword => ({
-            username,
+            userId,
             keyword,
             aiCategory: aiCategory,
             aiSubCategory: aiSubCategory,

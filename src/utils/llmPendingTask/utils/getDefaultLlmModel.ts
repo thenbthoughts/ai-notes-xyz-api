@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import { ModelUserApiKey } from '../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelOpenaiCompatibleModel } from '../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema';
@@ -10,11 +11,11 @@ interface DefaultModelResult {
     apiKey: string;
 }
 
-const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult> => {
+const getDefaultLlmModel = async (userId: string | mongoose.Types.ObjectId): Promise<DefaultModelResult> => {
     try {
         // Find user and get their AI preferences
         const user = await ModelUser.findOne({
-            username,
+            _id: userId,
             featureAiActionsEnabled: true,
         });
 
@@ -29,7 +30,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
         }
 
         const userApiKeys = await ModelUserApiKey.findOne({
-            username,
+            userId,
         });
 
         let featureAiActionsModelName = user.featureAiActionsModelName || '';
@@ -127,7 +128,7 @@ const getDefaultLlmModel = async (username: string): Promise<DefaultModelResult>
 
         // if there exists a model for openai-compatible, return it
         const modelOpenaiCompatible = await ModelOpenaiCompatibleModel.findOne({
-            username,
+            userId,
             isInputModalityText: 'true',
             isOutputModalityText: 'true',
             modelName: { $not: /ocr/i },

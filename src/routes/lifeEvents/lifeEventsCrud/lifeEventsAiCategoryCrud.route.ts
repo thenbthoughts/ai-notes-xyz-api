@@ -13,7 +13,7 @@ router.post('/lifeEventAiCategoryGet', middlewareUserAuth, async (req: Request, 
         const lifeEvents = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 }
             },
             {
@@ -63,7 +63,7 @@ router.post('/lifeEventAiSubCategoryGet', middlewareUserAuth, async (req: Reques
         const lifeEvents = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     aiCategory: aiCategory,
                 }
             },

@@ -33,15 +33,15 @@ router.post(
         return res.status(400).json({ success: '', error: 'Missing or invalid region parameter' });
       }
 
-      const username = res.locals.auth_username;
-      if (!username) {
-        return res.status(401).json({ success: '', error: 'Unauthorized: username not found' });
+      const userId = res.locals.auth_userId;
+      if (!userId) {
+        return res.status(401).json({ success: '', error: 'Unauthorized: userId not found' });
       }
 
       // Update user
       await ModelUser.updateOne(
         {
-          username: username,
+          _id: userId,
         },
         {
           $set: {

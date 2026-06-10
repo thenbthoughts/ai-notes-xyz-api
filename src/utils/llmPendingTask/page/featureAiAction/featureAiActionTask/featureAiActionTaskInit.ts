@@ -20,19 +20,19 @@ const featureAiActionTaskInit = async ({
         console.log('targetRecordId', targetRecordId);
 
         // Check if Task AI is enabled for this user
-        const taskForUserCheck = await ModelTask.findById(targetRecordId).select('username').lean();
+        const taskForUserCheck = await ModelTask.findById(targetRecordId).select('userId').lean();
         if (!taskForUserCheck) {
             return true;
         }
 
         const user = await ModelUser.findOne({
-            username: taskForUserCheck.username,
+            _id: taskForUserCheck.userId,
             featureAiActionsEnabled: true,
             featureAiActionsTask: true
         });
 
         if (!user) {
-            console.log('Task AI not enabled for user:', taskForUserCheck.username);
+            console.log('Task AI not enabled for user:', taskForUserCheck.userId);
             return true; // Skip AI processing if Task AI is not enabled
         }
 
@@ -68,7 +68,7 @@ const featureAiActionTaskInit = async ({
         console.log('resultKeywords', resultKeywords);
 
         // reindex the document in global search after all AI actions are complete
-        const taskRecord = await ModelTask.findById(targetRecordId).select('username').lean();
+        const taskRecord = await ModelTask.findById(targetRecordId).select('userId').lean();
         if (taskRecord) {
             await reindexDocument({
                 reindexDocumentArr: [{

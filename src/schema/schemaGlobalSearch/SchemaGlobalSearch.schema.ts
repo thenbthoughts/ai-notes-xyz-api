@@ -15,10 +15,10 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
         required: true,
         index: true,
     },
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
     collectionName: {
@@ -74,7 +74,7 @@ const globalSearchSchema = new Schema<IGlobalSearch>({
 
 // Create indexes
 globalSearchSchema.index({ text: 'text' }); // Text index for full-text search
-globalSearchSchema.index({ username: 1, entityType: 1 }); // Compound index for filtering
+globalSearchSchema.index({ userId: 1, entityType: 1 }); // Compound index for filtering
 globalSearchSchema.index({ entityId: 1, entityType: 1 }); // Compound index for entity lookup
 
 // GlobalSearch Model

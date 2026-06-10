@@ -36,7 +36,7 @@ const shellRunArtifactV1Schema = new Schema(
         kind: { type: String, required: true },
         chatShellRunGroupId: { type: mongoose.Schema.Types.ObjectId, required: true },
         threadId: { type: mongoose.Schema.Types.ObjectId, required: true },
-        username: { type: String, required: true },
+        userId: { type: Schema.Types.ObjectId, ref: 'user', required: true },
         completedAtUtc: { type: Date, required: true },
         todos: { type: [shellRunArtifactV1TodoSchema], default: [] },
         importedFiles: { type: [shellRunArtifactV1ImportedFileSchema], default: [] },
@@ -58,7 +58,7 @@ const chatLlmSchema = new Schema<IChatLlm>({
     },
     content: { type: String, default: '' },
     reasoningContent: { type: String, default: '' },
-    username: { type: String, required: true, default: '', index: true, },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true, },
     tags: { type: [String], default: [] },
     visibility: {
         type: String,

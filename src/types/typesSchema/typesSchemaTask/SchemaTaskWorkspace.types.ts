@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // Task Workspace
 export interface ITaskWorkspace extends Document {
     // identification
-    username: string;
+    userId: Types.ObjectId;
 
     // fields
     title: string;

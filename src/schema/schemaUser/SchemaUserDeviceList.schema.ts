@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 // UserDeviceList Interface
 interface IUserDeviceList extends Document {
-    username: string;
+    userId: mongoose.Types.ObjectId;
     randomDeviceId: string;
     isExpired: boolean;
 
@@ -16,7 +16,7 @@ interface IUserDeviceList extends Document {
 
 // UserDeviceList Schema
 const userDeviceListSchema = new Schema<IUserDeviceList>({
-    username: { type: String, required: true, default: '' },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true },
     randomDeviceId: { type: String, required: true, unique: true, default: '' },
     isExpired: { type: Boolean, default: false },
 

@@ -42,10 +42,10 @@ const chatLlmAnswerMachineTokenRecordSchema = new Schema<IChatLlmAnswerMachineTo
     },
     
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
     

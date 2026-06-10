@@ -8,11 +8,11 @@ import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 const router = Router();
 
 const getCalenderFromTasks = ({
-    username,
+    userId,
     startDate,
     endDate,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
 }) => {
@@ -24,7 +24,7 @@ const getCalenderFromTasks = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
             dueDate: {
                 $lte: endDate,
                 $gte: startDate,
@@ -55,13 +55,13 @@ const getCalenderFromTasks = ({
 }
 
 const getCalenderFromTaskReminderByLookup = ({
-    username,
+    userId,
     startDate,
     endDate,
     reminderField,
     fromCollection,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
     reminderField: 'remainderScheduledTimes' | 'dueDateReminderScheduledTimes';
@@ -80,7 +80,7 @@ const getCalenderFromTaskReminderByLookup = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
         }
     };
     stateDocument.push(tempStage);
@@ -168,13 +168,13 @@ const getCalenderFromTaskReminderByLookup = ({
 }
 
 const getCalenderFromLifeEvents = ({
-    username,
+    userId,
     startDate,
     endDate,
 
     filterEventTypeDiary,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
 
@@ -188,7 +188,7 @@ const getCalenderFromLifeEvents = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
             eventDateUtc: {
                 $lte: endDate,
                 $gte: startDate,
@@ -227,11 +227,11 @@ const getCalenderFromLifeEvents = ({
 }
 
 const getCalenderFromInfoVaultSignificantDate = ({
-    username,
+    userId,
     startDate,
     endDate,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
 }) => {
@@ -243,7 +243,7 @@ const getCalenderFromInfoVaultSignificantDate = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
             date: {
                 $lte: endDate,
                 $gte: startDate,
@@ -274,11 +274,11 @@ const getCalenderFromInfoVaultSignificantDate = ({
 }
 
 const getCalenderFromInfoVaultSignificantDateRepeat = ({
-    username,
+    userId,
     startDate,
     endDate,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
 }) => {
@@ -309,7 +309,7 @@ const getCalenderFromInfoVaultSignificantDateRepeat = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
             normalizedDate: {
                 $lte: endDate,
                 $gte: startDate,
@@ -341,11 +341,11 @@ const getCalenderFromInfoVaultSignificantDateRepeat = ({
 }
 
 const getCalenderFromTaskSchedule = ({
-    username,
+    userId,
     startDate,
     endDate,
 }: {
-    username: string;
+    userId: string;
     startDate: Date;
     endDate: Date;
 }) => {
@@ -357,7 +357,7 @@ const getCalenderFromTaskSchedule = ({
     // stateDocument -> match
     tempStage = {
         $match: {
-            username: username,
+            userId: userId,
             isActive: true,
         }
     };
@@ -491,7 +491,7 @@ router.post(
                     $unionWith: {
                         coll: 'tasks',
                         pipeline: getCalenderFromTasks({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                         }),
@@ -504,7 +504,7 @@ router.post(
                     $unionWith: {
                         coll: 'tasks',
                         pipeline: getCalenderFromTaskReminderByLookup({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                             reminderField: 'remainderScheduledTimes',
@@ -519,7 +519,7 @@ router.post(
                     $unionWith: {
                         coll: 'tasks',
                         pipeline: getCalenderFromTaskReminderByLookup({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                             reminderField: 'dueDateReminderScheduledTimes',
@@ -536,7 +536,7 @@ router.post(
                     $unionWith: {
                         coll: 'lifeEvents',
                         pipeline: getCalenderFromLifeEvents({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
 
@@ -554,7 +554,7 @@ router.post(
                     $unionWith: {
                         coll: 'infoVaultSignificantDate',
                         pipeline: getCalenderFromInfoVaultSignificantDate({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                         }),
@@ -569,7 +569,7 @@ router.post(
                     $unionWith: {
                         coll: 'infoVaultSignificantDate',
                         pipeline: getCalenderFromInfoVaultSignificantDateRepeat({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                         }),
@@ -584,7 +584,7 @@ router.post(
                     $unionWith: {
                         coll: 'taskSchedules',
                         pipeline: getCalenderFromTaskSchedule({
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             startDate,
                             endDate,
                         }),

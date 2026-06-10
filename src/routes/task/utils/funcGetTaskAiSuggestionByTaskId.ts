@@ -106,13 +106,13 @@ const fetchLlmGroq = async ({
 };
 
 const funcGetTaskAiSuggestionByTaskId = async ({
-    username,
+    userId,
     taskRecordId,
 
     llmAuthToken,
     provider,
 }: {
-    username: string;
+    userId: string;
     taskRecordId: string;
 
     llmAuthToken: string;
@@ -133,7 +133,7 @@ const funcGetTaskAiSuggestionByTaskId = async ({
             {
                 $match: {
                     _id: mongoose.Types.ObjectId.createFromHexString(taskRecordId),
-                    username,
+                    userId,
                 }
             },
             {

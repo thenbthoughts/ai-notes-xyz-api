@@ -1,7 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface IMemoNote extends Document {
-  username: string;
+  userId: mongoose.Types.ObjectId;
   title: string;
   body: string;
   labelIds: mongoose.Types.ObjectId[];

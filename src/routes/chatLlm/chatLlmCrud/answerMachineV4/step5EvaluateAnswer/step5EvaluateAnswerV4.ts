@@ -23,7 +23,7 @@ interface EvaluationResult {
 async function createFinalAnswerMessageWithTokens(
     finalAnswer: string,
     threadId: mongoose.Types.ObjectId,
-    username: string,
+    userId: string | mongoose.Types.ObjectId,
     llmConfig: LlmConfig | null
 ): Promise<mongoose.Types.ObjectId | null> {
     try {
@@ -52,7 +52,7 @@ async function createFinalAnswerMessageWithTokens(
         const newMessage = await ModelChatLlm.create({
             type: 'text',
             content: finalAnswer,
-            username,
+            userId: userId.toString(),
             threadId,
             isAi: true,
             tags: [],
@@ -78,7 +78,7 @@ const evaluateFinalAnswerV4 = async (
     finalAnswer: string,
     llmConfig: LlmConfig,
     threadId: mongoose.Types.ObjectId,
-    username: string,
+    userId: string | mongoose.Types.ObjectId,
     answerMachineRequestV4Id: mongoose.Types.ObjectId,
     globalTaskDescription: string,
     abortSignal?: AbortSignal
@@ -96,7 +96,7 @@ const evaluateFinalAnswerV4 = async (
 
     try {
         const last10Messages = (await ModelChatLlm.aggregate([
-            { $match: { threadId, username, type: 'text' } },
+            { $match: { threadId, userId: userId.toString(), type: 'text' } },
             { $sort: { createdAtUtc: -1 } },
             { $limit: 10 },
             { $sort: { createdAtUtc: 1 } },
@@ -191,7 +191,7 @@ const evaluateFinalAnswerV4 = async (
         }
 
         try {
-            await trackAnswerMachineTokens(threadId, llmResult.usageStats, username, 'evaluation');
+            await trackAnswerMachineTokens(threadId, llmResult.usageStats, userId, 'evaluation');
         } catch {
             /* empty */
         }
@@ -289,7 +289,7 @@ const step5EvaluateAnswerV4 = async ({
             finalAnswer,
             llmConfig,
             answerMachineRecord.threadId,
-            answerMachineRecord.username,
+            answerMachineRecord.userId,
             answerMachineRequestV4Id,
             globalTaskDescription,
             abortSignal
@@ -311,7 +311,7 @@ const step5EvaluateAnswerV4 = async ({
             insertedChatMessageId = await createFinalAnswerMessageWithTokens(
                 finalAnswer,
                 answerMachineRecord.threadId,
-                answerMachineRecord.username,
+                answerMachineRecord.userId,
                 llmConfig
             );
 
@@ -337,7 +337,7 @@ const step5EvaluateAnswerV4 = async ({
         await ModelAnswerMachineEvaluateAnswerV4.create({
             answerMachineRequestV4Id,
             threadId: answerMachineRecord.threadId,
-            username: answerMachineRecord.username,
+            userId: answerMachineRecord.userId,
             isSatisfactory: evaluation.isSatisfactory,
             confidence: evaluation.confidence,
             evaluationReason: evaluation.reason,

@@ -13,7 +13,7 @@ const router = Router();
 // Add Task Board List API
 router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
         const { statusTitle, listPosition, taskWorkspaceId } = req.body;
 
         // validate task workspace id
@@ -23,7 +23,7 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
         }
         const workspace = await ModelTaskWorkspace.findOne({
             _id: taskWorkspaceIdObj,
-            username: auth_username,
+            userId: auth_userId,
         });
         if (!workspace) {
             return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
@@ -38,11 +38,11 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
             taskWorkspaceId: taskWorkspaceIdObj,
 
             // auth
-            username: auth_username,
+            userId: auth_userId,
         });
 
         await revalidatePositionAll({
-            auth_username,
+            auth_userId,
             taskWorkspaceId: taskWorkspaceIdObj,
         });
 
@@ -56,7 +56,7 @@ router.post('/taskStatusListAdd', middlewareUserAuth, async (req: Request, res: 
 // Get Task Board List API
 router.post('/taskStatusListGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
         const { taskWorkspaceId } = req.body;
 
         // validate task workspace id
@@ -66,14 +66,14 @@ router.post('/taskStatusListGet', middlewareUserAuth, async (req: Request, res: 
         }
         const workspace = await ModelTaskWorkspace.findOne({
             _id: taskWorkspaceIdObj,
-            username: auth_username,
+            userId: auth_userId,
         });
         if (!workspace) {
             return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
         }
 
         const resultTaskStatusLists = await ModelTaskStatusList.find({
-            username: auth_username,
+            userId: auth_userId,
             taskWorkspaceId: taskWorkspaceIdObj,
         }).sort({ listPosition: 1 });
 
@@ -92,7 +92,7 @@ router.post('/taskStatusListGet', middlewareUserAuth, async (req: Request, res: 
 router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const { id, statusTitle, listPosition, taskWorkspaceId } = req.body;
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         // validate task workspace id
         let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
@@ -101,7 +101,7 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
         }
         const workspace = await ModelTaskWorkspace.findOne({
             _id: taskWorkspaceIdObj,
-            username: auth_username,
+            userId: auth_userId,
         });
         if (!workspace) {
             return res.status(400).json({ message: 'Task workspace not found or unauthorized' });
@@ -110,7 +110,7 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
         const updatedTaskStatusList = await ModelTaskStatusList.findOneAndUpdate(
             {
                 _id: id,
-                username: auth_username,
+                userId: auth_userId,
             },
             {
                 statusTitle,
@@ -128,7 +128,7 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
         }
 
         await revalidatePositionAll({
-            auth_username,
+            auth_userId,
             taskWorkspaceId: taskWorkspaceIdObj,
         });
 
@@ -143,11 +143,11 @@ router.post('/taskStatusListEdit', middlewareUserAuth, async (req: Request, res:
 router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const { id } = req.body;
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const taskStatusList = await ModelTaskStatusList.findOne({
             _id: id,
-            username: auth_username,
+            userId: auth_userId,
         });
         if (!taskStatusList) {
             return res.status(404).json({ message: 'Task status list not found' });
@@ -155,14 +155,14 @@ router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, re
 
         const deletedTaskStatusList = await ModelTaskStatusList.findOneAndDelete({
             _id: id,
-            username: auth_username,
+            userId: auth_userId,
         });
         if (!deletedTaskStatusList) {
             return res.status(404).json({ message: 'Task status list not found' });
         }
 
         await revalidatePositionAll({
-            auth_username,
+            auth_userId,
             taskWorkspaceId: taskStatusList.taskWorkspaceId,
         });
 
@@ -174,17 +174,17 @@ router.post('/taskStatusListDelete', middlewareUserAuth, async (req: Request, re
 });
 
 const revalidatePositionAll = async ({
-    auth_username,
+    auth_userId,
     taskWorkspaceId
 }: {
-    auth_username: string;
+    auth_userId: string;
     taskWorkspaceId: mongoose.Types.ObjectId | null;
 }) => {
     try {
         const result = await ModelTaskStatusList.aggregate([
             {
                 $match: {
-                    username: auth_username,
+                    userId: auth_userId,
                     taskWorkspaceId: taskWorkspaceId,
                 }
             },
@@ -229,7 +229,7 @@ router.post(
     async (req: Request, res: Response) => {
         try {
             const { _id, upOrDown, taskWorkspaceId } = req.body;
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             let taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId) as mongoose.Types.ObjectId | null;
 
@@ -239,7 +239,7 @@ router.post(
 
             const taskStatusList = await ModelTaskStatusList.findOne({
                 _id: _id,
-                username: auth_username,
+                userId: auth_userId,
                 taskWorkspaceId: taskWorkspaceIdObj,
             });
             if (!taskStatusList) {
@@ -251,14 +251,14 @@ router.post(
 
             const targetTaskStatusList = await ModelTaskStatusList.findOne({
                 listPosition: newPosition,
-                username: auth_username,
+                userId: auth_userId,
                 taskWorkspaceId: taskWorkspaceIdObj
             });
             if (targetTaskStatusList) {
                 await ModelTaskStatusList.findOneAndUpdate(
                     {
                         _id: targetTaskStatusList._id,
-                        username: auth_username,
+                        userId: auth_userId,
                         taskWorkspaceId: taskWorkspaceIdObj,
                     },
                     { listPosition: currentPosition },
@@ -269,7 +269,7 @@ router.post(
             await ModelTaskStatusList.findOneAndUpdate(
                 {
                     _id: _id,
-                    username: auth_username,
+                    userId: auth_userId,
                     taskWorkspaceId: taskWorkspaceIdObj,
                 },
                 { listPosition: newPosition },
@@ -277,7 +277,7 @@ router.post(
             );
 
             await revalidatePositionAll({
-                auth_username,
+                auth_userId,
                 taskWorkspaceId: taskWorkspaceIdObj,
             });
 

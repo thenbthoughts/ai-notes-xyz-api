@@ -5,10 +5,10 @@ import { IHomepageSummary } from '../../types/typesSchema/typesHomepageSummary/S
 // Homepage Summary Schema
 const homepageSummarySchema = new Schema<IHomepageSummary>({
     // identification
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
 

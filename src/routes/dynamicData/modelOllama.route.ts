@@ -11,16 +11,16 @@ import { ModelAiModelStoreModalityOllama } from '../../schema/schemaDynamicData/
 const router = Router();
 
 const ollamaPullAllModelsFunc = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }): Promise<{
     success: boolean;
     message: string;
 }> => {
     try {
         const userApiKey = await ModelUserApiKey.findOne({
-            username: username
+            userId: userId
         });
 
         if (!userApiKey || !userApiKey.apiKeyOllamaEndpoint) {
@@ -48,7 +48,7 @@ const ollamaPullAllModelsFunc = async ({
             let isInputModalityVideo = 'false';
 
             const modelStoreModality = await ModelAiModelStoreModalityOllama.findOne({
-                username: username,
+                userId: userId,
                 modelName: model.name,
             });
             if (modelStoreModality) {
@@ -73,7 +73,7 @@ const ollamaPullAllModelsFunc = async ({
 
             modelsToInsert.push({
                 // ai
-                username: username,
+                userId: userId,
                 modelLabel: modelLabel,
                 modelName: model.name,
 
@@ -89,7 +89,7 @@ const ollamaPullAllModelsFunc = async ({
 
         // Clear existing models for this user and insert new ones
         await ModelAiListOllama.deleteMany({
-            username: username
+            userId: userId
         });
 
         let modelsToInsertSort = modelsToInsert.sort((a, b) => {
@@ -114,22 +114,22 @@ const ollamaPullAllModelsFunc = async ({
 export const ollamaInsertModelModality = async ({
     modelName,
     provider,
-    username,
+    userId,
 }: {
     modelName: string;
     provider: string;
-    username: string;
+    userId: string;
 }) => {
     try {
         // Get user API key
-        const userApiKey = await ModelUserApiKey.findOne({ username });
+        const userApiKey = await ModelUserApiKey.findOne({ userId });
         if (!userApiKey) {
             throw new Error('No user API key');
         }
 
         // check if model is already in database
         const modelStoreModality = await ModelAiModelStoreModalityOllama.findOne({
-            username: username,
+            userId: userId,
             modelName: modelName,
         });
         if (modelStoreModality) {
@@ -210,11 +210,11 @@ export const ollamaInsertModelModality = async ({
 
         // insert into database
         await ModelAiModelStoreModalityOllama.deleteMany({
-            username: username,
+            userId: userId,
             modelName: modelName,
         });
         await ModelAiModelStoreModalityOllama.create({
-            username: username,
+            userId: userId,
             modelName: modelName,
             isInputModalityText: isText,
             isInputModalityImage: isImage,
@@ -243,7 +243,7 @@ export const ollamaInsertModelModality = async ({
 router.get('/modelOllamaGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const models = await ModelAiListOllama.find({
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         });
 
         return res.json({
@@ -268,7 +268,7 @@ router.post('/modelOllamaAdd', middlewareUserAuth, async (req: Request, res: Res
 
         // Get user API key
         const userApiKey = await ModelUserApiKey.findOne({
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         });
 
         if (!userApiKey || !userApiKey.apiKeyOllamaEndpoint) {
@@ -287,13 +287,13 @@ router.post('/modelOllamaAdd', middlewareUserAuth, async (req: Request, res: Res
         const resultModelModality = await ollamaInsertModelModality({
             modelName: modelName,
             provider: 'ollama',
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         console.log('resultModelModality: ', resultModelModality);
 
         // Pull all models
         const resultOllamaPullAllModels = await ollamaPullAllModelsFunc({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!resultOllamaPullAllModels.success) {
@@ -320,7 +320,7 @@ router.delete('/modelOllamaDelete', middlewareUserAuth, async (req: Request, res
 
         // Get user API key
         const userApiKey = await ModelUserApiKey.findOne({
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         });
 
         if (!userApiKey || !userApiKey.apiKeyOllamaEndpoint) {
@@ -337,17 +337,17 @@ router.delete('/modelOllamaDelete', middlewareUserAuth, async (req: Request, res
 
         // Delete from database
         await ModelAiListOllama.findOneAndDelete({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             modelName: modelName,
         });
 
         await ModelAiModelStoreModalityOllama.findOneAndDelete({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             modelName: modelName,
         });
 
         await ollamaPullAllModelsFunc({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         return res.json({
@@ -363,7 +363,7 @@ router.delete('/modelOllamaDelete', middlewareUserAuth, async (req: Request, res
 router.post('/modelOllamaPullAll', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const resultOllamaPullAllModels = await ollamaPullAllModelsFunc({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!resultOllamaPullAllModels.success) {

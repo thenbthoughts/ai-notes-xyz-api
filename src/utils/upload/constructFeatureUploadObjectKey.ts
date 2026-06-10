@@ -3,10 +3,10 @@
  * Example: ai-notes-xyz/nibf/features/{threadId}/{userFileUploadId}.jpg
  */
 export function constructFeatureUploadObjectKey(
-    username: string,
+    userId: string,
     parentEntityId: string,
     fileNameStem: string,
     fileExtension: string,
 ): string {
-    return `ai-notes-xyz/${username}/features/${parentEntityId}/${fileNameStem}${fileExtension}`;
+    return `ai-notes-xyz/${userId}/features/${parentEntityId}/${fileNameStem}${fileExtension}`;
 }

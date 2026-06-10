@@ -1,7 +1,7 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 interface IS3FileIndex extends Document {
-    username: string;
+    userId: Types.ObjectId;
     bucketName: string;
     fileKey: string;
     fileKeyArr: string[];

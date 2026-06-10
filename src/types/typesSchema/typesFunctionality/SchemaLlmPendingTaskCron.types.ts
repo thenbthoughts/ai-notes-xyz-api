@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // Chat Interface
 export interface ILlmPendingTaskCron extends Document {
     // identification
-    username: string;
+    userId: Types.ObjectId;
 
     // task info
     taskType: string;

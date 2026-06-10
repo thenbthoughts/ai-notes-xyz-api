@@ -41,7 +41,7 @@ router.post('/contextGet', middlewareUserAuth, async (req: Request, res: Respons
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -125,7 +125,7 @@ router.post('/contextDeleteById', middlewareUserAuth, async (req: Request, res: 
 
         const deletedRecord = await ModelChatLlmThreadContextReference.findOneAndDelete({
             _id: recordId,
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         });
         if (!deletedRecord) {
             return res.status(404).json({ message: 'Record not found' });
@@ -201,7 +201,7 @@ router.post(
                 referenceId: updateObj.referenceId,
 
                 // auth
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             });
 
             let newRecord;
@@ -211,7 +211,7 @@ router.post(
                     existingContext._id,
                     {
                         ...updateObj,
-                        username: res.locals.auth_username,
+                        userId: res.locals.auth_userId,
                         ...actionDatetimeObj,
                     },
                     { new: true }
@@ -220,7 +220,7 @@ router.post(
                 // Create new context
                 newRecord = await ModelChatLlmThreadContextReference.create({
                     ...updateObj,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     ...actionDatetimeObj,
                 });
             }
@@ -282,7 +282,7 @@ router.post(
                 bulkOps.push({
                     updateOne: {
                         filter: {
-                            username: res.locals.auth_username,
+                            userId: res.locals.auth_userId,
                             threadId: threadIdObj,
                             referenceId: referenceIdObj,
                         },
@@ -292,7 +292,7 @@ router.post(
                                 referenceFrom: referenceFrom,
                                 referenceId: referenceIdObj,
                                 isAddedByAi: false,
-                                username: res.locals.auth_username,
+                                userId: res.locals.auth_userId,
                                 ...actionDatetimeObj,
                             }
                         },
@@ -358,7 +358,7 @@ router.post(
 
             // Delete contexts
             const result = await ModelChatLlmThreadContextReference.deleteMany({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 threadId: threadIdObj,
                 _id: { $in: contextIdObjs },
             });
@@ -387,12 +387,12 @@ router.post(
         try {
             const { threadId } = req.body;
 
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
             const result = await selectAutoContextByThreadId({
                 threadId,
-                username: auth_username,
+                userId: auth_userId,
             });
             console.log('result selectAutoContextByThreadId', result);
 
@@ -437,10 +437,10 @@ router.post('/contextSearch', middlewareUserAuth, async (req: Request, res: Resp
             page,
             limit,
          } = req.body;
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const result = await searchContext({
-            username: auth_username,
+            userId: auth_userId,
             threadId: threadId,
             searchQuery: searchQuery,
 

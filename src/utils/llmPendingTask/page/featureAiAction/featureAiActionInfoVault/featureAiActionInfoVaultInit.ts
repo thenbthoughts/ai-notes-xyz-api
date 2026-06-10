@@ -20,19 +20,19 @@ const featureAiActionInfoVaultInit = async ({
         console.log('targetRecordId', targetRecordId);
 
         // Check if Info Vault AI is enabled for this user
-        const infoVaultForUserCheck = await ModelInfoVault.findById(targetRecordId).select('username').lean();
+        const infoVaultForUserCheck = await ModelInfoVault.findById(targetRecordId).select('userId').lean();
         if (!infoVaultForUserCheck) {
             return true;
         }
 
         const user = await ModelUser.findOne({
-            username: infoVaultForUserCheck.username,
+            _id: infoVaultForUserCheck.userId,
             featureAiActionsEnabled: true,
             featureAiActionsInfoVault: true
         });
 
         if (!user) {
-            console.log('Info Vault AI not enabled for user:', infoVaultForUserCheck.username);
+            console.log('Info Vault AI not enabled for user:', infoVaultForUserCheck.userId);
             return true; // Skip AI processing if Info Vault AI is not enabled
         }
 
@@ -67,7 +67,7 @@ const featureAiActionInfoVaultInit = async ({
         console.log('resultKeywords', resultKeywords);
 
         // reindex the document in global search after all AI actions are complete
-        const infoVaultRecord = await ModelInfoVault.findById(targetRecordId).select('username').lean();
+        const infoVaultRecord = await ModelInfoVault.findById(targetRecordId).select('userId').lean();
         if (infoVaultRecord) {
             await reindexDocument({
                 reindexDocumentArr: [{

@@ -10,7 +10,7 @@ export interface IChatShellRunTodo extends Document {
     _id: mongoose.Types.ObjectId;
     chatShellRunGroupId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
     executeStrategyBy: ChatShellExecuteStrategy;
     taskName: string;
     shellCommand: string;

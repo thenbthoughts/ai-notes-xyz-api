@@ -40,7 +40,7 @@ export interface tsTaskList extends Document {
     remainderScheduledTimesCompleted: Date[];
 
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // auto
     createdAtUtc: Date;

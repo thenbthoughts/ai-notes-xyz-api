@@ -14,13 +14,13 @@ import { PipelineStage } from 'mongoose';
 import { ModelTask } from '../../../schema/schemaTask/SchemaTask.schema';
 
 // Function to get user info from the database
-const getUserInfo = async (username: string) => {
+const getUserInfo = async (userId: string) => {
     try {
-        if (!username) return '';
+        if (!userId) return '';
 
         let promptUserInfo = '';
 
-        const userInfo = await ModelUser.findOne({ username }).exec();
+        const userInfo = await ModelUser.findById(userId).exec();
         if (userInfo) {
             if (userInfo.name !== '') {
                 promptUserInfo += `My name is ${userInfo.name}. `;
@@ -97,9 +97,9 @@ const formatLifeEventForLLM = (event: ILifeEvents | null, label: string): string
 };
 
 const getTasksStr = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }): Promise<string> => {
     const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
     try {
@@ -110,7 +110,7 @@ const getTasksStr = async ({
         // auth
         tempStage = {
             $match: {
-                username: username,
+                userId: userId,
             }
         }
         stateDocument.push(tempStage);
@@ -232,7 +232,7 @@ const getTasksStr = async ({
                             $expr: {
                                 $and: [
                                     {
-                                        $eq: ['$username', username]
+                                        $eq: ['$userId', userId]
                                     },
                                     {
                                         $eq: ['$_id', '$$let_taskStatusId']
@@ -281,7 +281,7 @@ const getTasksStr = async ({
         const resultCompletedTasks = await ModelTask.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     $or: [
                         {
                             isCompleted: true,
@@ -359,10 +359,10 @@ const getTasksStr = async ({
     }
 }
 
-const getUserSummaryCombined = async (username: string): Promise<string> => {
+const getUserSummaryCombined = async (userId: string): Promise<string> => {
     try {
-        const userSummary = await getUserSummary(username);
-        const tasksStr = await getTasksStr({ username });
+        const userSummary = await getUserSummary(userId);
+        const tasksStr = await getTasksStr({ userId });
 
         if (
             userSummary.summaryToday ||
@@ -388,7 +388,7 @@ const getUserSummaryCombined = async (username: string): Promise<string> => {
         userDataString += `Local Time: ${now.toLocaleTimeString()}\n\n`;
 
         // Add user info
-        const promptUserInfo = await getUserInfo(username);
+        const promptUserInfo = await getUserInfo(userId);
         if (promptUserInfo.length > 0) {
             userDataString += `User Info:\n${promptUserInfo}\n`;
         }
@@ -444,7 +444,7 @@ ${userDataString}
 Make it practical and easy to understand.`;
 
         // Get user API keys
-        const userInfoApiKey = await ModelUserApiKey.findOne({ username }).exec();
+        const userInfoApiKey = await ModelUserApiKey.findOne({ userId }).exec();
         if (!userInfoApiKey) {
             return '';
         }

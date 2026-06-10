@@ -3,7 +3,7 @@ import mongoose, { Document } from 'mongoose';
 // FAQ
 export interface IFaq extends Document {
     // identification
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // fields
     question: string;

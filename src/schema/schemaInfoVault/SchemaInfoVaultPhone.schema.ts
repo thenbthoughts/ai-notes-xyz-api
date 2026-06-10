@@ -6,7 +6,7 @@ import { IInfoVaultPhone } from '../../types/typesSchema/typesSchemaInfoVault/Sc
 const infoVaultPhoneSchema = new Schema<IInfoVaultPhone>({
     // identification
     infoVaultId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     phoneNumber: { type: String, default: '' },

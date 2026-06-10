@@ -12,10 +12,10 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             // Generate the brief homepage summary using LLM
-            const summaryText = await generateHomepageSummary(auth_username);
+            const summaryText = await generateHomepageSummary(auth_userId);
 
             if (!summaryText || summaryText.trim().length === 0) {
                 return res.status(400).json({
@@ -25,7 +25,7 @@ router.post(
 
             // Create new homepage summary document
             const newSummary = await ModelHomepageSummary.create({
-                username: auth_username,
+                userId: auth_userId,
                 generatedAtUtc: new Date(),
                 summary: summaryText,
             });
@@ -47,10 +47,10 @@ router.delete(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const result = await ModelHomepageSummary.deleteMany({
-                username: auth_username,
+                userId: auth_userId,
             });
 
             return res.json({
@@ -70,10 +70,10 @@ router.get(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const docs = await ModelHomepageSummary.find({
-                username: auth_username,
+                userId: auth_userId,
             })
                 .sort({ generatedAtUtc: -1 })
                 .limit(10)

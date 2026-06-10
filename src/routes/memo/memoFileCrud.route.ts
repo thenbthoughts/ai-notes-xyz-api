@@ -16,23 +16,23 @@ import {
 
 const router = Router();
 
-async function assertMemoOwned(username: string, memoNoteId: Types.ObjectId): Promise<boolean> {
-  const n = await ModelMemoNote.countDocuments({ _id: memoNoteId, username });
+async function assertMemoOwned(userId: string, memoNoteId: Types.ObjectId): Promise<boolean> {
+  const n = await ModelMemoNote.countDocuments({ _id: memoNoteId, userId });
   return n === 1;
 }
 
 /** List uploaded file paths for a memo (ordered). */
 router.post('/memoFileList', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const memoNoteId = getMongodbObjectOrNull(req.body?.memoNoteId);
     if (!memoNoteId) {
       return res.status(400).json({ message: 'memoNoteId is invalid' });
     }
-    if (!(await assertMemoOwned(username, memoNoteId))) {
+    if (!(await assertMemoOwned(userId, memoNoteId))) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
-    const rows = await ModelMemoFile.find({ username, memoNoteId })
+    const rows = await ModelMemoFile.find({ userId, memoNoteId })
       .sort({ sortOrder: 1, createdAtUtc: 1 })
       .lean();
     const paths = rows.map((r) => r.filePath);
@@ -48,12 +48,12 @@ router.post('/memoFileList', middlewareUserAuth, async (req: Request, res: Respo
  */
 router.post('/memoFileAdd', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const memoNoteId = getMongodbObjectOrNull(req.body?.memoNoteId);
     if (!memoNoteId) {
       return res.status(400).json({ message: 'memoNoteId is invalid' });
     }
-    if (!(await assertMemoOwned(username, memoNoteId))) {
+    if (!(await assertMemoOwned(userId, memoNoteId))) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
 
@@ -65,25 +65,25 @@ router.post('/memoFileAdd', middlewareUserAuth, async (req: Request, res: Respon
     if (!filePath.startsWith('ai-notes-xyz/')) {
       return res.status(400).json({ message: 'Only uploaded storage paths can be registered' });
     }
-    if (!filePath.startsWith(`ai-notes-xyz/${username}/`)) {
+    if (!filePath.startsWith(`ai-notes-xyz/${userId}/`)) {
       return res.status(400).json({ message: 'Invalid file path for user' });
     }
 
-    const existing = await ModelMemoFile.countDocuments({ username, memoNoteId });
+    const existing = await ModelMemoFile.countDocuments({ userId, memoNoteId });
     if (existing >= MAX_IMAGES_PER_NOTE) {
       return res.status(400).json({ message: `At most ${MAX_IMAGES_PER_NOTE} images per memo` });
     }
 
-    const dup = await ModelMemoFile.countDocuments({ username, memoNoteId, filePath });
+    const dup = await ModelMemoFile.countDocuments({ userId, memoNoteId, filePath });
     if (dup > 0) {
       return res.status(400).json({ message: 'Image already attached to this memo' });
     }
 
-    const last = await ModelMemoFile.findOne({ username, memoNoteId }).sort({ sortOrder: -1 }).lean();
+    const last = await ModelMemoFile.findOne({ userId, memoNoteId }).sort({ sortOrder: -1 }).lean();
     const sortOrder = (last?.sortOrder ?? -1) + 1;
 
     const created = await ModelMemoFile.create({
-      username,
+      userId,
       memoNoteId,
       filePath,
       sortOrder,
@@ -107,7 +107,7 @@ router.post('/memoFileAdd', middlewareUserAuth, async (req: Request, res: Respon
 
 router.post('/memoFileDelete', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const memoNoteId = getMongodbObjectOrNull(req.body?.memoNoteId);
     if (!memoNoteId) {
       return res.status(400).json({ message: 'memoNoteId is invalid' });
@@ -121,12 +121,12 @@ router.post('/memoFileDelete', middlewareUserAuth, async (req: Request, res: Res
       return res.status(400).json({ message: 'Only storage paths can be removed here' });
     }
 
-    const row = await ModelMemoFile.findOneAndDelete({ username, memoNoteId, filePath });
+    const row = await ModelMemoFile.findOneAndDelete({ userId, memoNoteId, filePath });
     if (!row) {
       return res.status(404).json({ message: 'Memo file not found' });
     }
 
-    await deleteMemoStoredImagePathsByFullPaths(username, [filePath]);
+    await deleteMemoStoredImagePathsByFullPaths(userId, [filePath]);
 
     return res.json({ message: 'Memo file removed' });
   } catch (error) {
@@ -138,19 +138,19 @@ router.post('/memoFileDelete', middlewareUserAuth, async (req: Request, res: Res
 /** Remove all memoFiles rows for a memo and delete blobs from storage. */
 router.post('/memoFileClear', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const memoNoteId = getMongodbObjectOrNull(req.body?.memoNoteId);
     if (!memoNoteId) {
       return res.status(400).json({ message: 'memoNoteId is invalid' });
     }
-    if (!(await assertMemoOwned(username, memoNoteId))) {
+    if (!(await assertMemoOwned(userId, memoNoteId))) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
 
-    const rows = await ModelMemoFile.find({ username, memoNoteId }).lean();
+    const rows = await ModelMemoFile.find({ userId, memoNoteId }).lean();
     const paths = rows.map((r) => r.filePath).filter((p) => p.startsWith('ai-notes-xyz/'));
-    await ModelMemoFile.deleteMany({ username, memoNoteId });
-    await deleteMemoStoredImagePathsByFullPaths(username, paths);
+    await ModelMemoFile.deleteMany({ userId, memoNoteId });
+    await deleteMemoStoredImagePathsByFullPaths(userId, paths);
 
     return res.json({ message: 'Memo files cleared', removed: rows.length });
   } catch (error) {
@@ -162,21 +162,21 @@ router.post('/memoFileClear', middlewareUserAuth, async (req: Request, res: Resp
 /** Same as clearing memo files plus wiping legacy `imageDataUrls` on the memo document (raw collection). */
 router.post('/memoClearAllImages', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const memoNoteId = getMongodbObjectOrNull(req.body?.memoNoteId ?? req.body?._id);
     if (!memoNoteId) {
       return res.status(400).json({ message: 'Memo ID is invalid' });
     }
-    if (!(await assertMemoOwned(username, memoNoteId))) {
+    if (!(await assertMemoOwned(userId, memoNoteId))) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
-    const existing = await ModelMemoNote.findOne({ _id: memoNoteId, username }).lean();
+    const existing = await ModelMemoNote.findOne({ _id: memoNoteId, userId }).lean();
     if (!existing) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
-    await deleteAllMemoFilesAndLegacyStorage(username, existing as Record<string, unknown>, memoNoteId);
+    await deleteAllMemoFilesAndLegacyStorage(userId, existing as Record<string, unknown>, memoNoteId);
     await ModelMemoNote.collection.updateOne(
-      { _id: memoNoteId, username },
+      { _id: memoNoteId, userId },
       { $set: { imageDataUrls: [] } } as Record<string, unknown>,
     );
     return res.json({ message: 'All memo images cleared' });

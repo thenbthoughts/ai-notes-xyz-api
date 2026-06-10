@@ -15,17 +15,17 @@ import fetchLlmUnified from "../../../utils/fetchLlmUnified";
 import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
 
 const getLifeEventsStr = async ({
-    username,
+    userId,
     dateUtcStart,
     dateUtcEnd,
 }: {
-    username: string;
+    userId: string;
     dateUtcStart: Date;
     dateUtcEnd: Date;
 }) => {
     try {
         const lifeEventsRecords = await ModelLifeEvents.find({
-            username,
+            userId,
             $or: [
                 {
                     eventDateUtc: {
@@ -79,16 +79,16 @@ const getLifeEventsStr = async ({
 };
 
 const generateYearlySummaryByUserId = async ({
-    username,
+    userId,
     summaryDate,
 }: {
-    username: string;
+    userId: string;
     summaryDate: Date;
 }) => {
     try {
-        console.log('generateYearlySummaryByUserId: ', username, summaryDate);
+        console.log('generateYearlySummaryByUserId: ', userId, summaryDate);
         const userRecords = await ModelUser.find({
-            username,
+            _id: userId,
         }) as IUser[];
         if (!userRecords || userRecords.length !== 1) {
             return true;
@@ -115,13 +115,13 @@ const generateYearlySummaryByUserId = async ({
         const summaryDateUtc = startOfYear.minus({ minutes: userTimezoneOffsetMinutes }).toJSDate();
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(userFirst.username);
+        const llmConfig = await getDefaultLlmModel(userFirst._id);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         const lifeEventsStr = await getLifeEventsStr({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             dateUtcStart,
             dateUtcEnd,
         });
@@ -179,14 +179,14 @@ Be selective. Only include what matters for future reference.`;
         let yearlyNotesTitle = `Yearly Summary by AI - ${yearStr}`;
         console.log('yearlyNotesTitle: ', yearlyNotesTitle);
         await ModelLifeEvents.deleteMany({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
             title: yearlyNotesTitle,
         });
 
         const now = new Date();
         // update in life events record
         await ModelLifeEvents.create({
-            username: userFirst.username,
+            userId: userFirst._id.toString(),
 
             // identification - pagination
             eventDateUtc: startOfYear.toJSDate(),
@@ -236,7 +236,7 @@ const executeYearlySummaryByUserId = async ({
         }
 
         const userRecords = await ModelUser.find({
-            username: taskScheduleRecord.username,
+            _id: taskScheduleRecord._id,
         }) as IUser[];
 
         if (!userRecords || userRecords.length !== 1) {
@@ -254,7 +254,7 @@ const executeYearlySummaryByUserId = async ({
 
         // generate yearly summary by user id
         await generateYearlySummaryByUserId({
-            username: taskScheduleRecord.username,
+            userId: taskScheduleRecord._id.toString(),
             summaryDate: new Date(currentDateOnly + 'T00:00:00.000Z'),
         });
 

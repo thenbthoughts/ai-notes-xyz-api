@@ -18,14 +18,14 @@ const router = Router();
 
 const generateTags = async ({
     mongodbRecordId,
-    auth_username,
+    auth_userId,
 }: {
     mongodbRecordId: string,
-    auth_username: string,
+    auth_userId: string,
 }) => {
     try {
         await ModelLlmPendingTaskCron.create({
-            username: auth_username,
+            userId: auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.chatMessage,
             targetRecordId: mongodbRecordId,
         });
@@ -48,7 +48,7 @@ router.post(
         };
         req.on('close', abortIfClientGone);
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             const apiKeys = getApiKeyByObject(res.locals.apiKey);
 
             // variable -> threadId
@@ -60,7 +60,7 @@ router.post(
             // get thread info
             const threadInfo = await ModelChatLlmThread.findOne({
                 _id: threadId,
-                username: auth_username,
+                userId: auth_userId,
             });
             if (!threadInfo) {
                 return res.status(400).json({ message: 'Thread not found' });
@@ -74,7 +74,7 @@ router.post(
                 });
                 const shellRes = await runChatShellForThread({
                     threadId,
-                    username: auth_username,
+                    userId: auth_userId,
                     actionDatetimeObj,
                 });
                 if (!shellRes.success) {
@@ -86,7 +86,7 @@ router.post(
 
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Title, Embedding)
             await ModelLlmPendingTaskCron.create({
-                username: auth_username,
+                userId: auth_userId,
                 taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
                 targetRecordId: threadId,
             });
@@ -112,7 +112,7 @@ router.post(
             const resultFromLastConversation = await ModelChatLlm.create({
                 type: 'text',
                 content: 'AI generating in progress...',
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 tags: [],
                 fileUrl: '',
                 fileUrlArr: '',
@@ -135,7 +135,7 @@ router.post(
                 await getNextMessageFromLast30Conversation({
                     threadId,
                     threadInfo,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     aiModelProvider: aiModelProvider,
                     aiModelName: aiModelName,
                     userApiKey: apiKeys,
@@ -146,7 +146,7 @@ router.post(
                 if (!abortController.signal.aborted) {
                     await generateTags({
                         mongodbRecordId: messageId.toString(),
-                        auth_username,
+                        auth_userId,
                     });
                 }
             }
@@ -181,7 +181,7 @@ router.post(
         };
         req.on('close', abortIfClientGone);
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             let threadId = getMongodbObjectOrNull(req.body.threadId);
             if (threadId === null) {
@@ -190,7 +190,7 @@ router.post(
 
             const lastMessage = await ModelChatLlm.findOne({
                 threadId: threadId,
-                username: auth_username,
+                userId: auth_userId,
                 isAi: false,
             }).sort({ createdAt: -1 });
             if (!lastMessage) {

@@ -19,19 +19,19 @@ const featureAiActionChatMessageInit = async ({
         console.log('targetRecordId', targetRecordId);
 
         // Check if Chat Message AI is enabled for this user
-        const chatMessageRecord = await ModelChatLlm.findById(targetRecordId).select('username').lean();
+        const chatMessageRecord = await ModelChatLlm.findById(targetRecordId).select('userId').lean();
         if (!chatMessageRecord) {
             return true;
         }
 
         const user = await ModelUser.findOne({
-            username: chatMessageRecord.username,
+            _id: chatMessageRecord.userId,
             featureAiActionsEnabled: true,
             featureAiActionsChatMessage: true
         });
 
         if (!user) {
-            console.log('Chat Message AI not enabled for user:', chatMessageRecord.username);
+            console.log('Chat Message AI not enabled for user:', chatMessageRecord.userId);
             return true; // Skip AI processing if Chat Message AI is not enabled
         }
 

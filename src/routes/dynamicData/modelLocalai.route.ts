@@ -158,16 +158,16 @@ const getModalitySettingsByType = (modelType: LocalaiModelType): {
 };
 
 const localaiPullAllModelsFunc = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }): Promise<{
     success: boolean;
     message: string;
 }> => {
     try {
         const userApiKey = await ModelUserApiKey.findOne({
-            username: username
+            userId: userId
         });
 
         if (!userApiKey || !userApiKey.apiKeyLocalaiEndpoint) {
@@ -240,7 +240,7 @@ const localaiPullAllModelsFunc = async ({
         }
 
         // 3) Delete models that no longer exist in LocalAI
-        const existingDocs = await ModelAiListLocalai.find({ username }).select('modelName');
+        const existingDocs = await ModelAiListLocalai.find({ userId }).select('modelName');
         const idsToDelete = existingDocs
             .filter((doc) => !remoteIds.has(doc.modelName))
             .map((doc) => doc._id);
@@ -262,9 +262,9 @@ const localaiPullAllModelsFunc = async ({
             const modalitySettings = getModalitySettingsByType(modelType);
 
             await ModelAiListLocalai.findOneAndUpdate(
-                { username, modelName: model.id },
+                { userId, modelName: model.id },
                 {
-                    username,
+                    userId,
                     modelLabel,
                     modelName: model.id,
                     modelType,
@@ -296,7 +296,7 @@ const localaiPullAllModelsFunc = async ({
 router.get('/modelLocalaiGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const models = await ModelAiListLocalai.find({
-            username: res.locals.auth_username
+            userId: res.locals.auth_userId
         }).sort({ modelName: 1 });
 
         return res.json({
@@ -314,7 +314,7 @@ router.get('/modelLocalaiGet', middlewareUserAuth, async (req: Request, res: Res
 router.post('/modelLocalaiPullAll', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const resultLocalaiPullAllModels = await localaiPullAllModelsFunc({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!resultLocalaiPullAllModels.success) {
@@ -434,7 +434,7 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
         }
 
         const updated = await ModelAiListLocalai.findOneAndUpdate(
-            { username: res.locals.auth_username, _id },
+            { userId: res.locals.auth_userId, _id },
             { $set: update },
             { new: true }
         );
@@ -464,7 +464,7 @@ router.delete('/modelLocalaiDelete', middlewareUserAuth, async (req: Request, re
 
         // Delete from database only (no server-side delete for LocalAI)
         await ModelAiListLocalai.findOneAndDelete({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             modelName: modelName,
         });
 

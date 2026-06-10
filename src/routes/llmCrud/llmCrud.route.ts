@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
-import { getTextFromAudioByUrlAndUsername } from '../../utils/llmPendingTask/utils/fetchAudioUnified';
+import { getTextFromAudioByUrlAndUserId } from '../../utils/llmPendingTask/utils/fetchAudioUnified';
 
 const router = Router();
 
@@ -10,9 +10,9 @@ router.post('/audioToText', middlewareUserAuth, async (req: Request, res: Respon
     try {
         const fileUrl = req.body.fileUrl;
 
-        const result = await getTextFromAudioByUrlAndUsername({
+        const result = await getTextFromAudioByUrlAndUserId({
             fileUrl: fileUrl,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (result.error !== '') {

@@ -5,7 +5,7 @@ import { ILlmPendingTaskCron } from '../../types/typesSchema/typesFunctionality/
 // LlmPendingTaskCron Schema
 const llmPendingTaskCronSchema = new Schema<ILlmPendingTaskCron>({
     // identification
-    username: { type: String, required: true, uniqlowercase: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true },
 
     // task info
     taskType: {

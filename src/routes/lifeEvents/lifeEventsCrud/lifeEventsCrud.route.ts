@@ -39,7 +39,7 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -331,7 +331,7 @@ router.post('/lifeEventsGet', middlewareUserAuth, async (req: Request, res: Resp
                             $expr: {
                                 $and: [
                                     { $eq: ['$entityId', '$$entityId'] },
-                                    { $eq: ['$username', res.locals.auth_username] }
+                                    { $eq: ['$userId', res.locals.auth_userId] }
                                 ]
                             }
                         }
@@ -383,7 +383,7 @@ router.post('/lifeEventsDelete', middlewareUserAuth, async (req: Request, res: R
 
         const lifeEvent = await ModelLifeEvents.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!lifeEvent) {
@@ -392,7 +392,7 @@ router.post('/lifeEventsDelete', middlewareUserAuth, async (req: Request, res: R
 
         // delete files from s3
         await deleteFilesByParentEntityId({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             parentEntityId: _id.toString(),
         });
 
@@ -421,7 +421,7 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
             eventDateYearStr,
             eventDateYearMonthStr,
 
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             title: `Empty Event - ${eventDateUtc.toDateString()} ${eventDateUtc.toLocaleTimeString().substring(0, 7)}`,
 
             aiTags: ['Empty event'],
@@ -431,7 +431,7 @@ router.post('/lifeEventsAdd', middlewareUserAuth, middlewareActionDatetime, asyn
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
             targetRecordId: newLifeEvent._id,
         });
@@ -519,7 +519,7 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
             const newLifeEvent = await ModelLifeEvents.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -537,7 +537,7 @@ router.post('/lifeEventsEdit', middlewareUserAuth, middlewareActionDatetime, asy
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
             targetRecordId: _id,
         });

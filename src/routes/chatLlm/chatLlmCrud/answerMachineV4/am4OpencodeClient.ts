@@ -1,11 +1,11 @@
 import { AM4_OPENCODE_DEFAULT_EXECUTOR_MODEL, AM4_OPENCODE_EXECUTOR_AGENT } from './am4OpencodeConstants';
 
-export async function createAm4OpencodeClient(baseUrl: string, username: string, password: string) {
+export async function createAm4OpencodeClient(baseUrl: string, userId: string, password: string) {
     const importOpencodeSdk = new Function('return import("@opencode-ai/sdk/v2");') as () => Promise<
         typeof import('@opencode-ai/sdk/v2')
     >;
     const { createOpencodeClient } = await importOpencodeSdk();
-    const auth = Buffer.from(`${username}:${password}`).toString('base64');
+    const auth = Buffer.from(`${userId}:${password}`).toString('base64');
     return createOpencodeClient({
         baseUrl: baseUrl.replace(/\/+$/, ''),
         headers: {

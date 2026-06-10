@@ -11,7 +11,7 @@ const init = async () => {
     console.timeEnd('mongoose-connect');
 
     const resultInsert = await ModelLlmPendingTaskCron.create({
-        "username": "example",
+        "userId": "example",
         "taskType": llmPendingTaskTypes.page.featureAiActions.chatThread,
         "targetRecordId": "68e2b9f0b5a33b7965cd6324",
     });

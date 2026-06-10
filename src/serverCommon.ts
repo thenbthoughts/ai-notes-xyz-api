@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser'; // Import cookie-parser
 import routesAll from './routes/routesAll';
 import envKeys from './config/envKeys';
 import initCron from './srcCron/indexCron';
+import migrateUsernameToUserId from './migrations/migrateUsernameToUserId';
 
 const app = express();
 app.use(express.json({
@@ -85,8 +86,13 @@ app.use((req: Request, res: Response, next) => {
 // Connect to MongoDB
 mongoose
     .connect(envKeys.MONGODB_URI)
-    .then(() => {
+    .then(async () => {
         console.log('Connected to MongoDB');
+        try {
+            await migrateUsernameToUserId();
+        } catch (migrationError) {
+            console.error('Username-to-userId migration failed:', migrationError);
+        }
         initCron();
     })
     .catch((err) => {

@@ -34,7 +34,7 @@ router.post('/infoVaultWebsiteGet', middlewareUserAuth, async (req: Request, res
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -169,7 +169,7 @@ router.post('/infoVaultWebsiteDelete', middlewareUserAuth, async (req: Request, 
 
         const infoVaultWebsite = await ModelInfoVaultWebsite.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultWebsite) {
@@ -201,7 +201,7 @@ router.post('/infoVaultWebsiteAdd', middlewareUserAuth, async (req: Request, res
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -210,7 +210,7 @@ router.post('/infoVaultWebsiteAdd', middlewareUserAuth, async (req: Request, res
         const now = new Date();
         const newInfoVaultWebsite = await ModelInfoVaultWebsite.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             url: req.body.url || '',
             label: req.body.label || 'website',
             createdAtUtc: now,
@@ -258,7 +258,7 @@ router.post('/infoVaultWebsiteEdit', middlewareUserAuth, async (req: Request, re
             await ModelInfoVaultWebsite.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

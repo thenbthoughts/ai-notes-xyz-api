@@ -25,7 +25,7 @@ router.get(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
             const userApiKey = getApiKeyByObject(res.locals.apiKey);
 
             const fileName = req.query.fileName as string;
@@ -33,7 +33,7 @@ router.get(
                 return res.status(400).json({ message: 'File name must be a string' });
             }
             
-            const fileRecord = await ModelUserFileUpload.findOne({ username, fileUploadPath: fileName });
+            const fileRecord = await ModelUserFileUpload.findOne({ userId, fileUploadPath: fileName });
             if (!fileRecord) {
                 return res.status(404).json({ message: 'File not found for the user' });
             }
@@ -87,13 +87,13 @@ router.get(
 );
 
 const constructFilePath = (
-    username: string,
+    userId: string,
     parentEntityId: string,
     fileName: string,
     fileExtension: string
 ): { filePath: string; success: boolean } => ({
     success: true,
-    filePath: constructFeatureUploadObjectKey(username, parentEntityId, fileName, fileExtension),
+    filePath: constructFeatureUploadObjectKey(userId, parentEntityId, fileName, fileExtension),
 });
 
 // Upload File API
@@ -102,7 +102,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response): Promise<Response> => {
         try {
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
             const userApiKey = getApiKeyByObject(res.locals.apiKey);
 
             // Validate file upload
@@ -143,8 +143,8 @@ router.post(
 
             // Create temporary file record first
             let fileRecordObj = await ModelUserFileUpload.create({
-                username: username,
-                fileUploadPath: `ai-notes-xyz/${username}/temp/${new Date().valueOf()}.temp`,
+                userId: userId,
+                fileUploadPath: `ai-notes-xyz/${userId}/temp/${new Date().valueOf()}.temp`,
                 storageType: validStorageType,
             }) as IUserFileUpload;
 
@@ -153,7 +153,7 @@ router.post(
 
             // Construct file path (for backward compatibility)
             const resultConstructFilePath = constructFilePath(
-                username,
+                userId,
                 parentEntityId,
                 fileName,
                 fileExtension,
@@ -176,7 +176,7 @@ router.post(
                 fileContent: file.data,
                 contentType: file.mimetype,
                 metadata: {
-                    username,
+                    userId,
                     parentEntityId,
                     originalName: file.name,
                 },
@@ -226,21 +226,21 @@ router.post(
 
 // Delete File API
 export const deleteFilesByParentEntityId = async ({
-    username,
+    userId,
     parentEntityId,
 }: {
-    username: string;
+    userId: string;
     parentEntityId: string;
 }): Promise<{
     success: boolean;
     error: string;
 }> => {
     try {
-        let prefix = `ai-notes-xyz/${username}/features/${parentEntityId}/`;
+        let prefix = `ai-notes-xyz/${userId}/features/${parentEntityId}/`;
 
         // Get file records from database that match the prefix
         const fileRecords = await ModelUserFileUpload.find({
-            username,
+            userId,
             fileUploadPath: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` }
         });
 
@@ -266,7 +266,7 @@ export const deleteFilesByParentEntityId = async ({
                     ? (fileRecord.gridFsId?.toString() || fileRecord.fileUploadPath)
                     : fileRecord.fileUploadPath;
 
-                const userApiKeyDoc = await ModelUserApiKey.findOne({ username });
+                const userApiKeyDoc = await ModelUserApiKey.findOne({ userId });
                 const userApiKey = userApiKeyDoc ? getApiKeyByObject(userApiKeyDoc) : undefined;
 
                 const s3Config = storageType === 's3' && userApiKey?.apiKeyS3Valid ? {
@@ -307,11 +307,11 @@ export const deleteFilesByParentEntityId = async ({
 
 // Delete File by path
 export const deleteFileByPath = async ({
-    username,
+    userId,
     parentEntityId,
     fileName,
 }: {
-    username: string;
+    userId: string;
     parentEntityId: string;
     fileName: string;
 }): Promise<{
@@ -320,11 +320,11 @@ export const deleteFileByPath = async ({
 }> => {
     try {
         // Generate the file path
-        const filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}`;
+        const filePath = `ai-notes-xyz/${userId}/features/${parentEntityId}/${fileName}`;
 
         // Find file record
         const fileRecord = await ModelUserFileUpload.findOne({
-            username,
+            userId,
             fileUploadPath: filePath,
         });
 
@@ -341,7 +341,7 @@ export const deleteFileByPath = async ({
             ? (fileRecord.gridFsId?.toString() || filePath)
             : filePath;
 
-        const userApiKeyDoc = await ModelUserApiKey.findOne({ username });
+        const userApiKeyDoc = await ModelUserApiKey.findOne({ userId });
         const userApiKey = userApiKeyDoc ? getApiKeyByObject(userApiKeyDoc) : undefined;
 
         const s3Config = storageType === 's3' && userApiKey?.apiKeyS3Valid ? {
@@ -367,7 +367,7 @@ export const deleteFileByPath = async ({
 
         // Delete from database
         await ModelUserFileUpload.deleteOne({
-            username,
+            userId,
             fileUploadPath: filePath,
         });
 

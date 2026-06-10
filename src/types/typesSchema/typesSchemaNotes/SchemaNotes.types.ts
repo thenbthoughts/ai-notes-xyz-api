@@ -3,7 +3,7 @@ import mongoose, { Document } from 'mongoose';
 // Notes
 export interface INotes extends Document {
     // identification
-    username: string;
+    userId: mongoose.Types.ObjectId;
     notesWorkspaceId: mongoose.Schema.Types.ObjectId | null;
 
     // fields

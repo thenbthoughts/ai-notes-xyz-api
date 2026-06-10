@@ -46,14 +46,14 @@ interface IChatLlmThreadExtended extends IChatLlmThread {
 
 // Function to get the last 20 conversations from MongoDB
 const getAConversationByNotesId = async ({
-    username,
+    userId,
 }: {
-    username: string,
+    userId: string,
 }): Promise<string> => {
     const conversations = await ModelChatLlmThread.aggregate<IChatLlmThreadExtended>([
         {
             $match: {
-                username,
+                userId,
             }
         },
         {
@@ -106,17 +106,17 @@ const getAConversationByNotesId = async ({
 }
 
 // Function to get user info from the database
-const getUserInfo = async (username: string) => {
-    if (!username) return null;
+const getUserInfo = async (userId: string) => {
+    if (!userId) return null;
 
-    const user = await ModelUser.findOne({ username }).exec();
+    const user = await ModelUser.findById(userId).exec();
     return user;
 }
 
 const funcTasksGenerateByConversationAll = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }) => {
     try {
         const messages = [] as Message[];
@@ -150,7 +150,7 @@ const funcTasksGenerateByConversationAll = async ({
             "content": systemPrompt,
         })
 
-        const userInfo = await getUserInfo(username);
+        const userInfo = await getUserInfo(userId);
 
         if (userInfo) {
             let promptUserInfo = '';
@@ -189,7 +189,7 @@ const funcTasksGenerateByConversationAll = async ({
 
         // last conversations
         const lastConversationsDesc = await getAConversationByNotesId({
-            username,
+            userId,
         });
         messages.push({
             role: "user",
@@ -197,7 +197,7 @@ const funcTasksGenerateByConversationAll = async ({
         });
 
         // get user info
-        const userInfoApiKey = await ModelUserApiKey.findOne({ username }).exec();
+        const userInfoApiKey = await ModelUserApiKey.findOne({ userId }).exec();
         if (!userInfoApiKey) {
             return [];
         }

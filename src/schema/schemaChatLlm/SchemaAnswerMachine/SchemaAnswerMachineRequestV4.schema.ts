@@ -15,8 +15,9 @@ const answerMachineRequestV4Schema = new Schema<IAnswerMachineRequestV4>({
         index: true,
         ref: 'chatLlm',
     },
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
         index: true,
     },

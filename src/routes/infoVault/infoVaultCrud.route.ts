@@ -38,7 +38,7 @@ router.post('/infoVaultGet', middlewareUserAuth, async (req: Request, res: Respo
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -266,7 +266,7 @@ router.post('/infoVaultDelete', middlewareUserAuth, async (req: Request, res: Re
 
         const infoVault = await ModelInfoVault.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVault) {
@@ -275,7 +275,7 @@ router.post('/infoVaultDelete', middlewareUserAuth, async (req: Request, res: Re
 
         // delete files from s3
         await deleteFilesByParentEntityId({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             parentEntityId: _id.toString(),
         });
 
@@ -293,7 +293,7 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
 
         const now = new Date();
         const newInfoVault = await ModelInfoVault.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
 
             name,
 
@@ -307,7 +307,7 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.infoVault,
             targetRecordId: newInfoVault._id,
         });
@@ -315,7 +315,7 @@ router.post('/infoVaultAdd', middlewareUserAuth, async (req: Request, res: Respo
         // reindex all significant dates for this InfoVault
         const significantDates = await ModelInfoVaultSignificantDate.find({
             infoVaultId: newInfoVault._id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (significantDates.length > 0) {
             await reindexDocument({
@@ -406,7 +406,7 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
         if (typeof req.body.isBlocked === 'boolean') {
             updateObj.isBlocked = req.body.isBlocked;
         }
-        updateObj.lastUpdatedBy = res.locals.auth_username;
+        updateObj.lastUpdatedBy = res.locals.auth_userId;
         updateObj.updatedAtUtc = new Date();
         updateObj.updatedAtIpAddress = req.ip || '';
         updateObj.updatedAtUserAgent = req.headers['user-agent'] || '';
@@ -415,7 +415,7 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
             await ModelInfoVault.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -427,7 +427,7 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.infoVault,
             targetRecordId: _id,
         });
@@ -435,7 +435,7 @@ router.post('/infoVaultEdit', middlewareUserAuth, async (req: Request, res: Resp
         // reindex all significant dates for this InfoVault
         const significantDates = await ModelInfoVaultSignificantDate.find({
             infoVaultId: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (significantDates.length > 0) {
             await reindexDocument({

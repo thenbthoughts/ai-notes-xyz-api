@@ -5,7 +5,7 @@ export interface IAnswerMachineRequestV4 extends Document {
     _id: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
     parentMessageId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     schemaVersion: 4;
 

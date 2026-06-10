@@ -23,17 +23,17 @@ type MemoryItem = {
 const selectMemoriesToKeepUsingLLM = async ({
     memories,
     maxLimit,
-    username,
+    userId,
 }: {
     memories: MemoryItem[];
     maxLimit: number;
-    username: string;
+    userId: string | mongoose.Types.ObjectId;
 }): Promise<mongoose.Types.ObjectId[]> => {
     if (memories.length <= maxLimit) {
         return memories.map(m => m._id);
     }
 
-    const llmConfig = await getDefaultLlmModel(username);
+    const llmConfig = await getDefaultLlmModel(userId);
     if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
         throw new Error('LLM not available for memory selection');
     }
@@ -120,14 +120,14 @@ const generateMemoryFromChatThread = async ({
         const targetRecordIdObj = mongoose.Types.ObjectId.createFromHexString(targetRecordId.toString());
         if (!targetRecordIdObj) return true;
 
-        // Get the thread to find username
+        // Get the thread to find userId
         const [thread] = await ModelChatLlmThread.find({ _id: targetRecordIdObj }) as IChatLlmThread[];
         if (!thread) return true;
 
-        const llmConfig = await getDefaultLlmModel(thread.username);
+        const llmConfig = await getDefaultLlmModel(thread.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) return true;
 
-        const user = await ModelUser.findOne({ username: thread.username });
+        const user = await ModelUser.findById(thread.userId);
         if (!user?.featureAiActionsChatMessage) return true;
 
         // Check if user has memory storage enabled
@@ -138,7 +138,7 @@ const generateMemoryFromChatThread = async ({
 
         // Get last 6 conversations from the thread
         const lastConversations = await ModelChatLlm.find({
-            username: thread.username,
+            userId: thread.userId,
             threadId: targetRecordIdObj,
             type: 'text',
         })
@@ -297,7 +297,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
 
         // Get existing memories for duplicate check
         const existingMemories = await ModelUserMemory.find({
-            username: thread.username,
+            userId: thread.userId,
         }).select('content _id').lean();
 
         const memoryMap = new Map<string, mongoose.Types.ObjectId>();
@@ -325,7 +325,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
                 );
             } else {
                 await ModelUserMemory.create({
-                    username: thread.username,
+                    userId: thread.userId,
                     content: normalizedMemory,
                     isPermanent: false,
                     ...actionDatetimeObj,
@@ -336,7 +336,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
 
         // Enforce memory limit using LLM selection
         const allNonPermanentMemories = await ModelUserMemory.find({
-            username: thread.username,
+            userId: thread.userId,
             isPermanent: false,
         })
             .select('_id content updatedAtUtc createdAtUtc')
@@ -352,7 +352,7 @@ EXAMPLES OF BAD MEMORIES (too generic/vague):
                         createdAtUtc: m.createdAtUtc,
                     })),
                     maxLimit: userMemoriesLimit,
-                    username: thread.username,
+                    userId: thread.userId,
                 });
 
                 const idsToKeepSet = new Set(memoriesToKeep.map(id => id.toString()));

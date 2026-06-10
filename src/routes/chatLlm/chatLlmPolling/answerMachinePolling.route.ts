@@ -44,7 +44,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             const threadId = getMongodbObjectOrNull(req.body.threadId);
             if (threadId === null) {
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
@@ -52,7 +52,7 @@ router.post(
 
             const thread = await ModelChatLlmThread.findOne({
                 _id: threadId,
-                username: auth_username,
+                userId: auth_userId,
             });
             if (!thread) {
                 return res.status(404).json({ message: 'Thread not found' });
@@ -113,7 +113,7 @@ router.post(
 
             const latestAnswerMachineRecord = await ModelAnswerMachineRequestV4.findOne({
                 threadId,
-                username: auth_username,
+                userId: auth_userId,
             }).sort({ createdAt: -1 });
 
             if (!latestAnswerMachineRecord) {
@@ -139,12 +139,12 @@ router.post(
 
             const lastUserMessage = await ModelChatLlm.findOne({
                 threadId,
-                username: auth_username,
+                userId: auth_userId,
                 isAi: false,
             }).sort({ createdAtUtc: -1 });
             const lastAiMessage = await ModelChatLlm.findOne({
                 threadId,
-                username: auth_username,
+                userId: auth_userId,
                 isAi: true,
             }).sort({ createdAtUtc: -1 });
             const hasFinalAnswer = !!(lastUserMessage && lastAiMessage && lastAiMessage.createdAtUtc > lastUserMessage.createdAtUtc);
@@ -176,7 +176,7 @@ router.post(
             }
 
             const answerMachineJobs = await ModelAnswerMachineRequestV4.aggregate([
-                { $match: { threadId, username: auth_username } },
+                { $match: { threadId, userId: auth_userId } },
                 { $sort: { createdAt: -1 } },
                 {
                     $lookup: {
@@ -233,7 +233,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
             const threadId = getMongodbObjectOrNull(req.body.threadId);
             if (threadId === null) {
                 return res.status(400).json({ message: 'Thread ID cannot be null' });
@@ -241,7 +241,7 @@ router.post(
 
             const thread = await ModelChatLlmThread.findOne({
                 _id: threadId,
-                username: auth_username,
+                userId: auth_userId,
             }).select('_id answerEngine');
             if (!thread) {
                 return res.status(404).json({ message: 'Thread not found' });
@@ -252,7 +252,7 @@ router.post(
 
             const latestPending = await ModelAnswerMachineRequestV4.findOne({
                 threadId,
-                username: auth_username,
+                userId: auth_userId,
                 status: 'pending',
             }).sort({ createdAt: -1 });
 
@@ -263,7 +263,7 @@ router.post(
             const upd = await ModelAnswerMachineRequestV4.updateOne(
                 {
                     _id: latestPending._id,
-                    username: auth_username,
+                    userId: auth_userId,
                     status: 'pending',
                 },
                 {

@@ -6,7 +6,7 @@ export interface IHomepageSummary extends Document {
     _id: mongoose.Types.ObjectId;
 
     // fields
-    username: string;
+    userId: mongoose.Types.ObjectId;
     generatedAtUtc: Date;
     summary: string;
 }

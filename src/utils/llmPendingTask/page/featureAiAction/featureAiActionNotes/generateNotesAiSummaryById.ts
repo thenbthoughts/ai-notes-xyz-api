@@ -23,13 +23,13 @@ const  generateNotesAiSummaryById = async ({
         const notesFirst = notesRecords[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(notesFirst.username);
+        const llmConfig = await getDefaultLlmModel(notesFirst.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         // Check if Notes AI feature is enabled for this user
-        const user = await ModelUser.findOne({ username: notesFirst.username });
+        const user = await ModelUser.findById(notesFirst.userId);
         if (!user || !user.featureAiActionsNotes) {
             return true; // Skip if Notes AI is not enabled for this user
         }

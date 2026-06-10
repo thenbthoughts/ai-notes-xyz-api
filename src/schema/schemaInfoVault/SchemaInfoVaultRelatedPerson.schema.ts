@@ -6,7 +6,7 @@ import { IInfoVaultRelatedPerson } from '../../types/typesSchema/typesSchemaInfo
 const infoVaultRelatedPersonSchema = new Schema<IInfoVaultRelatedPerson>({
     // identification
     infoVaultId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     relatedPersonName: { type: String, default: '' },

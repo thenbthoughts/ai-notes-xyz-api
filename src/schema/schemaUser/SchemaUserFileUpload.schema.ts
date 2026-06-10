@@ -3,7 +3,7 @@ import IUserFileUpload from '../../types/typesSchema/typesUser/SchemaUserFileUpl
 
 // User file upload schema
 const userFileUploadSchema = new Schema<IUserFileUpload>({
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // file upload field (legacy S3 path or GridFS identifier)
     fileUploadPath: { type: String, required: true, default: '', index: true },

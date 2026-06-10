@@ -110,16 +110,16 @@ function toAttachedMeta(d: {
  * thread, scoped to the time range of the chat page (so pagination stays chat-based).
  */
 export async function mergeAnswerMachineV4StreamIntoNotes(params: {
-    username: string;
+    userId: string;
     threadId: mongoose.Types.ObjectId;
     chatDocs: Record<string, unknown>[];
 }): Promise<Record<string, unknown>[]> {
-    const { username, threadId, chatDocs } = params;
+    const { userId, threadId, chatDocs } = params;
     if (chatDocs.length === 0) {
         return chatDocs;
     }
 
-    const thread = await ModelChatLlmThread.findOne({ _id: threadId, username }).select('answerEngine').lean();
+    const thread = await ModelChatLlmThread.findOne({ _id: threadId, userId }).select('answerEngine').lean();
     if (!thread || thread.answerEngine !== 'answerMachine4') {
         return chatDocs;
     }
@@ -133,7 +133,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
     const tMax = new Date(Math.max(...times));
     const tUpper = new Date(Math.max(tMax.getTime(), Date.now()));
 
-    const requests = await ModelAnswerMachineRequestV4.find({ threadId, username }).select('_id').lean();
+    const requests = await ModelAnswerMachineRequestV4.find({ threadId, userId }).select('_id').lean();
     const requestIds = requests.map((r) => r._id);
     if (requestIds.length === 0) {
         return chatDocs;
@@ -142,12 +142,12 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
     const [subQuestions, am4Evaluations, am4RequestSnapshots, allFilesForRequests] = await Promise.all([
         ModelAnswerMachineSubQuestionV4.find({
             threadId,
-            username,
+            userId,
             createdAtUtc: { $gte: tMin, $lte: tUpper },
         }).lean(),
         ModelAnswerMachineEvaluateAnswerV4.find({
             threadId,
-            username,
+            userId,
             answerMachineRequestV4Id: { $in: requestIds },
         })
             .select('answerMachineRequestV4Id evaluationReason isSatisfactory createdAtUtc')
@@ -155,7 +155,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
         ModelAnswerMachineRequestV4.find({
             _id: { $in: requestIds },
             threadId,
-            username,
+            userId,
         })
             .select(
                 'intermediateAnswers globalTaskDescription maxNumberOfIterations attachedFiles opencodeSessionId status currentIteration createdAt cancellationRequestedUtc',
@@ -363,7 +363,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             } satisfies AnswerMachineV4StreamPayload,
             content: `Answer Machine 4 · Iteration ${meta.iterationNumber} · ${meta.status}`,
             reasoningContent: '',
-            username,
+            userId,
             tags: [],
             visibility: '',
             fileUrlArr: [],
@@ -434,7 +434,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
                     ? `Answer Machine 4 · Step ${sq.stepIndex} (${sq.kind || 'opencode'}) · ${sq.status}`
                     : `Answer Machine 4 · Sub-question (${sq.kind || 'opencode'}) · ${sq.status}`,
             reasoningContent: '',
-            username,
+            userId,
             tags: [],
             visibility: '',
             fileUrlArr: [],
@@ -462,7 +462,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
 
     const fileArtifacts = await ModelAnswerMachineFileV4.find({
         threadId,
-        username,
+        userId,
         answerMachineRequestV4Id: { $in: requestIds },
         createdAtUtc: { $gte: tMin, $lte: tUpper },
     })
@@ -495,7 +495,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
             } satisfies AnswerMachineV4StreamPayload,
             content: `Answer Machine 4 · File · ${f.fileName || 'artifact'}`,
             reasoningContent: '',
-            username,
+            userId,
             tags: [],
             visibility: '',
             fileUrlArr: [],
@@ -540,7 +540,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
 
         const evalRowsWithChatNote = await ModelAnswerMachineEvaluateAnswerV4.find({
             answerMachineRequestV4Id: { $in: reqObjectIds },
-            username,
+            userId,
             threadId,
             insertedChatMessageId: { $ne: null },
         })
@@ -552,7 +552,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
 
         const reqsWithFinal = await ModelAnswerMachineRequestV4.find({
             _id: { $in: reqObjectIds },
-            username,
+            userId,
             threadId,
         })
             .select('finalAnswer updatedAt createdAt')
@@ -578,7 +578,7 @@ export async function mergeAnswerMachineV4StreamIntoNotes(params: {
                 } satisfies AnswerMachineV4StreamPayload,
                 content: 'Answer Machine 4 · Final answer',
                 reasoningContent: '',
-                username,
+                userId,
                 tags: [],
                 visibility: '',
                 fileUrlArr: [],

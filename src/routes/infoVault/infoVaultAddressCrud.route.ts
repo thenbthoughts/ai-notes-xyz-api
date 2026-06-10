@@ -34,7 +34,7 @@ router.post('/infoVaultAddressGet', middlewareUserAuth, async (req: Request, res
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -173,7 +173,7 @@ router.post('/infoVaultAddressDelete', middlewareUserAuth, async (req: Request, 
 
         const infoVaultAddress = await ModelInfoVaultAddress.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultAddress) {
@@ -205,7 +205,7 @@ router.post('/infoVaultAddressAdd', middlewareUserAuth, async (req: Request, res
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -214,7 +214,7 @@ router.post('/infoVaultAddressAdd', middlewareUserAuth, async (req: Request, res
         const now = new Date();
         const newInfoVaultAddress = await ModelInfoVaultAddress.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             countryRegion: req.body.countryRegion || '',
             address: req.body.address || '',
             city: req.body.city || '',
@@ -295,7 +295,7 @@ router.post('/infoVaultAddressEdit', middlewareUserAuth, async (req: Request, re
             await ModelInfoVaultAddress.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

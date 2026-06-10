@@ -20,7 +20,7 @@ const answerMachineFileV4Schema = new Schema<IAnswerMachineFileV4>({
         index: true,
         ref: 'chatLlmThread',
     },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     fileName: { type: String, required: true, default: '' },
     originalSize: { type: Number, default: 0 },
     mimeType: { type: String, default: 'application/octet-stream' },

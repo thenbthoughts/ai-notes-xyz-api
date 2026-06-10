@@ -1,7 +1,7 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 interface IUserApiKey extends Document {
-    username: string;
+    userId: Types.ObjectId;
 
     // client frontend url
     clientFrontendUrl: string;

@@ -6,8 +6,8 @@ import { reindexAll } from '../../src/utils/search/reindexGlobalSearch';
 const reindexAllDocuments = async () => {
     try {
         await mongoose.connect(envKeys.MONGODB_URI);
-        
-        await reindexAll({ username: 'nibf' });
+
+        await reindexAll({ userId: '669126666666666666666666' });
 
         await mongoose.disconnect();
     } catch (error) {

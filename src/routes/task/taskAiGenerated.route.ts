@@ -31,7 +31,7 @@ router.post('/taskGenerateByConversationId', middlewareUserAuth, async (req: Req
         if (provider === 'groq' || provider === 'openrouter') {
             taskList = await funcTasksGenerateByConversationId({
                 _id: req.body.id,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
 
                 provider,
                 llmAuthToken,
@@ -77,7 +77,7 @@ router.post(
 
             const taskInfo = await funcGetTaskAiSuggestionByTaskId({
                 taskRecordId: req.body.id,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
 
                 provider,
                 llmAuthToken,
@@ -92,7 +92,7 @@ router.post(
                     commentText: taskInfo.newTaskAiSuggestion,
                     isAi: true,
 
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
 
                     // date time ip
                     ...actionDatetimeObj,
@@ -118,7 +118,7 @@ router.post('/taskGenerateByConversationAll', middlewareUserAuth, async (req: Re
     try {
         let taskList = [] as object[];
         taskList = await funcTasksGenerateByConversationAll({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         return res.status(201).json({

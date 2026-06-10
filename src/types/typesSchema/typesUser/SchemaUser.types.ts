@@ -2,8 +2,12 @@ import mongoose, { Document } from 'mongoose';
 
 // User Interface
 interface IUser extends Document {
+    _id: mongoose.Types.ObjectId;
     username: string;
     password: string;
+
+    // convenience alias for the _id when we want to treat the user identifier as "userId"
+    userId?: mongoose.Types.ObjectId;
 
     // personal info
     name: string;

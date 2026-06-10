@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import IUserS3Bucket from '../../types/typesSchema/typesDrive/SchemaUserS3Bucket.types';
 
 const userS3BucketSchema = new Schema<IUserS3Bucket>({
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     bucketName: { type: String, required: true, default: '' },
     endpoint: { type: String, required: true, default: '' },
     region: { type: String, required: true, default: '' },

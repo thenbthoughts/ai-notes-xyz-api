@@ -5,7 +5,7 @@ import { IFaq } from '../../types/typesSchema/typesFaq/SchemaFaq.types';
 // FAQ Schema
 const faqSchema = new Schema<IFaq>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     question: { type: String, default: '', index: true },

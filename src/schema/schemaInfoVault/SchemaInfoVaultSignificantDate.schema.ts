@@ -6,7 +6,7 @@ import { IInfoVaultSignificantDate } from '../../types/typesSchema/typesSchemaIn
 const infoVaultSignificantDateSchema = new Schema<IInfoVaultSignificantDate>({
     // identification
     infoVaultId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     date: { type: Date, default: null },

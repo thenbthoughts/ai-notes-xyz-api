@@ -7,14 +7,14 @@ import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.
 import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 
 const groqModelGet = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }) => {
     try {
         // check if user is valid
         const userApiKey = await ModelUserApiKey.findOne({
-            username: username,
+            userId: userId,
         });
         if (!userApiKey) {
             console.log('User not found, skipping...');

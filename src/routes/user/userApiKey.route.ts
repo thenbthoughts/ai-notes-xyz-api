@@ -133,7 +133,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyGroq: apiKeyGroq,
@@ -192,7 +192,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyOpenrouter: apiKeyOpenrouter,
@@ -236,7 +236,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     fileStorageType: fileStorageType,
@@ -271,8 +271,8 @@ router.post(
                 Math.random() * 1_000_000,
             );
             const curDateTime = new Date().valueOf();
-            const fileContent = `file-upload-test-${res.locals.auth_username}-${curDateTime}-${randomNum}`;
-            const fileName = `file-upload-test-${res.locals.auth_username}.txt`;
+            const fileContent = `file-upload-test-${res.locals.auth_userId}-${curDateTime}-${randomNum}`;
+            const fileName = `file-upload-test-${res.locals.auth_userId}.txt`;
 
             console.log(fileName, fileContent);
 
@@ -325,7 +325,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyS3Valid: true,
@@ -380,7 +380,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyOllamaValid: apiKeyOllamaValid,
@@ -422,7 +422,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     shellEngineValid: true,
@@ -472,7 +472,7 @@ router.post(
             if (!user || !pass) {
                 return res.status(400).json({
                     success: '',
-                    error: 'OpenCode username and password are required',
+                    error: 'OpenCode userId and password are required',
                 });
             }
 
@@ -485,7 +485,7 @@ router.post(
             }
 
             await ModelUserApiKey.findOneAndUpdate(
-                { username: res.locals.auth_username },
+                { userId: res.locals.auth_userId },
                 {
                     apiKeyOpencodeValid: true,
                     opencodeUrl: originParsed.origin,
@@ -541,7 +541,7 @@ router.post(
             if (!user || !pass) {
                 return res.status(400).json({
                     success: '',
-                    error: 'OpenCode username and password are required',
+                    error: 'OpenCode userId and password are required',
                 });
             }
 
@@ -569,7 +569,7 @@ router.post(
             }
 
             await ModelUserApiKey.findOneAndUpdate(
-                { username: res.locals.auth_username },
+                { userId: res.locals.auth_userId },
                 {
                     apiKeyOpencodeWithShellValid: true,
                     opencodeWithShellUrl: originParsed.origin,
@@ -677,7 +677,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyQdrantValid: apiKeyQdrantValid,
@@ -739,7 +739,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyReplicate: apiKeyReplicate,
@@ -825,7 +825,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyRunpod: apiKeyRunpod,
@@ -900,7 +900,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyOpenai: apiKeyOpenai,
@@ -968,7 +968,7 @@ router.post(
 
             const updatedUser = await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     apiKeyLocalaiValid: apiKeyLocalaiValid,
@@ -1043,7 +1043,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     // api key
@@ -1104,8 +1104,8 @@ function labelForTelegramChat(chat: Record<string, unknown>): {
         }
         const name = `${fn} ${ln}`.trim();
         let un = '';
-        if (typeof chat.username === 'string') {
-            un = chat.username;
+        if (typeof chat.userId === 'string') {
+            un = chat.userId;
         }
         if (name && un) {
             label = `${name} (@${un})`;
@@ -1250,12 +1250,12 @@ function normalizeCachedTelegramChat(raw: unknown): TTelegramChat | null {
     return { chatId, messageThreadId, label, type };
 }
 
-/** Bot token for Telegram APIs: JWT session identifies the user; token only from DB */
+/** Bot token for Telegram APIs (user's own BotFather token). The user is identified via our auth (auth_userId = User._id); the token itself is stored in DB and fetched using the current user's id. */
 async function getTelegramBotTokenFromDbOnly(
-    authUsername: string
+    authUserId: string
 ): Promise<{ token: string; error: string }> {
     const keys = await ModelUserApiKey.findOne({
-        username: authUsername,
+        userId: authUserId,
     })
         .select('telegramBotToken')
         .lean();
@@ -1308,7 +1308,7 @@ router.post(
             }
 
             await ModelUserApiKey.findOneAndUpdate(
-                { username: res.locals.auth_username },
+                { userId: res.locals.auth_userId },
                 { $set: { telegramBotToken: raw } },
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             );
@@ -1341,10 +1341,10 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
             const [cacheDoc, apiKeys] = await Promise.all([
-                ModelUserTelegramConversationCache.findOne({ username }).lean(),
-                ModelUserApiKey.findOne({ username })
+                ModelUserTelegramConversationCache.findOne({ userId }).lean(),
+                ModelUserApiKey.findOne({ userId })
                     .select('telegramChatId telegramMessageThreadId telegramBotToken')
                     .lean(),
             ]);
@@ -1397,7 +1397,7 @@ router.post(
     async (req: Request, res: Response) => {
         try {
             const { token, error: tokenErr } = await getTelegramBotTokenFromDbOnly(
-                res.locals.auth_username
+                res.locals.auth_userId
             );
             if (!token) {
                 return res.status(400).json({
@@ -1431,13 +1431,13 @@ router.post(
                 updates = tgRes.data.result;
             }
             const chats = collectChatsFromTelegramUpdates(updates);
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
             const updatedAtUtc = new Date();
 
             // Remove all prior cache rows for this user (including duplicates), then insert only what Telegram returned now
-            await ModelUserTelegramConversationCache.deleteMany({ username });
+            await ModelUserTelegramConversationCache.deleteMany({ userId });
             await ModelUserTelegramConversationCache.create({
-                username,
+                userId,
                 chats,
                 updatedAtUtc,
             });
@@ -1504,7 +1504,7 @@ router.post(
 
             if (!token && useStoredToken === true) {
                 const keys = await ModelUserApiKey.findOne({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 })
                     .select('telegramBotToken')
                     .lean();
@@ -1549,7 +1549,7 @@ router.post(
             }
 
             await ModelUserApiKey.findOneAndUpdate(
-                { username: res.locals.auth_username },
+                { userId: res.locals.auth_userId },
                 {
                     telegramValid: true,
                     telegramBotToken: token,
@@ -1597,7 +1597,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     userEmailVerifyOtp: otp,
@@ -1609,7 +1609,7 @@ router.post(
             );
 
             const sendStatus = await funcSendMail({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 smtpTo: email,
                 subject: 'AI Notes XYZ - Email Verification',
                 text: `Hello from AI Notes XYZ. Your verification code is: ${otp}. Please do not share this code with anyone.`,
@@ -1655,7 +1655,7 @@ router.post(
             }
 
             const user = await ModelUserApiKey.findOne({
-                username: res.locals.auth_username
+                userId: res.locals.auth_userId
             });
 
             if (!user) {
@@ -1671,7 +1671,7 @@ router.post(
 
             await ModelUser.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    _id: res.locals.auth_userId
                 },
                 {
                     emailVerified: true,
@@ -1705,7 +1705,7 @@ router.post(
         try {
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     // api key
@@ -1717,10 +1717,8 @@ router.post(
                 }
             );
 
-            await ModelUser.findOneAndUpdate(
-                {
-                    username: res.locals.auth_username
-                },
+            await ModelUser.findByIdAndUpdate(
+                res.locals.auth_userId,
                 {
                     email: '',
                     emailVerified: false,
@@ -1863,7 +1861,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 updateFields,
                 {
@@ -1874,7 +1872,7 @@ router.post(
             // Clear Telegram conversation cache
             if (apiKeyType === 'telegram') {
                 await ModelUserTelegramConversationCache.deleteOne({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 });
             }
 
@@ -1911,7 +1909,7 @@ router.post(
 
             await ModelUserApiKey.findOneAndUpdate(
                 {
-                    username: res.locals.auth_username
+                    userId: res.locals.auth_userId
                 },
                 {
                     clientFrontendUrl: clientFrontendUrl,

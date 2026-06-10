@@ -34,7 +34,7 @@ router.post('/infoVaultEmailGet', middlewareUserAuth, async (req: Request, res: 
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -186,7 +186,7 @@ router.post('/infoVaultEmailDelete', middlewareUserAuth, async (req: Request, re
 
         const infoVaultEmail = await ModelInfoVaultEmail.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultEmail) {
@@ -218,7 +218,7 @@ router.post('/infoVaultEmailAdd', middlewareUserAuth, async (req: Request, res: 
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -227,7 +227,7 @@ router.post('/infoVaultEmailAdd', middlewareUserAuth, async (req: Request, res: 
         const now = new Date();
         const newInfoVaultEmail = await ModelInfoVaultEmail.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             email: req.body.email || '',
             label: req.body.label || 'home',
             isPrimary: req.body.isPrimary === true,
@@ -279,7 +279,7 @@ router.post('/infoVaultEmailEdit', middlewareUserAuth, async (req: Request, res:
             await ModelInfoVaultEmail.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

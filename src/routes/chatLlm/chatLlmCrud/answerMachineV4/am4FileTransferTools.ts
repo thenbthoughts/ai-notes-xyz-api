@@ -93,7 +93,7 @@ export async function ensureAm4ShellWorkDirectoryMarker(params: {
 export async function putFileFromUserStorageToAm4ShellWorkspace(params: {
     shellCfg: Am4ShellServiceConfig;
     apiKey: tsUserApiKey;
-    username: string;
+    userId: string;
     userObjectId: string;
     threadId: string;
     /** Key as returned by uploads / stored on `AnswerMachineFileV4.storedFileUrl`. */
@@ -207,7 +207,7 @@ export async function copyExistingShellFileToAm4CanonicalInputPath(params: {
 export async function syncAm4RequestAttachmentsIntoCanonicalShellLayout(params: {
     shellCfg: Am4ShellServiceConfig;
     apiKey: tsUserApiKey;
-    username: string;
+    userId: string;
     userObjectId: string;
     threadId: mongoose.Types.ObjectId;
     attachments: Array<{
@@ -243,7 +243,7 @@ export async function syncAm4RequestAttachmentsIntoCanonicalShellLayout(params: 
             const transferred = await putFileFromUserStorageToAm4ShellWorkspace({
                 shellCfg: params.shellCfg,
                 apiKey: params.apiKey,
-                username: params.username,
+                userId: params.userId,
                 userObjectId: params.userObjectId,
                 threadId: String(params.threadId),
                 storageObjectKey: doc.storedFileUrl!.trim(),
@@ -307,7 +307,7 @@ export async function syncAm4RequestAttachmentsIntoCanonicalShellLayout(params: 
  * Persists a user-upload record + object bytes to GridFS/S3, returns the storage key used by `/api/uploads/crud/getFile`.
  */
 async function persistGeneratedBytesToUserStorage(params: {
-    username: string;
+    userId: string;
     threadId: mongoose.Types.ObjectId;
     apiKey: tsUserApiKey;
     originalFileName: string;
@@ -316,14 +316,14 @@ async function persistGeneratedBytesToUserStorage(params: {
 }): Promise<{ objectKey: string }> {
     const { storageType, s3Config } = buildUserStorageOptions(params.apiKey);
     const tempRecord = await ModelUserFileUpload.create({
-        username: params.username,
-        fileUploadPath: `ai-notes-xyz/${params.username}/temp/${Date.now()}.temp`,
+        userId: params.userId,
+        fileUploadPath: `ai-notes-xyz/${params.userId}/temp/${Date.now()}.temp`,
         storageType,
     });
     const fileNameStem = tempRecord._id.toString();
     const extension = path.extname(params.originalFileName) || '.bin';
     const objectKey = constructFeatureUploadObjectKey(
-        params.username,
+        params.userId,
         String(params.threadId),
         fileNameStem,
         extension,
@@ -333,7 +333,7 @@ async function persistGeneratedBytesToUserStorage(params: {
         fileContent: params.buffer,
         contentType: params.contentType,
         metadata: {
-            username: params.username,
+            userId: params.userId,
             parentEntityId: String(params.threadId),
             originalName: params.originalFileName,
             source: 'answer_machine_v4_shell_output',
@@ -367,7 +367,7 @@ async function persistGeneratedBytesToUserStorage(params: {
 export async function syncAm4AssistantOutputFilesFromShellToUserStorage(params: {
     shellCfg: Am4ShellServiceConfig;
     apiKey: tsUserApiKey;
-    username: string;
+    userId: string;
     userObjectId: string;
     threadId: mongoose.Types.ObjectId;
     answerMachineRequestV4Id: mongoose.Types.ObjectId;
@@ -409,7 +409,7 @@ export async function syncAm4AssistantOutputFilesFromShellToUserStorage(params: 
         let objectKey: string;
         try {
             const persisted = await persistGeneratedBytesToUserStorage({
-                username: params.username,
+                userId: params.userId,
                 threadId: params.threadId,
                 apiKey: params.apiKey,
                 originalFileName: name,
@@ -424,7 +424,7 @@ export async function syncAm4AssistantOutputFilesFromShellToUserStorage(params: 
         const created = await ModelAnswerMachineFileV4.create({
             answerMachineRequestV4Id: params.answerMachineRequestV4Id,
             threadId: params.threadId,
-            username: params.username,
+            userId: params.userId,
             fileName: name.slice(0, 500),
             originalSize: read.buffer.length,
             mimeType: contentType.slice(0, 200),
