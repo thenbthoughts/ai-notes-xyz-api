@@ -34,7 +34,7 @@ router.post('/infoVaultCustomFieldGet', middlewareUserAuth, async (req: Request,
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -169,7 +169,7 @@ router.post('/infoVaultCustomFieldDelete', middlewareUserAuth, async (req: Reque
 
         const infoVaultCustomField = await ModelInfoVaultCustomField.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultCustomField) {
@@ -201,7 +201,7 @@ router.post('/infoVaultCustomFieldAdd', middlewareUserAuth, async (req: Request,
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -210,7 +210,7 @@ router.post('/infoVaultCustomFieldAdd', middlewareUserAuth, async (req: Request,
         const now = new Date();
         const newInfoVaultCustomField = await ModelInfoVaultCustomField.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             key: req.body.key || '',
             value: req.body.value || '',
             createdAtUtc: now,
@@ -258,7 +258,7 @@ router.post('/infoVaultCustomFieldEdit', middlewareUserAuth, async (req: Request
             await ModelInfoVaultCustomField.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

@@ -54,10 +54,10 @@ const taskSchema = new Schema<tsTaskList>({
     },
 
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
 

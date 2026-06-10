@@ -24,7 +24,7 @@ router.post('/notesNextQuestionGenerateByLast30Conversation', middlewareUserAuth
         // get thread info
         const threadInfo = await ModelChatLlmThread.findOne({
             _id: threadId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!threadInfo) {
             return res.status(400).json({ message: 'Thread not found' });
@@ -46,7 +46,7 @@ router.post('/notesNextQuestionGenerateByLast30Conversation', middlewareUserAuth
         if (provider === 'groq' || provider === 'openrouter') {
             taskList = await getNextQuestionsFromLast30Conversation({
                 threadId,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 llmAuthToken,
                 provider,
             });

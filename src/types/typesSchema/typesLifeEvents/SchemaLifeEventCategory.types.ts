@@ -3,7 +3,7 @@ import mongoose, { Document } from 'mongoose';
 // LifeEvents
 export interface ILifeEventCategory extends Document {
     // identification
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // fields
     name: string;

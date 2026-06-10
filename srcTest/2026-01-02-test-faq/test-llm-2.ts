@@ -11,7 +11,7 @@ const init = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
 
         const resultInsert = await ModelLlmPendingTaskCron.create({
-            "username": "gridfstest",
+            "userId": "gridfstest",
             "taskType": llmPendingTaskTypes.page.featureAiActions.task,
             "targetRecordId": "6963ae9ce6c8989223a95da4",
         });

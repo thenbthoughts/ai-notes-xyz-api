@@ -9,12 +9,12 @@ const router = Router();
 // Get Note API
 router.post('/processBackgroundTask', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const results = await ModelLlmPendingTaskCron.aggregate([
             {
                 $match: {
-                    username: auth_username,
+                    userId: auth_userId,
                     taskStatus: 'pending',
                 }
             },

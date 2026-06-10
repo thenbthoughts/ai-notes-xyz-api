@@ -25,10 +25,10 @@ const taskStatusListSchema = new Schema<tsTaskStatusList>({
     },
 
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
 });

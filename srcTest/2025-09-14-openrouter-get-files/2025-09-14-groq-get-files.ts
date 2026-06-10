@@ -9,7 +9,7 @@ const openrouterGetFiles = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
 
         const userApiKey = await ModelUserApiKey.findOne({
-            username: 'exampleuser',
+            userId: 'exampleuser',
         });
 
         if (!userApiKey) {

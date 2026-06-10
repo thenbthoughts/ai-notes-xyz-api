@@ -9,10 +9,10 @@ import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
 const router = Router();
 
 const getUnionPipeline = ({
-    username,
+    userId,
     collectionName,
 }: {
-    username: string;
+    userId: string;
     collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
 }) => {
     if (collectionName === 'tasks') {
@@ -22,7 +22,7 @@ const getUnionPipeline = ({
                 pipeline: [
                     {
                         $match: {
-                            username: username,
+                            userId: userId,
                         }
                     },
                     {
@@ -43,7 +43,7 @@ const getUnionPipeline = ({
                 pipeline: [
                     {
                         $match: {
-                            username: username,
+                            userId: userId,
                         }
                     },
                     {
@@ -64,7 +64,7 @@ const getUnionPipeline = ({
                 pipeline: [
                     {
                         $match: {
-                            username: username,
+                            userId: userId,
                         }
                     },
                     {
@@ -85,7 +85,7 @@ const getUnionPipeline = ({
                 pipeline: [
                     {
                         $match: {
-                            username: username,
+                            userId: userId,
                         }
                     },
                     {
@@ -106,7 +106,7 @@ const getUnionPipeline = ({
                 pipeline: [
                     {
                         $match: {
-                            username: username,
+                            userId: userId,
                         }
                     },
                     {
@@ -143,14 +143,14 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
             }
         }
 
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         let tempStage = {} as PipelineStage;
         const pipelineDocument: PipelineStage[] = [];
         const pipelineCount: PipelineStage[] = [];
 
         // union pipeline -> task
         const unionPipelineTasks = getUnionPipeline({
-            username: username,
+            userId: userId,
             collectionName: 'tasks',
         });
         if (unionPipelineTasks !== null) {
@@ -160,7 +160,7 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
 
         // union pipeline -> note
         const unionPipelineNotes = getUnionPipeline({
-            username: username,
+            userId: userId,
             collectionName: 'notes',
         });
         if (unionPipelineNotes !== null) {
@@ -170,7 +170,7 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
 
         // union pipeline -> lifeEvent
         const unionPipelineLifeEvents = getUnionPipeline({
-            username: username,
+            userId: userId,
             collectionName: 'lifeEvents',
         });
         if (unionPipelineLifeEvents !== null) {
@@ -180,7 +180,7 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
 
         // union pipeline -> chatLlmThread
         const unionPipelineChatLlmThread = getUnionPipeline({
-            username: username,
+            userId: userId,
             collectionName: 'chatLlmThread',
         });
         if (unionPipelineChatLlmThread !== null) {
@@ -190,7 +190,7 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
 
         // union pipeline -> infoVault
         const unionPipelineInfoVault = getUnionPipeline({
-            username: username,
+            userId: userId,
             collectionName: 'infoVault',
         });
         if (unionPipelineInfoVault !== null) {

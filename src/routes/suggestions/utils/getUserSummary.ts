@@ -4,7 +4,7 @@ import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import IUser from '../../../types/typesSchema/typesUser/SchemaUser.types';
 import { ILifeEvents } from '../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
 
-const getTodaySummary = async (username: string): Promise<ILifeEvents | null> => {
+const getTodaySummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
         let todayDateUtc = new Date();
         let summaryDateOnly = new Date(todayDateUtc).toISOString().split('T')[0];
@@ -13,7 +13,7 @@ const getTodaySummary = async (username: string): Promise<ILifeEvents | null> =>
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: dailyNotesTitle,
                 },
             },
@@ -26,7 +26,7 @@ const getTodaySummary = async (username: string): Promise<ILifeEvents | null> =>
     }
 };
 
-const getYesterdaySummary = async (username: string): Promise<ILifeEvents | null> => {
+const getYesterdaySummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
         let yesterdayDateUtc = new Date(new Date().valueOf() - 24 * 60 * 60 * 1000);
         let summaryDateOnly = new Date(yesterdayDateUtc).toISOString().split('T')[0];
@@ -35,7 +35,7 @@ const getYesterdaySummary = async (username: string): Promise<ILifeEvents | null
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: dailyNotesTitle,
                 },
             },
@@ -48,11 +48,9 @@ const getYesterdaySummary = async (username: string): Promise<ILifeEvents | null
     }
 };
 
-const getCurrentWeekSummary = async (username: string): Promise<ILifeEvents | null> => {
+const getCurrentWeekSummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
-        const userRecords = await ModelUser.find({
-            username: username,
-        }) as IUser[];
+        const userRecords = await ModelUser.findById(userId) as IUser[];
         if (!userRecords || userRecords.length !== 1) {
             return null;
         }
@@ -69,7 +67,7 @@ const getCurrentWeekSummary = async (username: string): Promise<ILifeEvents | nu
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: weeklyNotesTitle,
                 },
             },
@@ -82,11 +80,9 @@ const getCurrentWeekSummary = async (username: string): Promise<ILifeEvents | nu
     }
 };
 
-const getLastWeekSummary = async (username: string): Promise<ILifeEvents | null> => {
+const getLastWeekSummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
-        const userRecords = await ModelUser.find({
-            username: username,
-        }) as IUser[];
+        const userRecords = await ModelUser.findById(userId) as IUser[];
         if (!userRecords || userRecords.length !== 1) {
             return null;
         }
@@ -105,7 +101,7 @@ const getLastWeekSummary = async (username: string): Promise<ILifeEvents | null>
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: weeklyNotesTitle,
                 },
             },
@@ -118,7 +114,7 @@ const getLastWeekSummary = async (username: string): Promise<ILifeEvents | null>
     }
 };
 
-const getCurrentMonthSummary = async (username: string): Promise<ILifeEvents | null> => {
+const getCurrentMonthSummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
         const summaryDateUtc = new Date();
         let monthYearStr = summaryDateUtc.getFullYear().toString();
@@ -128,7 +124,7 @@ const getCurrentMonthSummary = async (username: string): Promise<ILifeEvents | n
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: monthlyNotesTitle,
                 },
             },
@@ -141,7 +137,7 @@ const getCurrentMonthSummary = async (username: string): Promise<ILifeEvents | n
     }
 };
 
-const getLastMonthSummary = async (username: string): Promise<ILifeEvents | null> => {
+const getLastMonthSummary = async (userId: string): Promise<ILifeEvents | null> => {
     try {
         const lastMonth = DateTime.fromJSDate(new Date()).minus({ months: 1 }).toJSDate();
 
@@ -153,7 +149,7 @@ const getLastMonthSummary = async (username: string): Promise<ILifeEvents | null
         const docs = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     title: monthlyNotesTitle,
                 },
             },
@@ -166,7 +162,7 @@ const getLastMonthSummary = async (username: string): Promise<ILifeEvents | null
     }
 };
 
-const getUserSummary = async (username: string): Promise<{
+const getUserSummary = async (userId: string): Promise<{
     summaryToday: ILifeEvents | null,
     summaryYesterday: ILifeEvents | null,
     summaryCurrentWeek: ILifeEvents | null,
@@ -176,12 +172,12 @@ const getUserSummary = async (username: string): Promise<{
 }> => {
     try {
         const [summaryToday, summaryYesterday, summaryCurrentWeek, summaryLastWeek, summaryCurrentMonth, summaryLastMonth] = await Promise.all([
-            getTodaySummary(username),
-            getYesterdaySummary(username),
-            getCurrentWeekSummary(username),
-            getLastWeekSummary(username),
-            getCurrentMonthSummary(username),
-            getLastMonthSummary(username),
+            getTodaySummary(userId),
+            getYesterdaySummary(userId),
+            getCurrentWeekSummary(userId),
+            getLastWeekSummary(userId),
+            getCurrentMonthSummary(userId),
+            getLastMonthSummary(userId),
         ]);
 
         return {

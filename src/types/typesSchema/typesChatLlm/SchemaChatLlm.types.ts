@@ -12,7 +12,7 @@ export interface IChatLlm extends Document {
     type: string,
     content: string;
     reasoningContent: string;
-    username: string;
+    userId: mongoose.Types.ObjectId;
     tags: string[];
     visibility: string;
     fileUrlArr: string[];

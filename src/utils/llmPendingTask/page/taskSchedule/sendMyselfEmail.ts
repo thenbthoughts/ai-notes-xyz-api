@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { DateTime } from 'luxon';
 
 import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
@@ -15,14 +16,14 @@ import { getDefaultLlmModel } from '../../utils/getDefaultLlmModel';
 
 const generateAiGeneratedEmailContent = async ({
     sendMyselfEmailInfo,
-    username,
+    userId,
 }: {
     sendMyselfEmailInfo: tsTaskListScheduleSendMyselfEmail;
-    username: string;
+    userId: string | mongoose.Types.ObjectId;
 }) => {
     try {
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(username);
+        const llmConfig = await getDefaultLlmModel(userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return '';
         }
@@ -98,7 +99,7 @@ const sendMyselfEmail = async ({
             console.time('generateAiGeneratedEmailContent');
             const emailSubjectAiResponse = await generateAiGeneratedEmailContent({
                 sendMyselfEmailInfo,
-                username: taskInfo.username,
+                userId: taskInfo.userId,
             });
             console.timeEnd('generateAiGeneratedEmailContent');
             if (emailSubjectAiResponse.length > 0) {
@@ -139,7 +140,7 @@ const sendMyselfEmail = async ({
         let emailSubject = `${sendMyselfEmailInfo.emailSubject} | AI Notes XYZ`;
 
         const keysForFooter = await ModelUserApiKey.findOne({
-            username: taskInfo.username,
+            userId: taskInfo.userId,
         })
             .select('clientFrontendUrl')
             .lean();
@@ -185,18 +186,16 @@ const sendMyselfEmail = async ({
         if (sendMailEnabled) {
             anyChannel = true;
             const apiKeysSmtp = await ModelUserApiKey.findOne({
-                username: taskInfo.username,
+                userId: taskInfo.userId,
                 smtpValid: true,
             });
-            const userInfo = await ModelUser.findOne({
-                username: taskInfo.username,
-            });
+            const userInfo = await ModelUser.findById(taskInfo.userId);
             if (!apiKeysSmtp || !userInfo) {
                 allOk = false;
             } else {
                 try {
                     await funcSendMail({
-                        username: taskInfo.username,
+                        userId: taskInfo.userId,
                         smtpTo: userInfo.email,
                         subject: emailSubject,
                         text: '',
@@ -252,7 +251,7 @@ const sendMyselfEmail = async ({
             }
 
             const tgOk = await funcSendTelegram({
-                username: taskInfo.username,
+                userId: taskInfo.userId.toString(),
                 subject: emailSubjectTelegram,
                 text: textTelegram,
                 html: '',

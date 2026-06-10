@@ -63,7 +63,7 @@ export interface IChatLlmThread extends Document {
     shellExecuteMaxAttempts?: number;
 
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // auto
     createdAtUtc: Date;

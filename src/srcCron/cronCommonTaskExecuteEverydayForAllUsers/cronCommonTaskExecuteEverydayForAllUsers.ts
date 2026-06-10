@@ -9,31 +9,32 @@ const processHomepageSummary = async () => {
         // Get all users
         const allUsers = await ModelUser.find({
             featureAiActionsEnabled: true,
-        }, { username: 1 }).lean();
+        }, { _id: 1 }).lean();
 
         console.log(`Found ${allUsers.length} users to process homepage summaries`);
 
         for (const user of allUsers) {
             try {
-                console.log(`Generating homepage summary for user: ${user.username}`);
+                const uid = user._id;
+                console.log(`Generating homepage summary for user: ${uid}`);
 
-                // Generate the homepage summary
-                const summaryText = await generateHomepageSummary(user.username);
+                // Generate the homepage summary (uid is the User _id)
+                const summaryText = await generateHomepageSummary(String(uid));
 
                 if (summaryText && summaryText.trim().length > 0) {
                     // Create new homepage summary document
                     await ModelHomepageSummary.create({
-                        username: user.username,
+                        userId: uid,
                         generatedAtUtc: new Date(),
                         summary: summaryText,
                     });
 
-                    console.log(`Successfully generated homepage summary for ${user.username}`);
+                    console.log(`Successfully generated homepage summary for ${uid}`);
                 } else {
-                    console.log(`No summary generated for ${user.username} (no sufficient data)`);
+                    console.log(`No summary generated for ${uid} (no sufficient data)`);
                 }
             } catch (userError) {
-                console.error(`Error processing homepage summary for user ${user.username}:`, userError);
+                console.error(`Error processing homepage summary for user ${user._id}:`, userError);
                 // Continue processing other users even if one fails
             }
         }

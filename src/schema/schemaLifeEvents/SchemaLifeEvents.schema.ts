@@ -5,7 +5,7 @@ import { ILifeEvents } from '../../types/typesSchema/typesLifeEvents/SchemaLifeE
 // LifeEvents Schema
 const lifeEventsSchema = new Schema<ILifeEvents>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     title: { type: String, default: '' },

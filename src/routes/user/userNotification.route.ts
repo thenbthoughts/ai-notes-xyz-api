@@ -34,7 +34,7 @@ router.post('/userNotificationGet', middlewareUserAuth, async (req: Request, res
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -90,7 +90,7 @@ router.post('/userNotificationGet', middlewareUserAuth, async (req: Request, res
 // Delete User Notification API
 router.post('/userNotificationDelete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { recordId } = req.body;
 
         let recordIdObj = getMongodbObjectOrNull(recordId);
@@ -99,7 +99,7 @@ router.post('/userNotificationDelete', middlewareUserAuth, async (req: Request, 
             return res.status(400).json({ message: 'Valid record ID is required' });
         }
 
-        const deletedUserNotification = await ModelUserNotification.deleteOne({ _id: recordIdObj, username: username });
+        const deletedUserNotification = await ModelUserNotification.deleteOne({ _id: recordIdObj, userId: userId });
         if (deletedUserNotification.deletedCount === 0) {
             return res.status(404).json({ message: 'User notification not found' });
         }

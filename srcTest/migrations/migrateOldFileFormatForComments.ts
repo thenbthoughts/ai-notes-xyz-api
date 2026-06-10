@@ -10,7 +10,7 @@ import IUserFileUpload from '../../src/types/typesSchema/typesUser/SchemaUserFil
 
 // Helper function to construct file path (same as in uploadFileS3ForFeatures.ts)
 const constructFilePath = (
-    username: string,
+    userId: string,
     parentEntityId: string,
     fileName: string,
     fileExtension: string
@@ -20,8 +20,8 @@ const constructFilePath = (
         filePath: '',
     };
 
-    // Construct: ai-notes-xyz/{username}/features/{parentEntityId}/{fileName}{extension}
-    returnObj.filePath = `ai-notes-xyz/${username}/features/${parentEntityId}/${fileName}${fileExtension}`;
+    // Construct: ai-notes-xyz/{userId}/features/{parentEntityId}/{fileName}{extension}
+    returnObj.filePath = `ai-notes-xyz/${userId}/features/${parentEntityId}/${fileName}${fileExtension}`;
     returnObj.success = true;
     return returnObj;
 };
@@ -54,7 +54,7 @@ const migrateOldFileFormat = async () => {
         for (const record of oldFormatRecords) {
             try {
                 const oldFileUrl = record.fileUrl;
-                const username = record.username;
+                const userId = record.userId;
                 const parentEntityId = record.entityId?.toString() || '';
 
                 if (parentEntityId === '') {
@@ -63,7 +63,7 @@ const migrateOldFileFormat = async () => {
                     continue;
                 }
 
-                console.log(`\nProcessing record ${record._id} for user ${username}`);
+                console.log(`\nProcessing record ${record._id} for user ${userId}`);
                 console.log(`Old fileUrl: ${oldFileUrl}`);
 
                 // Check if old file path already matches new format (starts with ai-notes-xyz/)
@@ -74,9 +74,9 @@ const migrateOldFileFormat = async () => {
                 }
 
                 // Get user API key to determine storage type
-                const userApiKeyDoc = await ModelUserApiKey.findOne({ username });
+                const userApiKeyDoc = await ModelUserApiKey.findOne({ userId });
                 if (!userApiKeyDoc) {
-                    console.error(`User API key not found for ${username}`);
+                    console.error(`User API key not found for ${userId}`);
                     errorCount++;
                     continue;
                 }
@@ -85,7 +85,7 @@ const migrateOldFileFormat = async () => {
 
                 // Only process users with S3 credentials configured (storageType will always be 's3')
                 if (!userApiKey.apiKeyS3Valid) {
-                    console.log(`Skipping user ${username} - S3 credentials not configured`);
+                    console.log(`Skipping user ${userId} - S3 credentials not configured`);
                     skippedCount++;
                     continue;
                 }
@@ -122,8 +122,8 @@ const migrateOldFileFormat = async () => {
 
                 // Create temporary file record first (same pattern as uploadFileS3ForFeatures.ts)
                 let fileRecordObj = await ModelUserFileUpload.create({
-                    username: username,
-                    fileUploadPath: `ai-notes-xyz/${username}/temp/${new Date().valueOf()}.temp`,
+                    userId: userId,
+                    fileUploadPath: `ai-notes-xyz/${userId}/temp/${new Date().valueOf()}.temp`,
                     storageType: 's3',
                 }) as IUserFileUpload;
 
@@ -132,7 +132,7 @@ const migrateOldFileFormat = async () => {
 
                 // Construct new file path
                 const resultConstructFilePath = constructFilePath(
-                    username,
+                    (userId as any).toString(),
                     parentEntityId,
                     fileName,
                     fileExtension,
@@ -148,7 +148,7 @@ const migrateOldFileFormat = async () => {
                     fileContent: fileData.content,
                     contentType: fileData.contentType || 'image/jpeg',
                     metadata: {
-                        username,
+                        userId,
                         parentEntityId,
                         originalName: path.basename(oldFileUrl),
                     },

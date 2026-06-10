@@ -12,7 +12,7 @@ const revalidate = async () => {
         await mongoose.connect(envKeys.MONGODB_URI);
 
         const userApiKey = await ModelUserApiKey.findOne({
-            username: 'exampleuser',
+            userId: 'exampleuser',
         });
 
         if (!userApiKey) {
@@ -21,7 +21,7 @@ const revalidate = async () => {
 
         const task = await ModelLlmPendingTaskCron.create({
             taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
-            username: 'exampleuser',
+            userId: 'exampleuser',
         });
 
         await llmPendingTaskProcessFunc({
@@ -30,7 +30,7 @@ const revalidate = async () => {
 
         const task2 = await ModelLlmPendingTaskCron.create({
             taskType: llmPendingTaskTypes.page.settings.groqModelGet,
-            username: 'exampleuser',
+            userId: 'exampleuser',
         });
 
         await llmPendingTaskProcessFunc({

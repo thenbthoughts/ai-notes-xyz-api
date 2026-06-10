@@ -4,9 +4,11 @@ import type { tsSchemaAiModelListOllama } from '../../types/typesSchema/typesDyn
 
 // AI Model Schema
 const aiModelListOllamaSchema = new Schema<tsSchemaAiModelListOllama>({
-    username: {
-        type: String,
-        default: '',
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        required: true,
+        index: true,
     },
     modelLabel: {
         type: String,

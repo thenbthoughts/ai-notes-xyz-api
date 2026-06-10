@@ -11,12 +11,12 @@ router.get(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const resultTasks = await ModelTask.aggregate([
                 {
                     $match: {
-                        username: auth_username,
+                        userId: auth_userId,
                     }
                 },
                 {
@@ -27,7 +27,7 @@ router.get(
             const resultTasksRemaining = await ModelTask.aggregate([
                 {
                     $match: {
-                        username: auth_username,
+                        userId: auth_userId,
                         isCompleted: false,
                         isArchived: false,
                     }

@@ -1,9 +1,9 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface IMemoFile extends Document {
-  username: string;
+  userId: mongoose.Types.ObjectId;
   memoNoteId: mongoose.Types.ObjectId;
-  /** Uploaded storage path: `ai-notes-xyz/{username}/features/...` */
+  /** Uploaded storage path: `ai-notes-xyz/{userId}/features/...` */
   filePath: string;
   sortOrder: number;
   createdAtUtc: Date;

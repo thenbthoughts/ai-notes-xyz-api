@@ -165,12 +165,12 @@ const bufferToArrayBuffer = (buffer: Buffer): ArrayBuffer => {
     return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 };
 
-const getTextFromAudioByUrlAndUsername = async ({
+const getTextFromAudioByUrlAndUserId = async ({
     fileUrl,
-    username,
+    userId,
 }: {
     fileUrl: string;
-    username: string;
+    userId: string;
 }): Promise<{
     success: string;
     error: string;
@@ -180,7 +180,7 @@ const getTextFromAudioByUrlAndUsername = async ({
 }> => {
     try {
         const userApiKey = await ModelUserApiKey.findOne({
-            username,
+            userId,
         });
 
         if (!userApiKey) {
@@ -301,6 +301,6 @@ const getTextFromAudioByUrlAndUsername = async ({
 
 export {
     bufferToArrayBuffer,
-    getTextFromAudioByUrlAndUsername,
+    getTextFromAudioByUrlAndUserId,
 };
 export default fetchAudioUnified;

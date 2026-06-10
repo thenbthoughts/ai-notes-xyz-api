@@ -111,7 +111,7 @@ function reminderChannels(
 
 const sendTaskReminderNotifications = async ({
     resultTask,
-    username,
+    userId,
     userInfo,
     apiKeys,
 }: {
@@ -121,8 +121,8 @@ const sendTaskReminderNotifications = async ({
         dueDate?: Date | null;
         _id: unknown;
     };
-    username: string;
-    userInfo: { username: string; email?: string; emailVerified?: boolean };
+    userId: string;
+    userInfo: { userId: string; email?: string; emailVerified?: boolean };
     apiKeys: {
         clientFrontendUrl: string;
         smtpValid?: boolean;
@@ -134,7 +134,7 @@ const sendTaskReminderNotifications = async ({
     const { canEmail, canTelegram } = reminderChannels(userInfo, apiKeys);
 
     if (!canEmail && !canTelegram) {
-        console.warn(`No email or Telegram notification channel for user: ${username}`);
+        console.warn(`No email or Telegram notification channel for user: ${userId}`);
         return false;
     }
 
@@ -155,7 +155,7 @@ const sendTaskReminderNotifications = async ({
     if (canEmail && userInfo.email) {
         try {
             emailOk = await funcSendMail({
-                username,
+                userId,
                 smtpTo: userInfo.email,
                 subject: emailSubject,
                 text: '',
@@ -174,13 +174,13 @@ const sendTaskReminderNotifications = async ({
     if (canTelegram) {
         try {
             telegramOk = await funcSendTelegram({
-                username,
+                userId,
                 subject: telegramSubject,
                 text: telegramText,
             });
             if (telegramOk) {
                 console.log(
-                    `Reminder Telegram sent for user ${username} task ${resultTask._id}`
+                    `Reminder Telegram sent for user ${userId} task ${resultTask._id}`
                 );
             }
         } catch (tgErr) {
@@ -206,9 +206,7 @@ const processTaskAbsoluteTimes = async ({
         }
         const resultTask = raw as Record<string, unknown>;
 
-        const userInfo = await ModelUser.findOne({
-            username: resultTask.username as string,
-        });
+        const userInfo = await ModelUser.findById(resultTask.userId);
         if (!userInfo) {
             throw new Error('User not found');
         }
@@ -230,7 +228,7 @@ const processTaskAbsoluteTimes = async ({
         }
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: resultTask.username as string,
+            userId: String(resultTask.userId),
         });
         if (!apiKeys) {
             throw new Error('Api keys not found');
@@ -274,11 +272,11 @@ const processTaskAbsoluteTimes = async ({
             resultTask: resultTask as Parameters<
                 typeof sendTaskReminderNotifications
             >[0]['resultTask'],
-            username: resultTask.username as string,
-            userInfo: userInfo as {
-                username: string;
-                email?: string;
-                emailVerified?: boolean;
+            userId: String(resultTask.userId),
+            userInfo: {
+                userId: String((userInfo as any)._id),
+                email: (userInfo as any).email,
+                emailVerified: (userInfo as any).emailVerified,
             },
             apiKeys: apiKeys as {
                 clientFrontendUrl: string;
@@ -352,9 +350,7 @@ const processTaskCronReminders = async ({
         }
         const resultTask = raw;
 
-        const userInfo = await ModelUser.findOne({
-            username: resultTask.username as string,
-        });
+        const userInfo = await ModelUser.findById(resultTask.userId);
         if (!userInfo) {
             return false;
         }
@@ -380,7 +376,7 @@ const processTaskCronReminders = async ({
         }
 
         const apiKeys = await ModelUserApiKey.findOne({
-            username: resultTask.username as string,
+            userId: String(resultTask.userId),
         });
         if (!apiKeys) {
             return false;
@@ -411,11 +407,11 @@ const processTaskCronReminders = async ({
             resultTask: resultTask as Parameters<
                 typeof sendTaskReminderNotifications
             >[0]['resultTask'],
-            username: resultTask.username as string,
-            userInfo: userInfo as {
-                username: string;
-                email?: string;
-                emailVerified?: boolean;
+            userId: String(resultTask.userId),
+            userInfo: {
+                userId: String((userInfo as any)._id),
+                email: (userInfo as any).email,
+                emailVerified: (userInfo as any).emailVerified,
             },
             apiKeys: apiKeys as {
                 clientFrontendUrl: string;

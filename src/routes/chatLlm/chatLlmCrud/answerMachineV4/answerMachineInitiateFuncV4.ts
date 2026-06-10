@@ -36,7 +36,7 @@ const answerMachineInitiateFuncV4 = async ({
         const answerMachineRecord = await ModelAnswerMachineRequestV4.create({
             threadId: message.threadId,
             parentMessageId: messageId,
-            username: thread.username,
+            userId: thread.userId,
             schemaVersion: 4,
             status: 'pending',
             errorReason: '',
@@ -61,7 +61,7 @@ const answerMachineInitiateFuncV4 = async ({
         const winEnd = new Date(msgUtc.getTime() + 3 * 60 * 1000);
         const orphanUploads = await ModelAnswerMachineFileV4.find({
             threadId: message.threadId,
-            username: thread.username,
+            userId: thread.userId,
             fileRole: 'user_attachment',
             uploadStatus: 'saved_to_shell',
             $or: [{ answerMachineRequestV4Id: null }, { answerMachineRequestV4Id: { $exists: false } }],

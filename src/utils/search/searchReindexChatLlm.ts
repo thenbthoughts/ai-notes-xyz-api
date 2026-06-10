@@ -20,7 +20,7 @@ export const funcSearchReindexChatLlmById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface IChatLlmAggregate extends IChatLlm {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: mongoose.Types.ObjectId;
         thread: IChatLlmThread[];
         comments: ISchemaCommentCommon[];
         aiContextFaq: IFaq[];
@@ -181,7 +181,7 @@ export const funcSearchReindexChatLlmById = async ({
         // insert new record
         await ModelGlobalSearch.create({
             entityId: chatLlm._id,
-            username: chatLlm.username,
+            userId: chatLlm.userId,
             text: searchableText,
             collectionName: 'chatLlm',
             chatLlmThreadId: chatLlm.threadId,

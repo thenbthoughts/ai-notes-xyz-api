@@ -5,7 +5,7 @@ import { ModelChatLlmThreadContextReference } from '../../../../schema/schemaCha
 import { getMongodbObjectOrNull } from '../../../../utils/common/getMongodbObjectOrNull';
 
 const getContextFromTasks = ({
-    username,
+    userId,
     searchQuery,
 
     // filter -> task
@@ -13,7 +13,7 @@ const getContextFromTasks = ({
     filterTaskIsArchived,
     filterTaskWorkspaceIds,
 }: {
-    username: string;
+    userId: string;
     searchQuery: string;
 
     // filter -> task
@@ -28,7 +28,7 @@ const getContextFromTasks = ({
 
     // stateDocument -> match
     const matchConditions: any = {
-        username: username,
+        userId: userId,
     };
     if (filterTaskIsCompleted === 'completed') {
         matchConditions.isCompleted = true;
@@ -145,13 +145,13 @@ const getContextFromTasks = ({
 }
 
 const getContextFromNotes = ({
-    username,
+    userId,
     searchQuery,
 
     // filter -> note
     filterNotesWorkspaceIds,
 }: {
-    username: string;
+    userId: string;
     searchQuery: string;
 
     // filter -> note
@@ -164,7 +164,7 @@ const getContextFromNotes = ({
 
     // stateDocument -> match
     const matchConditions: any = {
-        username: username,
+        userId: userId,
     };
     let filterNotesWorkspaceIdsObj = [];
     for (let i = 0; i < filterNotesWorkspaceIds.length; i++) {
@@ -271,11 +271,11 @@ const getContextFromNotes = ({
 }
 
 const getContextFromLifeEvents = ({
-    username,
+    userId,
     filterEventTypeDiary,
     searchQuery,
 }: {
-    username: string;
+    userId: string;
     filterEventTypeDiary: boolean;
     searchQuery: string;
 }) => {
@@ -286,7 +286,7 @@ const getContextFromLifeEvents = ({
 
     // stateDocument -> match
     const matchConditions: any = {
-        username: username,
+        userId: userId,
     };
     if (filterEventTypeDiary === false) {
         matchConditions.title = {
@@ -394,10 +394,10 @@ const getContextFromLifeEvents = ({
 }
 
 const getContextFromMemo = ({
-    username,
+    userId,
     searchQuery,
 }: {
-    username: string;
+    userId: string;
     searchQuery: string;
 }) => {
     type PipelineStageCustom = PipelineStage.Match | PipelineStage.AddFields | PipelineStage.Lookup | PipelineStage.Project;
@@ -407,7 +407,7 @@ const getContextFromMemo = ({
 
     tempStage = {
         $match: {
-            username,
+            userId,
             trashed: false,
         },
     };
@@ -467,7 +467,7 @@ const getContextFromMemo = ({
 };
 
 const searchContext = async ({
-    username,
+    userId,
     threadId,
     searchQuery,
 
@@ -491,7 +491,7 @@ const searchContext = async ({
     page,
     limit,
 }: {
-    username: string;
+    userId: string;
     threadId: string;
     searchQuery: string;
 
@@ -525,7 +525,7 @@ const searchContext = async ({
                 $unionWith: {
                     coll: 'tasks',
                     pipeline: getContextFromTasks({
-                        username,
+                        userId,
                         searchQuery,
 
                         // filter -> task
@@ -545,7 +545,7 @@ const searchContext = async ({
                 $unionWith: {
                     coll: 'lifeEvents',
                     pipeline: getContextFromLifeEvents({
-                        username,
+                        userId,
 
                         // 
                         filterEventTypeDiary,
@@ -563,7 +563,7 @@ const searchContext = async ({
                 $unionWith: {
                     coll: 'notes',
                     pipeline: getContextFromNotes({
-                        username,
+                        userId,
                         searchQuery,
 
                         // filter -> note
@@ -581,7 +581,7 @@ const searchContext = async ({
                 $unionWith: {
                     coll: 'memoNotes',
                     pipeline: getContextFromMemo({
-                        username,
+                        userId,
                         searchQuery,
                     }),
                 },
@@ -595,7 +595,7 @@ const searchContext = async ({
             {
                 $match: {
                     threadId: getMongodbObjectOrNull(threadId),
-                    username: username,
+                    userId: userId,
                 },
             },
             {

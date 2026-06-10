@@ -5,7 +5,7 @@ import { IInfoVaultContact } from '../../types/typesSchema/typesSchemaInfoVault/
 // InfoVault Schema
 const infoVaultSchema = new Schema<IInfoVaultContact>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // basic information
     infoVaultType: {

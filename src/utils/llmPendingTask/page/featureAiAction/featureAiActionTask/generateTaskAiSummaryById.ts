@@ -23,13 +23,13 @@ const  generateTaskAiSummaryById = async ({
         const taskFirst = taskRecords[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(taskFirst.username);
+        const llmConfig = await getDefaultLlmModel(taskFirst.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         // Check if Task AI feature is enabled for this user
-        const user = await ModelUser.findOne({ username: taskFirst.username });
+        const user = await ModelUser.findById(taskFirst.userId);
         if (!user || !user.featureAiActionsTask) {
             return true; // Skip if Task AI is not enabled for this user
         }

@@ -71,10 +71,10 @@ const isValidTaskType = (taskType: string): boolean => {
 // revalidate task schedule execution time by id
 export const revalidateTaskScheduleExecutionTimeById = async ({
     _id,
-    auth_username,
+    auth_userId,
 }: {
     _id: string;
-    auth_username: string;
+    auth_userId: string;
 }) => {
     // get offset value
     let SECOND_TO_MILLISECOND = 1000;
@@ -85,7 +85,7 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
             {
                 $match: {
                     _id: getMongodbObjectOrNull(_id),
-                    username: auth_username,
+                    userId: auth_userId,
                 }
             },
             {
@@ -212,15 +212,15 @@ export const revalidateTaskScheduleExecutionTimeById = async ({
 
 // execute task schedule
 export const executeTaskSchedule = async ({
-    auth_username,
+    auth_userId,
 }: {
-    auth_username: string;
+    auth_userId: string;
 }) => {
     try {
         const itemTaskSchedules = await ModelTaskSchedule.aggregate([
             {
                 $match: {
-                    username: auth_username,
+                    userId: auth_userId,
                     isActive: true,
                 }
             },
@@ -310,7 +310,7 @@ export const executeTaskSchedule = async ({
                     let recordId = (itemTaskSchedule._id as mongoose.Types.ObjectId).toString();
                     await revalidateTaskScheduleExecutionTimeById({
                         _id: recordId,
-                        auth_username: auth_username,
+                        auth_userId: auth_userId,
                     });
 
                     // insert record in llmPendingTaskCron
@@ -326,7 +326,7 @@ export const executeTaskSchedule = async ({
                     }
                     if (tempTaskType !== '') {
                         await ModelLlmPendingTaskCron.create({
-                            username: auth_username,
+                            userId: auth_userId,
                             taskType: tempTaskType,
                             targetRecordId: itemTaskSchedule._id,
                         });
@@ -349,23 +349,23 @@ export const executeTaskScheduleForAllUsers = async () => {
         const itemTaskSchedules = await ModelTaskSchedule.aggregate([
             {
                 $group: {
-                    _id: '$username',
-                    username: { $first: '$username' },
+                    _id: '$userId',
+                    userId: { $first: '$userId' },
                 }
             },
             {
                 $project: {
                     _id: 0,
-                    username: 1,
+                    userId: 1,
                 }
             }
         ]) as {
-            username: string;
+            userId: string;
         }[];
 
         for (const itemTaskSchedule of itemTaskSchedules) {
             await executeTaskSchedule({
-                auth_username: itemTaskSchedule.username,
+                auth_userId: itemTaskSchedule.userId,
             });
         }
     } catch (error) {
@@ -380,7 +380,7 @@ router.post(
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const {
                 title,
@@ -450,7 +450,7 @@ router.post(
 
             const newTaskSchedule = await ModelTaskSchedule.create({
                 // auth
-                username: auth_username,
+                userId: auth_userId,
 
                 // required
                 isActive: isActive !== undefined ? Boolean(isActive) : true,
@@ -481,7 +481,7 @@ router.post(
             if (newTaskSchedule._id) {
                 await revalidateTaskScheduleExecutionTimeById({
                     _id: newTaskSchedule._id.toString(),
-                    auth_username: auth_username,
+                    auth_userId: auth_userId,
                 });
             }
 
@@ -499,7 +499,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             let tempStage = {} as PipelineStage;
             const stateDocument = [] as PipelineStage[];
@@ -507,10 +507,10 @@ router.post(
 
             // stateDocument -> match
             const tempStageMatch = {
-                username: auth_username,
+                userId: auth_userId,
             } as {
                 _id?: mongoose.Types.ObjectId;
-                username: string;
+                userId: string;
                 title?: RegExp;
                 description?: RegExp;
                 taskType?: string;
@@ -703,12 +703,12 @@ router.post(
     middlewareUserAuth,
     async (_req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const grouped = await ModelTaskSchedule.aggregate([
                 {
                     $match: {
-                        username: auth_username,
+                        userId: auth_userId,
                     },
                 },
                 {
@@ -753,7 +753,7 @@ router.post(
     middlewareActionDatetime,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const actionDatetimeObj = normalizeDateTimeIpAddress(
                 res.locals.actionDatetime
@@ -864,7 +864,7 @@ router.post(
             const updatedTaskSchedule = await ModelTaskSchedule.findOneAndUpdate(
                 {
                     _id: taskScheduleIdObj,
-                    username: auth_username,
+                    userId: auth_userId,
                 },
                 updateObj,
                 {
@@ -899,7 +899,7 @@ router.post(
                         taskStatusId: taskAddObj.taskStatusId || null,
 
                         // auth
-                        username: auth_username,
+                        userId: auth_userId,
 
                         // task fields
                         taskTitle: taskAddObj.taskTitle,
@@ -968,7 +968,7 @@ router.post(
                     await ModelTaskScheduleSendMyselfEmail.create({
                         // identification
                         _id: taskScheduleIdObj,
-                        username: auth_username,
+                        userId: auth_userId,
                         taskScheduleId: taskScheduleIdObj,
 
                         // email fields -> staticContent
@@ -1000,7 +1000,7 @@ router.post(
             // revalidate task schedule execution time
             await revalidateTaskScheduleExecutionTimeById({
                 _id: _id,
-                auth_username: auth_username,
+                auth_userId: auth_userId,
             });
 
             return res.json(updatedTaskSchedule);
@@ -1017,7 +1017,7 @@ router.post('/taskScheduleDelete', middlewareUserAuth, async (req: Request, res:
         const {
             _id
         } = req.body;
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const taskScheduleIdObj = getMongodbObjectOrNull(_id);
         if (!taskScheduleIdObj) {
@@ -1026,7 +1026,7 @@ router.post('/taskScheduleDelete', middlewareUserAuth, async (req: Request, res:
 
         const deletedTaskSchedule = await ModelTaskSchedule.findOneAndDelete({
             _id: taskScheduleIdObj,
-            username: auth_username,
+            userId: auth_userId,
         });
 
         if (!deletedTaskSchedule) {

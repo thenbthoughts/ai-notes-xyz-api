@@ -8,7 +8,7 @@ export const MAX_IMAGE_DATA_URL_LENGTH = 450_000;
 export const MAX_IMAGE_STORAGE_PATH_LENGTH = 2048;
 
 /**
- * Uploaded file paths look like `ai-notes-xyz/{username}/features/{parentEntityId}/{id}.ext`.
+ * Uploaded file paths look like `ai-notes-xyz/{userId}/features/{parentEntityId}/{id}.ext`.
  */
 export function isValidMemoImageStoragePath(storagePath: string): boolean {
   if (!storagePath.startsWith('ai-notes-xyz/')) return false;
@@ -83,12 +83,12 @@ export function parseMemoImageUrls(imageDataUrlsInput: unknown): { ok: true; val
   return { ok: true, values: out };
 }
 
-/** Parses `ai-notes-xyz/{username}/features/{parentEntityId}/{fileName}` for `deleteFileByPath`. */
+/** Parses `ai-notes-xyz/{userId}/features/{parentEntityId}/{fileName}` for `deleteFileByPath`. */
 export function parseFeatureUploadPathForDelete(
-  username: string,
+  userId: string,
   fileUploadPath: string,
 ): { parentEntityId: string; fileName: string } | null {
-  const prefix = `ai-notes-xyz/${username}/features/`;
+  const prefix = `ai-notes-xyz/${userId}/features/`;
   const trimmedUploadPath = fileUploadPath.trim();
   if (!trimmedUploadPath.startsWith(prefix)) return null;
   const rest = trimmedUploadPath.slice(prefix.length);
@@ -102,37 +102,37 @@ export function parseFeatureUploadPathForDelete(
 
 /** Delete `memoFiles` rows + storage for those paths; also extra legacy `ai-notes-xyz/` paths on the memo document. */
 export async function deleteAllMemoFilesAndLegacyStorage(
-  username: string,
+  userId: string,
   doc: Record<string, unknown>,
   memoId: Types.ObjectId,
 ): Promise<void> {
-  const rows = await ModelMemoFile.find({ username, memoNoteId: memoId }).lean();
+  const rows = await ModelMemoFile.find({ userId, memoNoteId: memoId }).lean();
   const pathsFromFiles = rows.map((r) => r.filePath);
-  await ModelMemoFile.deleteMany({ username, memoNoteId: memoId });
-  await deleteMemoStoredImagePathsByFullPaths(username, pathsFromFiles);
+  await ModelMemoFile.deleteMany({ userId, memoNoteId: memoId });
+  await deleteMemoStoredImagePathsByFullPaths(userId, pathsFromFiles);
 
   const legacy = normalizeMemoImageUrlsFromDoc(doc);
   const fromFilesSet = new Set(pathsFromFiles);
   const extraLegacyStorage = legacy.filter((p) => p.startsWith('ai-notes-xyz/') && !fromFilesSet.has(p));
-  await deleteMemoStoredImagePathsByFullPaths(username, extraLegacyStorage);
+  await deleteMemoStoredImagePathsByFullPaths(userId, extraLegacyStorage);
 }
 
-export async function deleteMemoStoredImagePathsByFullPaths(username: string, pathsToDelete: string[]): Promise<void> {
+export async function deleteMemoStoredImagePathsByFullPaths(userId: string, pathsToDelete: string[]): Promise<void> {
   const seen = new Set<string>();
   for (const p of pathsToDelete) {
     const pt = typeof p === 'string' ? p.trim() : '';
     if (!pt || seen.has(pt)) continue;
     seen.add(pt);
-    if (!pt.startsWith(`ai-notes-xyz/${username}/`)) {
+    if (!pt.startsWith(`ai-notes-xyz/${userId}/`)) {
       console.error(`deleteMemoStoredImagePathsByFullPaths: rejected path (not owned by user): ${pt}`);
       continue;
     }
-    const parsed = parseFeatureUploadPathForDelete(username, pt);
+    const parsed = parseFeatureUploadPathForDelete(userId, pt);
     if (!parsed) {
       console.error(`deleteMemoStoredImagePathsByFullPaths: skip path (not features layout): ${pt}`);
       continue;
     }
-    const r = await deleteFileByPath({ username, ...parsed });
+    const r = await deleteFileByPath({ userId, ...parsed });
     if (!r.success) {
       console.error(`deleteMemoStoredImagePathsByFullPaths: could not delete ${pt}: ${r.error}`);
     }

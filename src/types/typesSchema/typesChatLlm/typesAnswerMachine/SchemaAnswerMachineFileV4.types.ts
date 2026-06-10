@@ -9,7 +9,7 @@ export interface IAnswerMachineFileV4 extends Document {
 
     answerMachineRequestV4Id: mongoose.Types.ObjectId | null;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     fileName: string;
     originalSize: number;

@@ -21,19 +21,19 @@ const featureAiActionLifeEventsInit = async ({
         console.log('targetRecordId', targetRecordId);
 
         // Check if Life Events AI is enabled for this user
-        const lifeEventForUserCheck = await ModelLifeEvents.findById(targetRecordId).select('username').lean();
+        const lifeEventForUserCheck = await ModelLifeEvents.findById(targetRecordId).select('userId').lean();
         if (!lifeEventForUserCheck) {
             return true;
         }
 
         const user = await ModelUser.findOne({
-            username: lifeEventForUserCheck.username,
+            _id: lifeEventForUserCheck.userId,
             featureAiActionsEnabled: true,
             featureAiActionsLifeEvents: true
         });
 
         if (!user) {
-            console.log('Life Events AI not enabled for user:', lifeEventForUserCheck.username);
+            console.log('Life Events AI not enabled for user:', lifeEventForUserCheck.userId);
             return true; // Skip AI processing if Life Events AI is not enabled
         }
 
@@ -74,7 +74,7 @@ const featureAiActionLifeEventsInit = async ({
         console.log('resultKeywords', resultKeywords);
 
         // reindex the document in global search after all AI actions are complete
-        const lifeEventRecord = await ModelLifeEvents.findById(targetRecordId).select('username').lean();
+        const lifeEventRecord = await ModelLifeEvents.findById(targetRecordId).select('userId').lean();
         if (lifeEventRecord) {
             await reindexDocument({
                 reindexDocumentArr: [{

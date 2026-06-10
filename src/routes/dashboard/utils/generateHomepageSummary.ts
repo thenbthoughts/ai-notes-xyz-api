@@ -4,13 +4,13 @@ import { ModelUser } from '../../../schema/schemaUser/SchemaUser.schema';
 import { fetchLlmUnified, Message } from '../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getDefaultLlmModel } from '../../../utils/llmPendingTask/utils/getDefaultLlmModel';
 
-const getUserInfoForSummary = async (username: string): Promise<string> => {
+const getUserInfoForSummary = async (userId: string): Promise<string> => {
     try {
-        if (!username) return '';
+        if (!userId) return '';
 
         let promptUserInfo = '';
 
-        const userInfo = await ModelUser.findOne({ username }).exec();
+        const userInfo = await ModelUser.findById(userId).exec();
         if (userInfo) {
             if (userInfo.name !== '') {
                 promptUserInfo += `My name is ${userInfo.name}. `;
@@ -32,15 +32,15 @@ const getUserInfoForSummary = async (username: string): Promise<string> => {
     }
 }
 
-const getUserMemoriesStr = async (username: string): Promise<string> => {
+const getUserMemoriesStr = async (userId: string): Promise<string> => {
     try {
         // Get user to determine memory limit
-        const user = await ModelUser.findOne({ username }).exec();
+        const user = await ModelUser.findById(userId).exec();
         const userMemoriesLimit = user?.userMemoriesLimit || 25;
 
         // Fetch memories up to the limit, sorted by most recently updated
         const memories = await ModelUserMemory.find({
-            username: username,
+            userId: userId,
         })
             .sort({ updatedAtUtc: -1 })
             .limit(userMemoriesLimit)
@@ -64,7 +64,7 @@ const getUserMemoriesStr = async (username: string): Promise<string> => {
     }
 }
 
-const getTasksSummaryStr = async (username: string): Promise<string> => {
+const getTasksSummaryStr = async (userId: string): Promise<string> => {
     const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
     try {
         let tempStage = {} as any;
@@ -73,7 +73,7 @@ const getTasksSummaryStr = async (username: string): Promise<string> => {
         // auth
         tempStage = {
             $match: {
-                username: username,
+                userId: userId,
             }
         }
         stateDocument.push(tempStage);
@@ -180,12 +180,12 @@ const getTasksSummaryStr = async (username: string): Promise<string> => {
 }
 
 
-const generateHomepageSummary = async (username: string): Promise<string> => {
+const generateHomepageSummary = async (userId: string): Promise<string> => {
     try {
         // Get basic user info
-        const userInfoStr = await getUserInfoForSummary(username);
-        const tasksStr = await getTasksSummaryStr(username);
-        const memoriesStr = await getUserMemoriesStr(username);
+        const userInfoStr = await getUserInfoForSummary(userId);
+        const tasksStr = await getTasksSummaryStr(userId);
+        const memoriesStr = await getUserMemoriesStr(userId);
 
         // Combine the data
         let userDataString = '';
@@ -234,7 +234,7 @@ ${userDataString}
 Create a concise summary that captures their current activities, priorities, and progress. Follow this with an original inspirational quote that directly relates to their situation and motivates them forward.`;
 
         // Get LLM configuration using centralized function
-        const llmConfig = await getDefaultLlmModel(username);
+        const llmConfig = await getDefaultLlmModel(userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return '';
         }

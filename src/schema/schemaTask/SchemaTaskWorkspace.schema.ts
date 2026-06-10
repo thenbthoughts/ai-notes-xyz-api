@@ -5,7 +5,7 @@ import { ITaskWorkspace } from '../../types/typesSchema/typesSchemaTask/SchemaTa
 // Task Workspace Schema
 const taskWorkspaceSchema = new Schema<ITaskWorkspace>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
 
     // fields
     title: { type: String, default: '' },

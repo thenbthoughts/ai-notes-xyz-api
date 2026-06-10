@@ -5,7 +5,7 @@ import { INotes } from '../../types/typesSchema/typesSchemaNotes/SchemaNotes.typ
 // Notes Schema
 const notesSchema = new Schema<INotes>({
     // identification
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     notesWorkspaceId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
 
     // fields

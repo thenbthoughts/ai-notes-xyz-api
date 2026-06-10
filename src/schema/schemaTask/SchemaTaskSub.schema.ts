@@ -23,11 +23,11 @@ const taskSubListSchema = new Schema<tsTaskSubList>({
     },
 
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
         index: true,
-        default: '',
     },
 
     // auto

@@ -106,7 +106,7 @@ const llmPendingTaskProcessFunc = async ({
             
             case llmPendingTaskTypes.page.settings.groqModelGet:
                 isTaskDone = await groqModelGet({
-                    username: resultTask.username,
+                    userId: String(resultTask.userId),
                 });
                 break;
 

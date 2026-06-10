@@ -32,7 +32,7 @@ export interface IShellRunArtifactV1 {
     kind: 'shell_run';
     chatShellRunGroupId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
     completedAtUtc: Date;
     todos: IShellRunArtifactV1Todo[];
     importedFiles: IShellRunArtifactV1ImportedFile[];
@@ -44,7 +44,7 @@ export interface IShellRunArtifactV1Plain {
     kind: 'shell_run';
     chatShellRunGroupId: string;
     threadId: string;
-    username: string;
+    userId: string;
     completedAtUtc: string;
     todos: IShellRunArtifactV1Todo[];
     importedFiles: IShellRunArtifactV1ImportedFile[];

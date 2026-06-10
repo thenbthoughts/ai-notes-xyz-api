@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import IOpenaiCompatibleModel from '../../types/typesSchema/typesUser/SchemaOpenaiCompatibleModel.types';
 
 const openaiCompatibleModelSchema = new Schema<IOpenaiCompatibleModel>({
-    username: { type: String, required: true, default: '', index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     providerName: { type: String, default: '' },
     baseUrl: { type: String, required: true, default: '' },
     apiKey: { type: String, required: true, default: '' },

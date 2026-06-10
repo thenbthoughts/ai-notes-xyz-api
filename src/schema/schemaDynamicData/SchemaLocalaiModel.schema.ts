@@ -4,9 +4,11 @@ import type { tsSchemaAiModelListLocalai } from '../../types/typesSchema/typesDy
 
 // AI Model Schema
 const aiModelListLocalaiSchema = new Schema<tsSchemaAiModelListLocalai>({
-    username: {
-        type: String,
-        default: '',
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        required: true,
+        index: true,
     },
     modelLabel: {
         type: String,

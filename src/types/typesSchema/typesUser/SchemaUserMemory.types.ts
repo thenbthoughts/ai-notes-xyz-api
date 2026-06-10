@@ -6,7 +6,7 @@ export interface IUserMemory extends Document {
     _id: mongoose.Types.ObjectId;
 
     // fields
-    username: string;
+    userId: mongoose.Types.ObjectId;
     content: string;
     isPermanent: boolean;
 

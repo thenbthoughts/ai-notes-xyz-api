@@ -13,9 +13,9 @@ const router = Router();
 // Get user's S3 buckets
 router.get('/buckets', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         
-        const buckets = await ModelUserS3Bucket.find({ username }).sort({ createdAtUtc: -1 });
+        const buckets = await ModelUserS3Bucket.find({ userId }).sort({ createdAtUtc: -1 });
         
         return res.status(200).json({
             success: true,
@@ -39,7 +39,7 @@ router.get('/buckets', middlewareUserAuth, async (req: Request, res: Response) =
 // Add new S3 bucket
 router.post('/buckets', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { bucketName, endpoint, region, accessKeyId, secretAccessKey, prefix } = req.body;
         
         if (!bucketName || !endpoint || !region || !accessKeyId || !secretAccessKey) {
@@ -47,7 +47,7 @@ router.post('/buckets', middlewareUserAuth, async (req: Request, res: Response) 
         }
         
         const bucket = await ModelUserS3Bucket.create({
-            username,
+            userId,
             bucketName,
             endpoint,
             region,
@@ -79,7 +79,7 @@ router.post('/buckets', middlewareUserAuth, async (req: Request, res: Response) 
 // Update S3 bucket
 router.put('/buckets/:id', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { id } = req.params;
         const { bucketName, endpoint, region, accessKeyId, secretAccessKey, prefix, isActive } = req.body;
         
@@ -87,7 +87,7 @@ router.put('/buckets/:id', middlewareUserAuth, async (req: Request, res: Respons
             return res.status(400).json({ message: 'Invalid bucket ID' });
         }
         
-        const bucket = await ModelUserS3Bucket.findOne({ _id: id, username });
+        const bucket = await ModelUserS3Bucket.findOne({ _id: id, userId });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
@@ -104,7 +104,7 @@ router.put('/buckets/:id', middlewareUserAuth, async (req: Request, res: Respons
         if (prefix !== undefined) updateData.prefix = prefix;
         if (typeof isActive === 'boolean') updateData.isActive = isActive;
         
-        await ModelUserS3Bucket.updateOne({ _id: id, username }, updateData);
+        await ModelUserS3Bucket.updateOne({ _id: id, userId }, updateData);
         
         const updatedBucket = await ModelUserS3Bucket.findById(id);
         
@@ -128,23 +128,23 @@ router.put('/buckets/:id', middlewareUserAuth, async (req: Request, res: Respons
 // Delete S3 bucket
 router.delete('/buckets/:id', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { id } = req.params;
         
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid bucket ID' });
         }
         
-        const bucket = await ModelUserS3Bucket.findOne({ _id: id, username });
+        const bucket = await ModelUserS3Bucket.findOne({ _id: id, userId });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
         
         // Delete all indexed files for this bucket
-        await ModelS3FileIndex.deleteMany({ username, bucketName: bucket.bucketName });
+        await ModelS3FileIndex.deleteMany({ userId, bucketName: bucket.bucketName });
         
         // Delete the bucket
-        await ModelUserS3Bucket.deleteOne({ _id: id, username });
+        await ModelUserS3Bucket.deleteOne({ _id: id, userId });
         
         return res.status(200).json({ success: true });
     } catch (error) {
@@ -156,18 +156,18 @@ router.delete('/buckets/:id', middlewareUserAuth, async (req: Request, res: Resp
 // Reindex files for a bucket
 router.post('/index/:bucketName', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { bucketName } = req.params;
         const { prefix } = req.body;
         
-        const bucket = await ModelUserS3Bucket.findOne({ username, bucketName });
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
         
         const result = await indexFilesFromS3({
             bucket,
-            username,
+            userId,
             prefix: prefix || '',
         });
         
@@ -185,7 +185,7 @@ router.post('/index/:bucketName', middlewareUserAuth, async (req: Request, res: 
 // List files/folders
 router.post('/files', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { bucketName, parentPath = '', page = 1, perPage = 10000 } = req.body;
         
         if (!bucketName) {
@@ -193,7 +193,7 @@ router.post('/files', middlewareUserAuth, async (req: Request, res: Response) =>
         }
         
         // Get bucket to know its prefix
-        const bucket = await ModelUserS3Bucket.findOne({ username, bucketName });
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
@@ -201,7 +201,7 @@ router.post('/files', middlewareUserAuth, async (req: Request, res: Response) =>
         // Use parentPath for querying - it's simpler and more reliable
         // parentPath is already calculated correctly during indexing
         const query: any = {
-            username,
+            userId,
             bucketName,
             parentPath: parentPath || '',
         };
@@ -252,7 +252,7 @@ router.post('/files', middlewareUserAuth, async (req: Request, res: Response) =>
 // Get file content
 router.get('/file', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const bucketName = req.query.bucketName as string;
         const fileKey = req.query.fileKey as string;
         
@@ -261,12 +261,12 @@ router.get('/file', middlewareUserAuth, async (req: Request, res: Response) => {
         }
         
         // Verify file belongs to user
-        const fileIndex = await ModelS3FileIndex.findOne({ username, bucketName, fileKey });
+        const fileIndex = await ModelS3FileIndex.findOne({ userId, bucketName, fileKey });
         if (!fileIndex) {
             return res.status(404).json({ message: 'File not found' });
         }
         
-        const bucket = await ModelUserS3Bucket.findOne({ username, bucketName });
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
@@ -298,7 +298,7 @@ router.get('/file', middlewareUserAuth, async (req: Request, res: Response) => {
 // Update file content (for text/md editing)
 router.put('/file', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const { bucketName, fileKey, content } = req.body;
         
         if (!bucketName || !fileKey || content === undefined) {
@@ -306,7 +306,7 @@ router.put('/file', middlewareUserAuth, async (req: Request, res: Response) => {
         }
         
         // Verify file belongs to user
-        const fileIndex = await ModelS3FileIndex.findOne({ username, bucketName, fileKey });
+        const fileIndex = await ModelS3FileIndex.findOne({ userId, bucketName, fileKey });
         if (!fileIndex) {
             return res.status(404).json({ message: 'File not found' });
         }
@@ -315,7 +315,7 @@ router.put('/file', middlewareUserAuth, async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Cannot edit folder' });
         }
         
-        const bucket = await ModelUserS3Bucket.findOne({ username, bucketName });
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
@@ -350,7 +350,7 @@ router.put('/file', middlewareUserAuth, async (req: Request, res: Response) => {
 // Delete file
 router.delete('/file', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
         const bucketName = req.query.bucketName as string;
         const fileKey = req.query.fileKey as string;
         
@@ -359,12 +359,12 @@ router.delete('/file', middlewareUserAuth, async (req: Request, res: Response) =
         }
         
         // Verify file belongs to user
-        const fileIndex = await ModelS3FileIndex.findOne({ username, bucketName, fileKey });
+        const fileIndex = await ModelS3FileIndex.findOne({ userId, bucketName, fileKey });
         if (!fileIndex) {
             return res.status(404).json({ message: 'File not found' });
         }
         
-        const bucket = await ModelUserS3Bucket.findOne({ username, bucketName });
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }

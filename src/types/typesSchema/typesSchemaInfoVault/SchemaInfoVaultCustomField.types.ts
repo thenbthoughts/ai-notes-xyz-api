@@ -4,7 +4,7 @@ import mongoose, { Document } from 'mongoose';
 export interface IInfoVaultCustomField extends Document {
     // identification
     infoVaultId: mongoose.Schema.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // fields
     key: string;

@@ -1,8 +1,8 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export interface tsTaskListScheduleUserSummaryDailyExecute extends Document {
     // auth
-    username: string;
+    userId: Types.ObjectId;
 
     // identification
     userDate: string;

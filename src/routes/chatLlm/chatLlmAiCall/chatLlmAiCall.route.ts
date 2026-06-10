@@ -78,7 +78,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const transcript = typeof req.body?.transcript === 'string' ? req.body.transcript.trim() : '';
             if (!transcript) {
@@ -92,7 +92,7 @@ router.post(
 
             const thread = await ModelChatLlmThread.findOne({
                 _id: threadId,
-                username: auth_username,
+                userId: auth_userId,
             });
             if (!thread) {
                 return res.status(400).json({ message: 'Thread not found' });

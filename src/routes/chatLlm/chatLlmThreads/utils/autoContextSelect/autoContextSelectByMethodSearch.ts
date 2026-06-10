@@ -28,14 +28,14 @@ interface RelevantContextResponse {
 }
 
 const getLlmConfigForThread = async ({
-    username,
+    userId,
 }: {
-    username: string;
+    userId: string;
 }): Promise<LlmConfig | null> => {
     try {
         // Get user API keys
         const userApiKeyDoc = await ModelUserApiKey.findOne({
-            username: username,
+            userId: userId,
         });
         if (!userApiKeyDoc) {
             return null;
@@ -71,7 +71,7 @@ const getLlmConfigForThread = async ({
         } else {
             // Try openai-compatible as fallback - find first available config for user
             const config = await ModelOpenaiCompatibleModel.findOne({
-                username: username,
+                userId: userId,
             }).sort({ createdAtUtc: -1 }); // Get most recent config
 
             if (config && config.apiKey && config.baseUrl) {
@@ -125,17 +125,17 @@ const getLlmConfigForThread = async ({
 
 const getConversationContextByThreadId = async ({
     threadId,
-    username,
+    userId,
 }: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<string> => {
     try {
         const lastMessages = await ModelChatLlm.aggregate([
             {
                 $match: {
                     threadId,
-                    username,
+                    userId,
                     type: 'text',
                 }
             },
@@ -228,7 +228,7 @@ const createKeywordsFromThread = async ({
 
         // Get LLM configuration - automatically select from available providers
         const llmConfig = await getLlmConfigForThread({
-            username: thread.username,
+            userId: thread.userId.toString(),
         });
 
         if (!llmConfig) {
@@ -286,11 +286,11 @@ const createKeywordsFromThread = async ({
 
 const scoreContextReferencesWithLlm = async ({
     threadId,
-    username,
+    userId,
     searchResults,
 }: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     searchResults: Array<{
         entityId: mongoose.Types.ObjectId;
         collectionName: string;
@@ -300,14 +300,14 @@ const scoreContextReferencesWithLlm = async ({
     try {
         const conversationContext = await getConversationContextByThreadId({
             threadId,
-            username,
+            userId,
         });
 
         if (!conversationContext) {
             return [];
         }
 
-        const llmConfig = await getLlmConfigForThread({ username });
+        const llmConfig = await getLlmConfigForThread({ userId });
         if (!llmConfig) {
             return [];
         }
@@ -394,12 +394,12 @@ const scoreContextReferencesWithLlm = async ({
 const searchAndAddContextReferences = async ({
     keywords,
     threadId,
-    username,
+    userId,
     limit = 20,
 }: {
     keywords: string[];
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     limit?: number;
 }): Promise<number> => {
     try {
@@ -435,7 +435,7 @@ const searchAndAddContextReferences = async ({
         const searchResults = await ModelGlobalSearch.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault', 'memoNotes'] }
                 }
             },
@@ -451,7 +451,7 @@ const searchAndAddContextReferences = async ({
 
         const scoredItems = await scoreContextReferencesWithLlm({
             threadId,
-            username,
+            userId,
             searchResults,
         });
 
@@ -492,7 +492,7 @@ const searchAndAddContextReferences = async ({
             // Check if reference already exists
             const existingReference = await ModelChatLlmThreadContextReference.findOne({
                 threadId,
-                username,
+                userId,
                 referenceFrom,
                 referenceId: result.entityId,
             });
@@ -501,7 +501,7 @@ const searchAndAddContextReferences = async ({
                 // Insert new reference
                 await ModelChatLlmThreadContextReference.create({
                     threadId,
-                    username,
+                    userId,
                     referenceFrom,
                     referenceId: result.entityId,
                     isAddedByAi: true,
@@ -552,7 +552,7 @@ const autoContextSelectByMethodSearch = async ({
         const insertedCount = await searchAndAddContextReferences({
             keywords,
             threadId: thread._id as mongoose.Types.ObjectId,
-            username: thread.username,
+            userId: thread.userId.toString(),
         });
 
         return {

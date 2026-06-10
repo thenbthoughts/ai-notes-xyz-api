@@ -6,12 +6,12 @@ const updateLlmModalModalityById = async ({
     modalIdString,
     provider,
 
-    username,
+    userId,
 }: {
     modalIdString: string;
     provider: string;
 
-    username: string;
+    userId: string;
 }) => {
     try {
         // validate provider
@@ -23,7 +23,7 @@ const updateLlmModalModalityById = async ({
 
         // get user api key
         const userApiKey = await ModelUserApiKey.findOne({
-            username: username,
+            userId: userId,
         });
         if (!userApiKey) {
             return false;

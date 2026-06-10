@@ -51,7 +51,7 @@ export const trackAnswerMachineTokens = async (
         totalTokens: number;
         costInUsd: number;
     },
-    username: string,
+    userId: string | mongoose.Types.ObjectId,
     queryType?: 'question_generation' | 'sub_question_answer' | 'evaluation' | 'final_answer'
 ): Promise<void> => {
     try {
@@ -59,7 +59,7 @@ export const trackAnswerMachineTokens = async (
         if (queryType) {
             await ModelChatLlmAnswerMachineTokenRecord.create({
                 threadId,
-                username,
+                userId,
                 queryType,
                 promptTokens: usageStats.promptTokens,
                 completionTokens: usageStats.completionTokens,

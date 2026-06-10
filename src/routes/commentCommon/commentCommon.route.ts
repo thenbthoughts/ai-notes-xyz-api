@@ -34,7 +34,7 @@ router.post(
                 fileTitle,
                 fileDescription,
             } = req.body;
-            const username = res.locals.auth_username;
+            const userId = res.locals.auth_userId;
 
             // validate comment type
             if (
@@ -57,7 +57,7 @@ router.post(
                 commentText,
                 entityId: entityIdObj,
                 commentType,
-                username,
+                userId,
 
                 // file fields
                 fileType,
@@ -92,11 +92,11 @@ router.post('/commentCommonGet', middlewareUserAuth, async (req: Request, res: R
         const {
             entityId,
         } = req.body;
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
 
         const resultComments = await ModelCommentCommon.find({
             entityId: mongoose.Types.ObjectId.createFromHexString(entityId),
-            username,
+            userId,
         }).sort({ createdAtUtc: -1 });
 
         return res.json({
@@ -114,11 +114,11 @@ router.post('/commentCommonGet', middlewareUserAuth, async (req: Request, res: R
 router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const { id } = req.body;
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
 
         const deletedComment = await ModelCommentCommon.findOneAndDelete({
             _id: mongoose.Types.ObjectId.createFromHexString(id),
-            username,
+            userId,
         });
 
         // delete file from s3
@@ -127,7 +127,7 @@ router.post('/commentCommonDelete', middlewareUserAuth, async (req: Request, res
             const fileName = fileUrlParts[fileUrlParts.length - 1];
             if (fileName) {
                 await deleteFileByPath({
-                    username,
+                    userId,
                     parentEntityId: deletedComment?.entityId?.toString() || '',
                     fileName: fileName,
                 });

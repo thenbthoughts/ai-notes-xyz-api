@@ -8,7 +8,7 @@ const router = Router();
 // List AI Context FAQs with aggregation
 router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         let tempStage = {} as PipelineStage;
         const pipelineDocument = [] as PipelineStage[];
@@ -28,9 +28,9 @@ router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => 
 
         // stage -> match -> filters
         let matchStage = {
-            username: auth_username
+            userId: auth_userId
         } as {
-            username: string;
+            userId: string;
             metadataSourceType?: string;
             metadataSourceId?: mongoose.Types.ObjectId;
             question?: { $regex: string; $options: string };
@@ -94,7 +94,7 @@ router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => 
         tempStage = {
             $project: {
                 _id: 1,
-                username: 1,
+                userId: 1,
                 question: 1,
                 answer: 1,
                 aiCategory: 1,

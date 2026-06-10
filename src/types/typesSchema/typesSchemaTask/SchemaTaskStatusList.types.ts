@@ -9,7 +9,7 @@ export interface tsTaskStatusList extends Document {
     listPosition: number;
 
     // identification
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // task workspace id
     taskWorkspaceId: mongoose.Types.ObjectId | null;

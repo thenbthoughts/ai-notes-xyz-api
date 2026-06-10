@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // Chat Interface
 export interface tsSchemaAiModelListLocalai extends Document {
     // ai
-    username: string;
+    userId: Types.ObjectId;
     modelLabel: string;
     modelName: string;
     modelType: '' | 'llm' | 'stt' | 'tts' | 'embedding' | 'image-generation';

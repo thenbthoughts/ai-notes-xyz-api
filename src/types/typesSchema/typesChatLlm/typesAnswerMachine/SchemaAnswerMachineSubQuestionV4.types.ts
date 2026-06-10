@@ -15,7 +15,7 @@ export interface IAnswerMachineSubQuestionV4 extends Document {
     answerMachineRequestV4Id: mongoose.Types.ObjectId;
     answerMachineIteration: number;
 
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     question: string;
     answerReasoningContent: string;

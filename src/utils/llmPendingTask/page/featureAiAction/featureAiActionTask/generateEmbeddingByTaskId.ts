@@ -35,9 +35,9 @@ const findTaskRecord = async (targetRecordId: string | null): Promise<tsTaskList
 /**
  * Validate user API keys for Ollama and Qdrant
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | mongoose.Types.ObjectId) => {
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
@@ -49,10 +49,10 @@ const validateApiKeys = async (username: string) => {
  * Build content string from task data
  */
 const buildContentFromTask = async ({
-    username,
+    userId,
     taskId,
 }: {
-    username: string,
+    userId: string | mongoose.Types.ObjectId,
     taskId: mongoose.Types.ObjectId,
 }) => {
     let taskStr = '';
@@ -68,7 +68,7 @@ const buildContentFromTask = async ({
         {
             $match: {
                 _id: taskId,
-                username: username,
+                userId: userId,
             }
         },
         {
@@ -286,24 +286,24 @@ const generateEmbeddingByTaskId = async ({
 
         // Step 2: Check if AI features are enabled for this user
         const user = await ModelUser.findOne({
-            username: taskRecord.username,
+            _id: taskRecord.userId,
             featureAiActionsEnabled: true,
             featureAiActionsTask: true
         });
         if (!user) {
-            console.log('Task AI or AI features not enabled for user:', taskRecord.username);
+            console.log('Task AI or AI features not enabled for user:', taskRecord.userId);
             return true; // Skip embedding generation if AI features or Task AI is not enabled
         }
 
         // Step 4: Validate API keys
-        const apiKeys = await validateApiKeys(taskRecord.username);
+        const apiKeys = await validateApiKeys(taskRecord.userId);
         if (!apiKeys) {
             return true;
         }
 
         // Step 5: Build content from task
         const content = await buildContentFromTask({
-            username: taskRecord.username,
+            userId: taskRecord.userId,
             taskId: taskRecord._id as mongoose.Types.ObjectId,
         });
 
@@ -324,7 +324,7 @@ const generateEmbeddingByTaskId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${taskRecord.username}`;
+        const collectionName = `index-user-${taskRecord.userId}`;
 
         // Step 10: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

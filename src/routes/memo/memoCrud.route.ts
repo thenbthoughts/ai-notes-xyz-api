@@ -38,7 +38,7 @@ function parseNoteColor(noteColorInput: unknown): { ok: true; value: string } | 
 
 type MemoDocPlain = {
   _id: Types.ObjectId;
-  username: string;
+  userId: string;
   title?: string;
   body?: string;
   labelIds?: Types.ObjectId[];
@@ -69,16 +69,16 @@ function effectiveLabelObjectIds(doc: MemoDocPlain | Record<string, unknown>): T
   return out;
 }
 
-async function assertLabelsOwned(username: string, ids: Types.ObjectId[]) {
+async function assertLabelsOwned(userId: string, ids: Types.ObjectId[]) {
   if (ids.length === 0) {
     return true;
   }
-  const count = await ModelMemoLabel.countDocuments({ username, _id: { $in: ids } });
+  const count = await ModelMemoLabel.countDocuments({ userId, _id: { $in: ids } });
   return count === ids.length;
 }
 
 async function parseAndValidateLabelIds(
-  username: string,
+  userId: string,
   labelIdsInput: unknown,
 ): Promise<{ ok: true; ids: Types.ObjectId[] } | { ok: false; message: string }> {
   if (labelIdsInput === undefined) {
@@ -103,7 +103,7 @@ async function parseAndValidateLabelIds(
       return { ok: false, message: `At most ${MAX_LABELS_PER_NOTE} labels per memo` };
     }
   }
-  if (!(await assertLabelsOwned(username, ids))) {
+  if (!(await assertLabelsOwned(userId, ids))) {
     return { ok: false, message: 'One or more labels were not found' };
   }
   return { ok: true, ids };
@@ -115,11 +115,11 @@ async function enrichNoteDoc(
   if (!doc || !doc._id) return null;
   const rawDoc = doc as Record<string, unknown>;
   const slim = rawDoc as MemoDocPlain;
-  const username = String(doc.username ?? '');
+  const userId = String(doc.userId ?? '');
   const ids = effectiveLabelObjectIds(doc);
-  const lbls = ids.length ? await ModelMemoLabel.find({ username, _id: { $in: ids } }).lean() : [];
+  const lbls = ids.length ? await ModelMemoLabel.find({ userId, _id: { $in: ids } }).lean() : [];
   const labelNames = ids.map((id) => lbls.find((l) => String(l._id) === String(id))?.name ?? '');
-  const files = await ModelMemoFile.find({ username, memoNoteId: doc._id }).sort({ sortOrder: 1, createdAtUtc: 1 }).lean();
+  const files = await ModelMemoFile.find({ userId, memoNoteId: doc._id }).sort({ sortOrder: 1, createdAtUtc: 1 }).lean();
   const pathsFromFiles = files.map((f) => f.filePath);
   return {
     ...slim,
@@ -140,12 +140,12 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
       {
         $lookup: {
           from: 'memoLabels',
-          let: { ids: '$effectiveMemoLabelIds', user: '$username' },
+          let: { ids: '$effectiveMemoLabelIds', user: '$userId' },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $and: [{ $in: ['$_id', '$$ids'] }, { $eq: ['$username', '$$user'] }],
+                  $and: [{ $in: ['$_id', '$$ids'] }, { $eq: ['$userId', '$$user'] }],
                 },
               },
             },
@@ -198,14 +198,14 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
       },
     ];
 
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const limit =
       typeof req.body?.limit === 'number' && req.body.limit >= 1 && req.body.limit <= 2000
         ? req.body.limit
         : 1000;
 
     const docs = await ModelMemoNote.aggregate([
-      { $match: { username } },
+      { $match: { userId } },
       { $sort: { updatedAtUtc: -1 } },
       { $limit: limit },
       ...memoLabelResolutionStages,
@@ -214,7 +214,7 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
     const noteIds = docs.map((d) => d._id as Types.ObjectId);
     const fileRows =
       noteIds.length > 0
-        ? await ModelMemoFile.find({ username, memoNoteId: { $in: noteIds } })
+        ? await ModelMemoFile.find({ userId, memoNoteId: { $in: noteIds } })
             .sort({ sortOrder: 1, createdAtUtc: 1 })
             .lean()
         : [];
@@ -246,12 +246,12 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
 
 router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
     const pinned = req.body?.pinned === true;
 
-    const parsed = await parseAndValidateLabelIds(username, req.body?.labelIds);
+    const parsed = await parseAndValidateLabelIds(userId, req.body?.labelIds);
     if (!parsed.ok) {
       return res.status(400).json({ message: parsed.message });
     }
@@ -268,7 +268,7 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
 
     const now = new Date();
     const created = await ModelMemoNote.create({
-      username,
+      userId,
       title: title || '',
       body,
       labelIds,
@@ -303,7 +303,7 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
 
 router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const _id = getMongodbObjectOrNull(req.body?._id);
     if (!_id) {
       return res.status(400).json({ message: 'Memo ID is invalid' });
@@ -340,14 +340,14 @@ router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response)
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'labelIds')) {
-      const parsed = await parseAndValidateLabelIds(username, req.body.labelIds);
+      const parsed = await parseAndValidateLabelIds(userId, req.body.labelIds);
       if (!parsed.ok) {
         return res.status(400).json({ message: parsed.message });
       }
       updateObj.labelIds = parsed.ids;
     }
     const updatePayload: { $set: Record<string, unknown> } = { $set: updateObj };
-    const result = await ModelMemoNote.updateOne({ _id, username }, updatePayload);
+    const result = await ModelMemoNote.updateOne({ _id, userId }, updatePayload);
 
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
@@ -366,19 +366,19 @@ router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response)
 
 router.post('/memoDelete', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
+    const userId = res.locals.auth_userId as string;
     const _id = getMongodbObjectOrNull(req.body?._id);
     if (!_id) {
       return res.status(400).json({ message: 'Memo ID is invalid' });
     }
 
-    const existing = await ModelMemoNote.findOne({ _id, username }).lean();
+    const existing = await ModelMemoNote.findOne({ _id, userId }).lean();
     if (!existing) {
       return res.status(404).json({ message: 'Memo not found or unauthorized' });
     }
 
-    await deleteAllMemoFilesAndLegacyStorage(username, existing as Record<string, unknown>, _id);
-    await ModelMemoNote.deleteOne({ _id, username });
+    await deleteAllMemoFilesAndLegacyStorage(userId, existing as Record<string, unknown>, _id);
+    await ModelMemoNote.deleteOne({ _id, userId });
     await ModelGlobalSearch.deleteMany({ entityId: _id });
 
     return res.json({ message: 'Memo deleted successfully' });
@@ -390,16 +390,16 @@ router.post('/memoDelete', middlewareUserAuth, async (req: Request, res: Respons
 
 router.post('/memoEmptyBin', middlewareUserAuth, async (req: Request, res: Response) => {
   try {
-    const username = res.locals.auth_username as string;
-    const trashed = await ModelMemoNote.find({ username, trashed: true }).lean();
+    const userId = res.locals.auth_userId as string;
+    const trashed = await ModelMemoNote.find({ userId, trashed: true }).lean();
     const trashedIds = trashed.map((d) => d._id as Types.ObjectId);
     if (trashedIds.length > 0) {
       await ModelGlobalSearch.deleteMany({ entityId: { $in: trashedIds } });
     }
     for (const doc of trashed) {
-      await deleteAllMemoFilesAndLegacyStorage(username, doc as Record<string, unknown>, doc._id as Types.ObjectId);
+      await deleteAllMemoFilesAndLegacyStorage(userId, doc as Record<string, unknown>, doc._id as Types.ObjectId);
     }
-    await ModelMemoNote.deleteMany({ username, trashed: true });
+    await ModelMemoNote.deleteMany({ userId, trashed: true });
     return res.json({ message: 'Bin emptied successfully' });
   } catch (error) {
     console.error(error);

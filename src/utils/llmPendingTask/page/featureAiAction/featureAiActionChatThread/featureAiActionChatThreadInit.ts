@@ -63,7 +63,7 @@ const featureAiActionChatThreadInit = async ({
         console.log('resultMemory', resultMemory);
 
         // reindex the document in global search after all AI actions are complete
-        const chatThreadRecord = await ModelChatLlmThread.findById(targetRecordId).select('username').lean();
+        const chatThreadRecord = await ModelChatLlmThread.findById(targetRecordId).select('userId').lean();
         if (chatThreadRecord) {
             await reindexDocument({
                 reindexDocumentArr: [{

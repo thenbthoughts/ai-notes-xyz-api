@@ -13,7 +13,7 @@ const answerMachineCronProcessPendingRequest = async ({
     answerMachineRequestV4Id: mongoose.Types.ObjectId;
 }): Promise<void> => {
     const row = await ModelAnswerMachineRequestV4.findById(answerMachineRequestV4Id)
-        .select('username threadId status')
+        .select('userId threadId status')
         .lean();
 
     if (!row) {
@@ -30,7 +30,7 @@ const answerMachineCronProcessPendingRequest = async ({
 
     if (outcome.kind === 'completed' && row.threadId) {
         await ModelLlmPendingTaskCron.create({
-            username: row.username,
+            userId: row.userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.chatThread,
             targetRecordId: row.threadId,
         });

@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // Chat Interface
 export interface tsSchemaOllamaModelStoreModality extends Document {
     // ai
-    username: string;
+    userId: Types.ObjectId;
     modelName: string;
 
     // input modalities

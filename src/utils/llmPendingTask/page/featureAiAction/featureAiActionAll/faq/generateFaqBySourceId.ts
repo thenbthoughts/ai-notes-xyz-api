@@ -29,8 +29,8 @@ interface tsFaqResponse {
 const extractContentFromSource = async (
     sourceType: 'notes' | 'tasks' | 'chatThread' | 'chatLlm' | 'lifeEvents' | 'infoVault',
     targetRecordIdObj: mongoose.Types.ObjectId
-): Promise<{ username: string; content: string } | null> => {
-    let username = '';
+): Promise<{ userId: string | mongoose.Types.ObjectId; content: string } | null> => {
+    let userId = '';
     let content = '';
 
     // Extract from Notes
@@ -50,7 +50,7 @@ const extractContentFromSource = async (
 
         if (noteAggregate && noteAggregate.length > 0) {
             const note = noteAggregate[0];
-            username = note.username;
+            userId = note.userId;
             content = `Title: ${note.title}\n`;
             if (note.description) {
                 const markdownContent = NodeHtmlMarkdown.translate(note.description);
@@ -65,7 +65,7 @@ const extractContentFromSource = async (
             if (note.notesWorkspace && note.notesWorkspace.length > 0 && note.notesWorkspace[0].name) {
                 content += `Workspace: ${note.notesWorkspace[0].name}\n`;
             }
-            return { username, content };
+            return { userId, content };
         }
     }
 
@@ -86,7 +86,7 @@ const extractContentFromSource = async (
 
         if (taskAggregate && taskAggregate.length > 0) {
             const task = taskAggregate[0];
-            username = task.username;
+            userId = task.userId;
             content = `Title: ${task.title}\n`;
             if (task.description) {
                 content += `Description: ${task.description}\n`;
@@ -106,7 +106,7 @@ const extractContentFromSource = async (
             if (task.taskWorkspace && task.taskWorkspace.length > 0 && task.taskWorkspace[0].name) {
                 content += `Workspace: ${task.taskWorkspace[0].name}\n`;
             }
-            return { username, content };
+            return { userId, content };
         }
     }
 
@@ -127,7 +127,7 @@ const extractContentFromSource = async (
 
         if (chatLlmAggregate && chatLlmAggregate.length > 0) {
             const chatLlm = chatLlmAggregate[0];
-            username = chatLlm.username;
+            userId = chatLlm.userId;
             content = `Content: ${chatLlm.content}\n`;
             if (chatLlm.tags && chatLlm.tags.length > 0) {
                 content += `Tags: ${chatLlm.tags.join(', ')}\n`;
@@ -143,7 +143,7 @@ const extractContentFromSource = async (
                     content += `Thread AI Summary: ${chatLlm.thread[0].aiSummary}\n`;
                 }
             }
-            return { username, content };
+            return { userId, content };
         }
     }
 
@@ -152,7 +152,7 @@ const extractContentFromSource = async (
     if (sourceType === 'lifeEvents') {
         const lifeEvent = await ModelLifeEvents.findOne({ _id: targetRecordIdObj });
         if (lifeEvent) {
-            username = lifeEvent.username;
+            userId = lifeEvent.userId.toString();
             content = `Title: ${lifeEvent.title}\n`;
             if (lifeEvent.description) {
                 content += `Description: ${lifeEvent.description}\n`;
@@ -169,7 +169,7 @@ const extractContentFromSource = async (
             if (lifeEvent.eventDateUtc) {
                 content += `Event Date: ${lifeEvent.eventDateUtc}\n`;
             }
-            return { username, content };
+            return { userId, content };
         }
     }
 
@@ -177,7 +177,7 @@ const extractContentFromSource = async (
     if (sourceType === 'infoVault') {
         const infoVault = await ModelInfoVault.findOne({ _id: targetRecordIdObj });
         if (infoVault) {
-            username = infoVault.username;
+            userId = infoVault.userId.toString();
             content = `Name: ${infoVault.name}\n`;
             if (infoVault.nickname) {
                 content += `Nickname: ${infoVault.nickname}\n`;
@@ -197,7 +197,7 @@ const extractContentFromSource = async (
             if (infoVault.infoVaultType) {
                 content += `Type: ${infoVault.infoVaultType}\n`;
             }
-            return { username, content };
+            return { userId, content };
         }
     }
 
@@ -315,16 +315,16 @@ const generateFaqBySourceId = async ({
             return true;
         }
 
-        const { username, content } = sourceData;
+        const { userId, content } = sourceData;
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(username);
+        const llmConfig = await getDefaultLlmModel(userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available or AI features disabled
         }
 
         // Check AI feature toggle based on source type
-        const user = await ModelUser.findOne({ username });
+        const user = await ModelUser.findById(userId);
         if (!user) {
             return true;
         }
@@ -374,7 +374,7 @@ const generateFaqBySourceId = async ({
 
         // Save FAQs to database
         const faqsToCreate = faqResponse.faqs.map(faq => ({
-            username: username,
+            userId: userId,
             question: faq.question || '',
             answer: faq.answer || '',
             aiCategory: faq.aiCategory || '',
@@ -401,7 +401,7 @@ const generateFaqBySourceId = async ({
 
         // delete existing FAQs for this source
         await ModelFaq.deleteMany({
-            username: username,
+            userId: userId,
             metadataSourceType: sourceType,
             metadataSourceId: targetRecordIdObj,
         });

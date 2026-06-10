@@ -1,15 +1,16 @@
 import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelUserNotification } from '../../schema/schemaUser/SchemaUserNotification';
 
 export const funcSendMail = async ({
-    username,
+    userId,
     smtpTo,
     subject,
     text,
     html,
 }: {
-    username: string;
+    userId: string | mongoose.Types.ObjectId;
     smtpTo: string;
     subject: string;
     text: string;
@@ -17,13 +18,13 @@ export const funcSendMail = async ({
 }): Promise<boolean> => {
     try {
         // validate
-        if (!username || !smtpTo || !subject) {
+        if (!userId || !smtpTo || !subject) {
             return false;
         }
 
         // get user
         const apiKeys = await ModelUserApiKey.findOne({
-            username: username
+            userId: userId
         });
 
         if (!apiKeys) {
@@ -60,7 +61,7 @@ export const funcSendMail = async ({
 
         // insert into user notification
         await ModelUserNotification.create({
-            username: username,
+            userId: userId,
             smtpTo: smtpTo,
             subject: subject,
             text: text,

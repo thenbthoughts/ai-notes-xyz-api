@@ -24,7 +24,7 @@ export interface IChatLlmAnswerMachineTokenRecord extends Document {
     costInUsd: number;
     
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
     
     // auto
     createdAtUtc: Date;

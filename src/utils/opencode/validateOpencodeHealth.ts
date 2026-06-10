@@ -4,11 +4,11 @@
  */
 export async function validateOpencodeHealth(
     baseUrl: string,
-    username: string,
+    userId: string,
     password: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
     const trimmedBase = baseUrl.replace(/\/+$/, '');
-    const auth = Buffer.from(`${username}:${password}`).toString('base64');
+    const auth = Buffer.from(`${userId}:${password}`).toString('base64');
 
     try {
         // Force native ESM dynamic import at runtime (TS CommonJS transform can turn import() into require()).

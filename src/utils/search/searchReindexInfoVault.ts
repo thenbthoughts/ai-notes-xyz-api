@@ -26,7 +26,7 @@ export const funcSearchReindexInfoVaultById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface IInfoVaultAggregate extends IInfoVaultContact {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: mongoose.Types.ObjectId;
         addresses: IInfoVaultAddress[];
         emails: IInfoVaultEmail[];
         phones: IInfoVaultPhone[];
@@ -294,7 +294,7 @@ export const funcSearchReindexInfoVaultById = async ({
         // insert new record
         await ModelGlobalSearch.create({
             entityId: infoVault._id,
-            username: infoVault.username,
+            userId: infoVault.userId,
             text: searchableText,
             collectionName: 'infoVault',
             updatedAtUtc: infoVault.updatedAtUtc || new Date(),

@@ -19,39 +19,39 @@ import { funcSearchReindexChatLlmById } from './searchReindexChatLlm';
 import { funcSearchReindexMemoById } from './searchReindexMemo';
 
 // Reindex all documents for a user
-export const reindexAll = async ({ username }: { username: string }): Promise<void> => {
+export const reindexAll = async ({ userId }: { userId: string }): Promise<void> => {
     try {
         // delete old records
-        await ModelGlobalSearch.deleteMany({ username: username });
+        await ModelGlobalSearch.deleteMany({ userId: userId });
 
         // Get all document IDs for each entity type using aggregation
         const [tasks, notes, lifeEvents, infoVault, chatLlmThreads, chatLlmMessages, memos] = await Promise.all([
             ModelTask.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelNotes.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelLifeEvents.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelInfoVault.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelChatLlmThread.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelChatLlm.aggregate([
-                { $match: { username } },
+                { $match: { userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelMemoNote.aggregate([
-                { $match: { username, trashed: false } },
+                { $match: { userId, trashed: false } },
                 { $project: { _id: 1 } }
             ]),
         ]);

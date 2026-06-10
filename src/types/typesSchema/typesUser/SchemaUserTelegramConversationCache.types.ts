@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export interface ITelegramCachedChat {
     /** Telegram chat id (supergroup, private, channel, …) */
@@ -10,7 +10,7 @@ export interface ITelegramCachedChat {
 }
 
 interface IUserTelegramConversationCache extends Document {
-    username: string;
+    userId: Types.ObjectId;
     chats: ITelegramCachedChat[];
     updatedAtUtc: Date;
 }

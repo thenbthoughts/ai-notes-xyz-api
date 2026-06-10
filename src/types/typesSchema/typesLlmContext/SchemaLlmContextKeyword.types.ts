@@ -3,7 +3,7 @@ import mongoose, { Document } from 'mongoose';
 // LlmContextKeyword
 export interface ILlmContextKeyword extends Document {
     // identification
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // fields
     keyword: string;

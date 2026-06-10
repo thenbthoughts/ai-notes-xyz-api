@@ -37,7 +37,7 @@ router.post('/memoryGet', middlewareUserAuth, async (req: Request, res: Response
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -115,7 +115,7 @@ router.post('/memoryGet', middlewareUserAuth, async (req: Request, res: Response
             console.error('Error in memoryGet aggregate:', aggregateError);
             // Fallback to simple find if aggregate fails
             docs = await ModelUserMemory.find({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             })
                 .sort({ updatedAtUtc: -1, createdAtUtc: -1 })
                 .skip((page - 1) * perPage)
@@ -135,7 +135,7 @@ router.post('/memoryGet', middlewareUserAuth, async (req: Request, res: Response
             console.error('Error in memoryGet count:', countError);
             // Fallback to countDocuments
             total = await ModelUserMemory.countDocuments({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             });
         }
 
@@ -168,7 +168,7 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
         }
 
         // Check memory limit (only for non-permanent memories)
-        const user = await ModelUser.findOne({ username: res.locals.auth_username });
+        const user = await ModelUser.findById(res.locals.auth_userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -177,7 +177,7 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
         
         // Only count non-permanent memories towards the limit
         const currentNonPermanentCount = await ModelUserMemory.countDocuments({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             isPermanent: false,
         });
 
@@ -185,7 +185,7 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
         const willBePermanent = typeof isPermanent === 'boolean' ? isPermanent : false;
         if (!willBePermanent && currentNonPermanentCount >= userMemoriesLimit) {
             const memoriesToDelete = await ModelUserMemory.find({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 isPermanent: false,
             })
                 .sort({ updatedAtUtc: 1, createdAtUtc: 1 }) // oldest first
@@ -198,7 +198,7 @@ router.post('/memoryAdd', middlewareUserAuth, middlewareActionDatetime, async (r
         }
 
         const newMemory = await ModelUserMemory.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             content: content.trim(),
             isPermanent: typeof isPermanent === 'boolean' ? isPermanent : false,
             ...actionDatetimeObj,
@@ -232,7 +232,7 @@ router.post('/memoryUpdate', middlewareUserAuth, middlewareActionDatetime, async
         // Check if memory exists and belongs to user
         const existingMemory = await ModelUserMemory.findOne({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!existingMemory) {
@@ -258,18 +258,18 @@ router.post('/memoryUpdate', middlewareUserAuth, middlewareActionDatetime, async
 
         // If changing from permanent to non-permanent, check memory limit
         if (updateObj.isPermanent === false && existingMemory.isPermanent === true) {
-            const user = await ModelUser.findOne({ username: res.locals.auth_username });
+            const user = await ModelUser.findById(res.locals.auth_userId);
             if (user) {
                 const userMemoriesLimit = user.userMemoriesLimit || 15;
                 const currentNonPermanentCount = await ModelUserMemory.countDocuments({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     isPermanent: false,
                 });
 
                 // If limit exceeded, delete oldest non-permanent memories
                 if (currentNonPermanentCount >= userMemoriesLimit) {
                     const memoriesToDelete = await ModelUserMemory.find({
-                        username: res.locals.auth_username,
+                        userId: res.locals.auth_userId,
                         isPermanent: false,
                     })
                         .sort({ updatedAtUtc: 1, createdAtUtc: 1 }) // oldest first
@@ -286,7 +286,7 @@ router.post('/memoryUpdate', middlewareUserAuth, middlewareActionDatetime, async
         await ModelUserMemory.updateOne(
             {
                 _id: _id,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             },
             {
                 $set: {
@@ -326,7 +326,7 @@ router.post('/memoryDelete', middlewareUserAuth, async (req: Request, res: Respo
         // Check if memory exists and belongs to user
         const existingMemory = await ModelUserMemory.findOne({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!existingMemory) {
@@ -340,7 +340,7 @@ router.post('/memoryDelete', middlewareUserAuth, async (req: Request, res: Respo
 
         await ModelUserMemory.deleteOne({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         return res.json({ message: 'Memory deleted successfully' });

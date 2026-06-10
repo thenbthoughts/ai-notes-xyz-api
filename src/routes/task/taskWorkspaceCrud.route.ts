@@ -34,7 +34,7 @@ router.post('/taskWorkspaceGet', middlewareUserAuth, async (req: Request, res: R
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -172,7 +172,7 @@ router.post('/taskWorkspaceDelete', middlewareUserAuth, async (req: Request, res
 
         const taskWorkspace = await ModelTaskWorkspace.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!taskWorkspace) {
@@ -193,7 +193,7 @@ router.post('/taskWorkspaceAdd', middlewareUserAuth, async (req: Request, res: R
 
         const now = new Date();
         const newTaskWorkspace = await ModelTaskWorkspace.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             title: req.body.title || title,
             description: req.body.description || '',
             isStar: req.body.isStar === true,
@@ -211,21 +211,21 @@ router.post('/taskWorkspaceAdd', middlewareUserAuth, async (req: Request, res: R
 
         // insert default task status list
         await ModelTaskStatusList.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskWorkspaceId: newTaskWorkspace._id,
             statusName: 'To Do',
             statusListName: 'To Do',
             listPosition: 1,
         });
         await ModelTaskStatusList.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskWorkspaceId: newTaskWorkspace._id,
             statusName: 'Doing',
             statusListName: 'Doing',
             listPosition: 2,
         });
         await ModelTaskStatusList.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskWorkspaceId: newTaskWorkspace._id,
             statusName: 'Done',
             statusListName: 'Done',
@@ -284,7 +284,7 @@ router.post('/taskWorkspaceEdit', middlewareUserAuth, async (req: Request, res: 
             await ModelTaskWorkspace.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -307,7 +307,7 @@ router.post('/taskWorkspaceEdit', middlewareUserAuth, async (req: Request, res: 
 router.post('/taskWorkspaceAddDefault', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const defaultTaskWorkspace = await ModelTaskWorkspace.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (defaultTaskWorkspace.length >= 1) {
@@ -317,7 +317,7 @@ router.post('/taskWorkspaceAddDefault', middlewareUserAuth, async (req: Request,
         }
 
         const newTaskWorkspace = await ModelTaskWorkspace.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             title: 'Your Task Workspace',
         });
         return res.json({

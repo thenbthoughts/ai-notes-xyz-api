@@ -1,9 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // InfoVault Entity
 export interface IInfoVaultContact extends Document {
     // identification
-    username: string;
+    userId: Types.ObjectId;
 
     // basic information
     infoVaultType: string;

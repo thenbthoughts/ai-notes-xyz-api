@@ -38,17 +38,17 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
 
         if (summaryType === 'daily') {
             await generateDailySummaryByUserId({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 summaryDate: new Date(summaryDate),
             });
         } else if (summaryType === 'weekly') {
             await generateWeeklySummaryByUserId({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 summaryDate: new Date(summaryDate),
             });
         } else if (summaryType === 'monthly') {
             await generateMonthlySummaryByUserId({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 summaryDate: new Date(summaryDate),
             });
         }
@@ -65,9 +65,9 @@ router.post('/ai-daily-diary-revalidate', middlewareUserAuth, async (req: Reques
 // Get AI summary Combined
 router.get('/get-ai-summary-combined', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
 
-        const userSummaryStr = await getUserSummaryCombined(username);
+        const userSummaryStr = await getUserSummaryCombined(userId);
 
         if (userSummaryStr.length <= 0) {
             return res.status(404).json({
@@ -93,9 +93,9 @@ router.get('/get-ai-summary-combined', middlewareUserAuth, async (req: Request, 
 // Get AI Summary
 router.get('/ai-summary-get', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
 
-        const userSummary = await getUserSummary(username);
+        const userSummary = await getUserSummary(userId);
 
         return res.json({
             message: 'AI Summaries retrieved successfully',
@@ -112,7 +112,7 @@ router.get('/get-ai-task-suggestions', middlewareUserAuth, async (req: Request, 
     try {
         let taskList = [] as object[];
         taskList = await generateTaskSuggestionsFromConversations({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         return res.status(201).json({

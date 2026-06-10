@@ -22,10 +22,10 @@ export const getLlmConfig = async ({
         if (!thread) {
             return null;
         }
-        const username = thread.username;
+        const userId = thread.userId;
 
         const userApiKeyDoc = await ModelUserApiKey.findOne({
-            username: username,
+            userId: userId,
         });
         if (!userApiKeyDoc) {
             return null;
@@ -95,7 +95,7 @@ export const getLlmConfig = async ({
                 modelName = 'gemma-3-1b-it'; // Default model for LocalAI
             } else {
                 const config = await ModelOpenaiCompatibleModel.findOne({
-                    username: username,
+                    userId: userId,
                 }).sort({ createdAtUtc: -1 });
 
                 if (config && config.apiKey && config.baseUrl) {

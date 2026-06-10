@@ -3,7 +3,7 @@ import IUserNotification from '../../types/typesSchema/typesUser/SchemaUserNotif
 
 // User Schema
 const userNotificationSchema = new Schema<IUserNotification>({
-    username: { type: String, required: true, lowercase: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true },
 
     // personal info
     smtpTo: {

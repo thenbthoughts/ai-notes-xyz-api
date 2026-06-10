@@ -3,10 +3,10 @@ import { tsTaskListSchedule } from '../../types/typesSchema/typesSchemaTaskSched
 
 const taskScheduleSchema = new Schema<tsTaskListSchedule>({
     // auth
-    username: {
-        type: String,
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
         required: true,
-        default: '',
         index: true,
     },
 

@@ -24,7 +24,7 @@ const answerMachineSubQuestionV4Schema = new Schema<IAnswerMachineSubQuestionV4>
         ref: 'answerMachineRequestV4',
     },
     answerMachineIteration: { type: Number, required: true, index: true },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     question: { type: String, default: '' },
     answerReasoningContent: { type: String, default: '' },
     answer: { type: String, default: '' },

@@ -10,11 +10,11 @@ const init = async () => {
         console.time('total-time');
         await mongoose.connect(envKeys.MONGODB_URI);
 
-        const auth_username = 'example';
+        const auth_userId = 'example';
         const taskScheduleId = new mongoose.Types.ObjectId('6894d7ee432f43bef7e342c8');
         
         const apiKey = await ModelUserApiKey.findOne({
-            username: auth_username,
+            userId: auth_userId,
         });
 
         if (!apiKey) {
@@ -22,7 +22,7 @@ const init = async () => {
         }
 
         const resultInsert = await ModelLlmPendingTaskCron.create({
-            username: auth_username,
+            userId: auth_userId,
             taskType: llmPendingTaskTypes.page.taskSchedule.taskSchedule_suggestDailyTasksByAi,
             targetRecordId: taskScheduleId,
         });

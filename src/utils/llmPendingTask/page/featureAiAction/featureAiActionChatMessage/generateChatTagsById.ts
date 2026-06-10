@@ -22,13 +22,13 @@ const  generateChatTagsById = async ({
         const messageFirst = messages[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(messageFirst.username);
+        const llmConfig = await getDefaultLlmModel(messageFirst.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         // Check if Chat Message AI feature is enabled for this user
-        const user = await ModelUser.findOne({ username: messageFirst.username });
+        const user = await ModelUser.findById(messageFirst.userId);
         if (!user || !user.featureAiActionsChatMessage) {
             return true; // Skip if Chat Message AI is not enabled for this user
         }

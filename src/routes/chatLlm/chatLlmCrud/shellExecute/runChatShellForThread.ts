@@ -96,9 +96,9 @@ function clipForArtifact(text: string, max = ARTIFACT_PREVIEW_MAX): string {
 async function buildShellRunArtifactV1(params: {
     chatShellRunGroupId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<IShellRunArtifactV1Plain> {
-    const { chatShellRunGroupId, threadId, username } = params;
+    const { chatShellRunGroupId, threadId, userId } = params;
 
     const todoRows = await ModelChatShellRunTodo.find({ chatShellRunGroupId })
         .sort({ orderIndex: 1 })
@@ -113,7 +113,7 @@ async function buildShellRunArtifactV1(params: {
         kind: 'shell_run',
         chatShellRunGroupId: String(chatShellRunGroupId),
         threadId: String(threadId),
-        username,
+        userId,
         completedAtUtc: new Date().toISOString(),
         todos: todoRows.map((row) => ({
             orderIndex: row.orderIndex ?? 0,
@@ -147,7 +147,7 @@ function mapPlainArtifactToChatSubdocument(params: { plain: IShellRunArtifactV1P
         kind: plain.kind,
         chatShellRunGroupId: new mongoose.Types.ObjectId(plain.chatShellRunGroupId),
         threadId: new mongoose.Types.ObjectId(plain.threadId),
-        username: plain.username,
+        userId: new mongoose.Types.ObjectId(plain.userId),
         completedAtUtc: new Date(plain.completedAtUtc),
         todos: plain.todos,
         importedFiles: plain.importedFiles,
@@ -199,7 +199,7 @@ type LlmConfigNonNull = NonNullable<Awaited<ReturnType<typeof getLlmConfig>>>;
 
 type ShellRunCtx = {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     actionDatetimeObj: DefaultDateTimeIpAddress;
     thread: HydratedDocument<IChatLlmThread>;
     userKeyDoc: HydratedDocument<IUserApiKey>;
@@ -860,13 +860,13 @@ async function tryImportShellRelativeFile(params: {
     token: string;
     group: HydratedDocument<IChatShellRunGroup>;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     todoId: mongoose.Types.ObjectId;
     storageType: 's3' | 'gridfs';
     s3Config: S3Config | undefined;
     skipPaths: Set<string>;
 }): Promise<{ ok: true; fileLine: string; normalizedPath: string } | { ok: false }> {
-    const { rel, apiBase, token, group, threadId, username, todoId, storageType, s3Config, skipPaths } = params;
+    const { rel, apiBase, token, group, threadId, userId, todoId, storageType, s3Config, skipPaths } = params;
     const normalized = rel.replace(/\\/g, '/');
     if (skipPaths.has(normalized)) {
         return { ok: false };
@@ -901,14 +901,14 @@ async function tryImportShellRelativeFile(params: {
         const fileExtension = path.extname(baseName) || '.bin';
 
         const fileRecordObj = (await ModelUserFileUpload.create({
-            username,
-            fileUploadPath: `ai-notes-xyz/${username}/temp/${Date.now()}.temp`,
+            userId,
+            fileUploadPath: `ai-notes-xyz/${userId}/temp/${Date.now()}.temp`,
             storageType,
         })) as IUserFileUpload;
 
         const fileNameStem = fileRecordObj._id.toString();
         const objectKey = constructFeatureUploadObjectKey(
-            username,
+            userId,
             String(threadId),
             fileNameStem,
             fileExtension,
@@ -959,7 +959,7 @@ async function tryImportShellRelativeFile(params: {
         await ModelChatShellGeneratedFile.create({
             chatShellRunGroupId: group._id,
             threadId,
-            username,
+            userId,
             todoId,
             relativePath: normalized,
             storedFileUrl: downloadKey,
@@ -984,21 +984,21 @@ async function tryImportShellRelativeFile(params: {
 
 async function shellStep1LoadThreadAndKeys(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<
     | { ok: true; data: Pick<ShellRunCtx, 'thread' | 'userKeyDoc' | 'keys' | 'apiBase' | 'token'> }
     | { ok: false; error: string }
 > {
-    const { threadId, username } = params;
-    logStep(1, 'load thread and API keys', { threadId: String(threadId), username });
+    const { threadId, userId } = params;
+    logStep(1, 'load thread and API keys', { threadId: String(threadId), userId });
 
-    const thread = await ModelChatLlmThread.findOne({ _id: threadId, username });
+    const thread = await ModelChatLlmThread.findOne({ _id: threadId, userId });
     if (!thread) {
         logStep(1, 'thread not found');
         return { ok: false, error: 'Thread not found' };
     }
 
-    const userKeyDoc = await ModelUserApiKey.findOne({ username });
+    const userKeyDoc = await ModelUserApiKey.findOne({ userId });
     if (!userKeyDoc) {
         logStep(1, 'User API keys doc missing');
         return { ok: false, error: 'User API keys not found' };
@@ -1036,17 +1036,17 @@ async function shellStep1LoadThreadAndKeys(params: {
 
 async function shellStep2CreateRunGroup(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<{
     ok: true;
     data: Pick<ShellRunCtx, 'group' | 'failGroup'>;
 }> {
-    const { threadId, username } = params;
+    const { threadId, userId } = params;
     logStep(2, 'create ChatShellRunGroup');
 
     const created = await ModelChatShellRunGroup.create({
         threadId,
-        username,
+        userId,
         status: 'running',
         errorReason: '',
         createdAtUtc: new Date(),
@@ -1067,14 +1067,14 @@ async function shellStep2CreateRunGroup(params: {
 
 async function shellStep3LoadConversation(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<{ ok: true; data: Pick<ShellRunCtx, 'convo' | 'latestUserText'> }> {
-    const { threadId, username } = params;
+    const { threadId, userId } = params;
     logStep(3, 'load recent messages');
 
     const recent = await ModelChatLlm.find({
         threadId,
-        username,
+        userId,
         type: 'text',
     })
         .sort({ createdAtUtc: -1 })
@@ -1090,7 +1090,7 @@ async function shellStep3LoadConversation(params: {
 
     const lastUser = await ModelChatLlm.findOne({
         threadId,
-        username,
+        userId,
         isAi: false,
         type: 'text',
     })
@@ -1252,9 +1252,9 @@ async function shellStep6PersistTodos(params: {
     todos: ParsedTodo[];
     group: HydratedDocument<IChatShellRunGroup>;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
 }): Promise<{ ok: true; data: Pick<ShellRunCtx, 'todoDocs'> }> {
-    const { todos, group, threadId, username } = params;
+    const { todos, group, threadId, userId } = params;
     logStep(6, 'create ChatShellRunTodo rows');
 
     const todoDocs: mongoose.Types.ObjectId[] = [];
@@ -1264,7 +1264,7 @@ async function shellStep6PersistTodos(params: {
         const doc = await ModelChatShellRunTodo.create({
             chatShellRunGroupId: group._id,
             threadId,
-            username,
+            userId,
             executeStrategyBy: t.executeStrategyBy,
             taskName: t.taskName,
             shellCommand: t.shellCommand,
@@ -1358,7 +1358,7 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
     token: string;
     group: HydratedDocument<IChatShellRunGroup>;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     storageType: 's3' | 'gridfs';
     s3Config: S3Config | undefined;
     workspaceInputPaths: string[];
@@ -1375,7 +1375,7 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
         token,
         group,
         threadId,
-        username,
+        userId,
         storageType,
         s3Config,
         workspaceInputPaths,
@@ -1732,7 +1732,7 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
                     token,
                     group,
                     threadId,
-                    username,
+                    userId,
                     todoId,
                     storageType,
                     s3Config,
@@ -1776,7 +1776,7 @@ async function shellStep9ExecuteTodosAndImportFiles(params: {
 
 async function shellStep10WriteSummaryAndCompleteGroup(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     actionDatetimeObj: DefaultDateTimeIpAddress;
     group: HydratedDocument<IChatShellRunGroup>;
     nonShellSummary: string;
@@ -1784,7 +1784,7 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
     fileLines: string[];
     shellFailureAppendix: string;
 }): Promise<{ ok: true }> {
-    const { threadId, username, actionDatetimeObj, group, nonShellSummary, shellLines, fileLines, shellFailureAppendix } =
+    const { threadId, userId, actionDatetimeObj, group, nonShellSummary, shellLines, fileLines, shellFailureAppendix } =
         params;
 
     logStep(10, 'build summary message');
@@ -1805,7 +1805,7 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
     const artifactPlain = await buildShellRunArtifactV1({
         chatShellRunGroupId: group._id,
         threadId,
-        username,
+        userId,
     });
     const shellRunArtifactV1 = mapPlainArtifactToChatSubdocument({ plain: artifactPlain });
 
@@ -1818,7 +1818,7 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
         type: 'text',
         content: summaryBody,
         shellRunArtifactV1,
-        username,
+        userId,
         threadId,
         isAi: true,
         tags: ['shell-run'],
@@ -1834,22 +1834,22 @@ async function shellStep10WriteSummaryAndCompleteGroup(params: {
 
 export async function runChatShellForThread(params: {
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: string;
     actionDatetimeObj: DefaultDateTimeIpAddress;
 }): Promise<{ success: true } | { success: false; error: string }> {
-    const { threadId, username, actionDatetimeObj } = params;
-    logStep(0, 'enter', { threadId: String(threadId), username });
+    const { threadId, userId, actionDatetimeObj } = params;
+    logStep(0, 'enter', { threadId: String(threadId), userId });
 
-    const s1 = await shellStep1LoadThreadAndKeys({ threadId, username });
+    const s1 = await shellStep1LoadThreadAndKeys({ threadId, userId });
     if (!s1.ok) {
         return { success: false, error: s1.error };
     }
 
-    const s2 = await shellStep2CreateRunGroup({ threadId, username });
+    const s2 = await shellStep2CreateRunGroup({ threadId, userId });
     const { group, failGroup } = s2.data;
 
     try {
-        const s3 = await shellStep3LoadConversation({ threadId, username });
+        const s3 = await shellStep3LoadConversation({ threadId, userId });
         const s4 = await shellStep4ResolveLlmConfig({ threadId, failGroup });
         if (!s4.ok) {
             return { success: false, error: s4.error };
@@ -1857,7 +1857,7 @@ export async function runChatShellForThread(params: {
 
         const merged: ShellRunCtx = {
             threadId,
-            username,
+            userId,
             actionDatetimeObj,
             ...s1.data,
             ...s2.data,
@@ -1875,7 +1875,7 @@ export async function runChatShellForThread(params: {
 
         const workspaceUpload = await uploadRecentUserFilesToShellWorkspace({
             threadId: merged.threadId,
-            username: merged.username,
+            userId: merged.userId,
             apiBase: merged.apiBase,
             token: merged.token,
             userKeyDoc: merged.userKeyDoc,
@@ -1915,7 +1915,7 @@ export async function runChatShellForThread(params: {
             todos: merged.todos,
             group: merged.group,
             threadId: merged.threadId,
-            username: merged.username,
+            userId: merged.userId,
         });
         merged.todoDocs = s6.data.todoDocs;
 
@@ -1943,7 +1943,7 @@ export async function runChatShellForThread(params: {
             token: merged.token,
             group: merged.group,
             threadId: merged.threadId,
-            username: merged.username,
+            userId: merged.userId,
             storageType: merged.storageType,
             s3Config: merged.s3Config,
             workspaceInputPaths: workspaceUpload.relativePaths,
@@ -1959,7 +1959,7 @@ export async function runChatShellForThread(params: {
 
         await shellStep10WriteSummaryAndCompleteGroup({
             threadId: merged.threadId,
-            username: merged.username,
+            userId: merged.userId,
             actionDatetimeObj: merged.actionDatetimeObj,
             group: merged.group,
             nonShellSummary: merged.nonShellSummary,

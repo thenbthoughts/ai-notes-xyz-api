@@ -16,11 +16,11 @@ const router = Router();
 // Trigger LLM AI Task API
 router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        let auth_username = res.locals.auth_username;
+        let auth_userId = res.locals.auth_userId;
 
         // by user api
         let userApi = await ModelUserApiKey.findOne({
-            username: auth_username,
+            userId: auth_userId,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -42,7 +42,7 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
         // find all notes that have aiSummary or aiTags is null
         const notes = await ModelNotes.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         }) as INotes[];
 
         for (let index = 0; index < notes.length; index++) {
@@ -50,7 +50,7 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
             // generate ai summary by id
             await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                 targetRecordId: element._id,
             });
@@ -58,7 +58,7 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 
         // find all task that have aiSummary or aiTags is null
         const tasks = await ModelTask.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         }) as tsTaskList[];
 
         for (let index = 0; index < tasks.length; index++) {
@@ -67,7 +67,7 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             if (userApi?.apiKeyOllamaValid && userApi?.apiKeyQdrantValid) {
                 await ModelLlmPendingTaskCron.create({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 });
@@ -86,11 +86,11 @@ router.post('/aiRevalidateNotesTask', middlewareUserAuth, async (req: Request, r
 // Trigger LLM AI Generate Keywords by Source ID
 router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        let auth_username = res.locals.auth_username;
+        let auth_userId = res.locals.auth_userId;
 
         // by user api
         let userApi = await ModelUserApiKey.findOne({
-            username: auth_username,
+            userId: auth_userId,
             $or: [
                 {
                     apiKeyGroqValid: true,
@@ -107,13 +107,13 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
 
         // find all notes that have aiSummary or aiTags is null
         const notes = await ModelNotes.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         }) as INotes[];
 
         const notesOperations = notes.map(element => ({
             insertOne: {
                 document: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     taskType: llmPendingTaskTypes.page.featureAiActions.notes,
                     targetRecordId: element._id,
                 }
@@ -122,13 +122,13 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
 
         // find all tasks that have aiSummary or aiTags is null
         const tasks = await ModelTask.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         }) as tsTaskList[];
 
         const tasksOperations = tasks.map(element => ({
             insertOne: {
                 document: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     taskType: llmPendingTaskTypes.page.featureAiActions.task,
                     targetRecordId: element._id,
                 }
@@ -137,13 +137,13 @@ router.post('/aiGenerateKeywordsBySourceId', middlewareUserAuth, async (req: Req
 
         // find all life events
         const lifeEvents = await ModelLifeEvents.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         }) as ILifeEvents[];
 
         const lifeEventsOperations = lifeEvents.map(element => ({
             insertOne: {
                 document: {
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     taskType: llmPendingTaskTypes.page.featureAiActions.lifeEvents,
                     targetRecordId: element._id,
                 }

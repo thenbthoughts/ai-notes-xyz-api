@@ -15,7 +15,7 @@ const chatShellRunTodoSchema = new Schema<IChatShellRunTodo>({
         index: true,
         ref: 'chatLlmThread',
     },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     executeStrategyBy: {
         type: String,
         enum: ['llm', 'shellExecute', 'browserIntegration', 'internalKnowledgeAndLlm'],

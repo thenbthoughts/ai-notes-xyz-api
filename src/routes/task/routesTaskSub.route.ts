@@ -26,14 +26,14 @@ router.post(
                 title,
                 parentTaskId: mongoose.Types.ObjectId.createFromHexString(parentTaskId), // Convert to MongoDB ObjectId
                 taskPosition,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
 
                 ...actionDatetimeObj,
             });
 
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: mongoose.Types.ObjectId.createFromHexString(parentTaskId),
             });
@@ -50,13 +50,13 @@ router.post(
 router.post('/taskSubGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const { parentTaskId } = req.body;
-        const username = res.locals.auth_username;
+        const userId = res.locals.auth_userId;
 
         const resultSubtasks = await ModelTaskSubList.aggregate([
             {
                 $match: {
                     parentTaskId: mongoose.Types.ObjectId.createFromHexString(parentTaskId),
-                    username
+                    userId
                 }
             },
             {
@@ -93,12 +93,12 @@ router.post(
                 taskPosition,
                 taskCompletedStatus,
             } = req.body;
-            const auth_username = res.locals.auth_username;
+            const auth_userId = res.locals.auth_userId;
 
             const updatedSubtask = await ModelTaskSubList.findOneAndUpdate(
                 {
                     _id: mongoose.Types.ObjectId.createFromHexString(id), // Convert to MongoDB ObjectId
-                    username: auth_username,
+                    userId: auth_userId,
                 },
                 {
                     title,
@@ -120,7 +120,7 @@ router.post(
 
             // generate Feature AI Actions by source id (includes FAQ, Summary, Tags, Embedding)
             await ModelLlmPendingTaskCron.create({
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 taskType: llmPendingTaskTypes.page.featureAiActions.task,
                 targetRecordId: updatedSubtask.parentTaskId,
             });
@@ -137,11 +137,11 @@ router.post(
 router.post('/taskSubDelete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const { id } = req.body;
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const deletedSubtask = await ModelTaskSubList.findOneAndDelete({
             _id: mongoose.Types.ObjectId.createFromHexString(id), // Convert to MongoDB ObjectId
-            username: auth_username,
+            userId: auth_userId,
         });
 
         if (!deletedSubtask) {

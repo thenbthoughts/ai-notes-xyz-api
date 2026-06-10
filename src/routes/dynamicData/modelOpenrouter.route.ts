@@ -18,7 +18,7 @@ router.get('/modelOpenrouterGet', middlewareUserAuth, async (req: Request, res: 
         if(resultAiListOpenrouter.length === 0) {
             const task = await ModelLlmPendingTaskCron.create({
                 taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             });
     
             await llmPendingTaskProcessFunc({
@@ -48,7 +48,7 @@ router.post('/modelOpenrouterAdd', middlewareUserAuth, async (req: Request, res:
     try {
         const task = await ModelLlmPendingTaskCron.create({
             taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         await llmPendingTaskProcessFunc({

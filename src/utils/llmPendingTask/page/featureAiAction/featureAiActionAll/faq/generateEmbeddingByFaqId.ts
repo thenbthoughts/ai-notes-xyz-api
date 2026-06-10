@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUser } from "../../../../../../schema/schemaUser/SchemaUser.schema";
@@ -34,9 +35,9 @@ const findFaqRecord = async (targetRecordId: string | null): Promise<IFaq | null
 /**
  * Validate user has valid Ollama and Qdrant configuration
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | ObjectId) => {
     // Get LLM config to check for Ollama configuration
-    const llmConfig = await getDefaultLlmModel(username);
+    const llmConfig = await getDefaultLlmModel(userId);
 
     // Check if user has Ollama configured (for embeddings)
     const hasOllama = llmConfig.provider === 'ollama' && llmConfig.apiEndpoint;
@@ -44,7 +45,7 @@ const validateApiKeys = async (username: string) => {
     // For Qdrant, we still need to check the old way since getDefaultLlmModel doesn't handle Qdrant
     // TODO: This could be updated when Qdrant configuration is moved to the user schema
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyQdrantValid: true,
     });
 
@@ -162,12 +163,9 @@ const generateEmbeddingByFaqId = async ({
         const faqId = faqRecord._id as ObjectId;
 
         // Step 2: Check if AI features are enabled for this user based on source type
-        const user = await ModelUser.findOne({
-            username: faqRecord.username,
-            featureAiActionsEnabled: true
-        });
+        const user = await ModelUser.findById(faqRecord.userId);
         if (!user) {
-            console.log('AI features not enabled for user:', faqRecord.username);
+            console.log('AI features not enabled for user:', faqRecord.userId);
             return true; // Skip embedding generation if AI features are not enabled
         }
 
@@ -196,12 +194,12 @@ const generateEmbeddingByFaqId = async ({
         }
 
         if (!featureEnabled) {
-            console.log(`${sourceType} AI not enabled for user: ${faqRecord.username}`);
+            console.log(`${sourceType} AI not enabled for user: ${faqRecord.userId}`);
             return true; // Skip embedding generation if specific feature AI is not enabled
         }
 
         // Step 4: Validate API keys
-        const apiKeys = await validateApiKeys(faqRecord.username);
+        const apiKeys = await validateApiKeys(faqRecord.userId);
         if (!apiKeys) {
             return true;
         }
@@ -226,7 +224,7 @@ const generateEmbeddingByFaqId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${faqRecord.username}`;
+        const collectionName = `index-user-${faqRecord.userId}`;
 
         // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

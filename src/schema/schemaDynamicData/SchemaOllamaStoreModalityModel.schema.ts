@@ -4,9 +4,11 @@ import type { tsSchemaOllamaModelStoreModality } from '../../types/typesSchema/t
 
 // AI Model Schema
 const aiModelStoreModalityOllamaSchema = new Schema<tsSchemaOllamaModelStoreModality>({
-    username: {
-        type: String,
-        default: '',
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        required: true,
+        index: true,
     },
     modelName: {
         type: String,

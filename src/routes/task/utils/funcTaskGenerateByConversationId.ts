@@ -44,14 +44,14 @@ export interface tsTaskListObj {
 // Function to get the last 20 conversations from MongoDB
 const getAConversationByNotesId = async ({
     _id,
-    username,
+    userId,
 }: {
     _id: string,
-    username: string,
+    userId: string,
 }): Promise<Message[]> => {
     const conversations = await ModelChatLlm.find({
         _id: mongoose.Types.ObjectId.createFromHexString(_id),
-        username,
+        userId,
     });
 
     return conversations.map((convo: { content: string; }) => ({
@@ -61,10 +61,10 @@ const getAConversationByNotesId = async ({
 }
 
 // Function to get user info from the database
-const getUserInfo = async (username: string) => {
-    if (!username) return null;
+const getUserInfo = async (userId: string) => {
+    if (!userId) return null;
 
-    const user = await ModelUser.findOne({ username }).exec();
+    const user = await ModelUser.findById(userId).exec();
     return user;
 }
 
@@ -128,13 +128,13 @@ const fetchLlmGroq = async ({
 
 const funcTasksGenerateByConversationId = async ({
     _id,
-    username,
+    userId,
 
     llmAuthToken,
     provider,
 }: {
     _id: string;
-    username: string;
+    userId: string;
 
     llmAuthToken: string;
     provider: 'groq' | 'openrouter';
@@ -142,7 +142,7 @@ const funcTasksGenerateByConversationId = async ({
     try {
         const lastConversationsDesc = await getAConversationByNotesId({
             _id,
-            username,
+            userId,
         });
         if(lastConversationsDesc.length === 0) {
             return [];
@@ -180,7 +180,7 @@ const funcTasksGenerateByConversationId = async ({
             "content": systemPrompt,
         })
 
-        const userInfo = await getUserInfo(username);
+        const userInfo = await getUserInfo(userId);
 
         if (userInfo) {
             let promptUserInfo = '';

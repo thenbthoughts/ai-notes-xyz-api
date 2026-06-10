@@ -4,7 +4,7 @@ export interface IAnswerMachineEvaluateAnswerV4 extends Document {
     _id: mongoose.Types.ObjectId;
     answerMachineRequestV4Id: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     isSatisfactory: boolean;
     confidence: number;

@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
@@ -33,9 +34,9 @@ const findChatMessageRecord = async (targetRecordId: string | null): Promise<ICh
 /**
  * Validate user API keys for Ollama and Qdrant
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | ObjectId) => {
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
@@ -148,17 +149,17 @@ const generateEmbeddingByChatMessageId = async ({
 
         // Step 2: Check if AI features are enabled for this user
         const user = await ModelUser.findOne({
-            username: chatMessageRecord.username,
+            _id: chatMessageRecord.userId,
             featureAiActionsEnabled: true,
             featureAiActionsChatMessage: true
         });
         if (!user) {
-            console.log('Chat Message AI or AI features not enabled for user:', chatMessageRecord.username);
+            console.log('Chat Message AI or AI features not enabled for user:', chatMessageRecord.userId);
             return true; // Skip embedding generation if AI features or Chat Message AI is not enabled
         }
 
         // Step 4: Validate API keys
-        const apiKeys = await validateApiKeys(chatMessageRecord.username);
+        const apiKeys = await validateApiKeys(chatMessageRecord.userId);
         if (!apiKeys) {
             return true;
         }
@@ -183,7 +184,7 @@ const generateEmbeddingByChatMessageId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${chatMessageRecord.username}`;
+        const collectionName = `index-user-${chatMessageRecord.userId}`;
 
         // Step 9: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

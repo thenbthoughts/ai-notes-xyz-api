@@ -29,14 +29,14 @@ export interface QuestionListObj {
 // Function to get the last 30 conversations from MongoDB
 const getLast30Conversations = async ({
     threadId,
-    username,
+    userId,
 }: {
     threadId: mongoose.Types.ObjectId,
-    username: string,
+    userId: string,
 }): Promise<Message[]> => {
     const conversations = await ModelChatLlm
         .find({
-            username,
+            userId,
             threadId: threadId,
             type: "text",
             $and: [
@@ -114,7 +114,7 @@ const fetchLlmGroq = async ({
 };
 
 const getNextQuestionsFromLast30Conversation = async ({
-    username,
+    userId,
 
     // thread
     threadId,
@@ -123,7 +123,7 @@ const getNextQuestionsFromLast30Conversation = async ({
     provider,
 }: {
     threadId: mongoose.Types.ObjectId,
-    username: string;
+    userId: string;
 
     llmAuthToken: string;
     provider: 'groq' | 'openrouter';
@@ -131,7 +131,7 @@ const getNextQuestionsFromLast30Conversation = async ({
     try {
         const lastConversationsDesc = await getLast30Conversations({
             threadId,
-            username,
+            userId,
         });
         if(lastConversationsDesc.length === 0) {
             return [];

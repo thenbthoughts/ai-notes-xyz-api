@@ -23,7 +23,7 @@ const  generateChatThreadAiSummaryById = async ({
         const messageFirst = messages[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(messageFirst.username);
+        const llmConfig = await getDefaultLlmModel(messageFirst.userId);
         console.log('llmConfig', llmConfig);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available

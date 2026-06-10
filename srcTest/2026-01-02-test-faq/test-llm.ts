@@ -15,10 +15,10 @@ const init = async () => {
         console.time('total-time');
         await mongoose.connect(envKeys.MONGODB_URI);
 
-        const username = 'exampleuser';
+        const userId = 'exampleuser';
 
         const notes = await ModelNotes.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!notes) {
@@ -39,7 +39,7 @@ const init = async () => {
 
         // Test with a tasks source
         const tasks = await ModelTask.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!tasks) {
@@ -58,7 +58,7 @@ const init = async () => {
 
         // Test with a chatLlm source
         const chatLlm = await ModelChatLlm.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!chatLlm) {
@@ -69,7 +69,7 @@ const init = async () => {
 
         // Test with a lifeEvents source
         const lifeEvents = await ModelLifeEvents.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!lifeEvents) {
@@ -88,7 +88,7 @@ const init = async () => {
 
         // Test with an infoVault source
         const infoVault = await ModelInfoVault.findOne({
-            username: username,
+            userId: userId,
         });
 
         if (!infoVault) {
@@ -108,7 +108,7 @@ const init = async () => {
         // Retrieve and display generated FAQs
         console.log('\nRetrieving generated FAQs...');
         const generatedFaqs = await ModelFaq.find({
-            username: username,
+            userId: userId,
         }).sort({ createdAtUtc: -1 }).limit(20);
 
         console.log(`\nFound ${generatedFaqs.length} FAQs:`);

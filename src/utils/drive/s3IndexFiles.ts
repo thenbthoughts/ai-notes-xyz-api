@@ -10,11 +10,11 @@ interface IndexFilesResult {
 
 const indexFilesFromS3 = async ({
     bucket,
-    username,
+    userId,
     prefix = '',
 }: {
     bucket: IUserS3Bucket;
-    username: string;
+    userId: string;
     prefix?: string;
 }): Promise<IndexFilesResult> => {
     const s3Client = new S3Client({
@@ -143,12 +143,12 @@ const indexFilesFromS3 = async ({
                         // Create or update index entry (replace if exists, add if new)
                         await ModelS3FileIndex.findOneAndUpdate(
                             {
-                                username,
+                                userId,
                                 bucketName: bucket.bucketName,
                                 fileKey: item.Key,
                             },
                             {
-                                username,
+                                userId,
                                 bucketName: bucket.bucketName,
                                 fileKey: item.Key,
                                 fileKeyArr: fileKeyArr,
@@ -203,12 +203,12 @@ const indexFilesFromS3 = async ({
                                 try {
                                     await ModelS3FileIndex.findOneAndUpdate(
                                         {
-                                            username,
+                                            userId,
                                             bucketName: bucket.bucketName,
                                             fileKey: parentFolderS3Key,
                                         },
                                         {
-                                            username,
+                                            userId,
                                             bucketName: bucket.bucketName,
                                             fileKey: parentFolderS3Key,
                                             fileKeyArr: parentFolderFileKeyArr,
@@ -285,12 +285,12 @@ const indexFilesFromS3 = async ({
                         
                         await ModelS3FileIndex.findOneAndUpdate(
                             {
-                                username,
+                                userId,
                                 bucketName: bucket.bucketName,
                                 fileKey: prefixItem.Prefix,
                             },
                             {
-                                username,
+                                userId,
                                 bucketName: bucket.bucketName,
                                 fileKey: prefixItem.Prefix,
                                 fileKeyArr: fileKeyArr,

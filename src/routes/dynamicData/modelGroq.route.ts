@@ -18,7 +18,7 @@ router.get('/modelGroqGet', middlewareUserAuth, async (req: Request, res: Respon
         if(resultAiListGroq.length === 0) {
             const task = await ModelLlmPendingTaskCron.create({
                 taskType: llmPendingTaskTypes.page.settings.groqModelGet,
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
 
                 createdAtUtc: new Date(),
             });
@@ -50,7 +50,7 @@ router.post('/modelGroqAdd', middlewareUserAuth, async (req: Request, res: Respo
     try {
         const task = await ModelLlmPendingTaskCron.create({
             taskType: llmPendingTaskTypes.page.settings.groqModelGet,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
 
             createdAtUtc: new Date(),
         });

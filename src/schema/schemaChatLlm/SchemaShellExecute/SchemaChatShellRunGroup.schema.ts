@@ -9,7 +9,7 @@ const chatShellRunGroupSchema = new Schema<IChatShellRunGroup>({
         index: true,
         ref: 'chatLlmThread',
     },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     status: {
         type: String,
         enum: ['pending', 'running', 'completed', 'error'],

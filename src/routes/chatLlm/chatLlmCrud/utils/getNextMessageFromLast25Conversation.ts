@@ -39,15 +39,15 @@ function isChatLlmInProgressPlaceholder(content: string | undefined | null): boo
 const funcDoesModalSupportImage = async ({
     modelProvider,
     modelName,
-    username,
+    userId,
 }: {
     modelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
     modelName: string;
-    username: string;
+    userId: string;
 }) => {
     if(modelProvider === 'ollama') {
         const resultOllamModel = await ModelAiListOllama.findOne({
-            username: username,
+            userId: userId,
             modelName: modelName,
         });
         if(resultOllamModel) {
@@ -58,7 +58,7 @@ const funcDoesModalSupportImage = async ({
 
     if (modelProvider === 'openai-compatible') {
         const resultOpenaiCompatibleModel = await ModelOpenaiCompatibleModel.findOne({
-            username: username,
+            userId: userId,
             modelName: modelName,
         });
         if(resultOpenaiCompatibleModel) {
@@ -82,7 +82,7 @@ const funcDoesModalSupportImage = async ({
         await updateLlmModalModalityById({
             modalIdString: modelName,
             provider: modelProvider,
-            username: username,
+            userId: userId,
         });
 
         resultModelModality = await ModelAiModelModality.findOne({
@@ -133,7 +133,7 @@ const getBase64File = async ({
 }
 
 const getConversationList = async ({
-    username,
+    userId,
     threadId,
 
     modelProvider,
@@ -141,7 +141,7 @@ const getConversationList = async ({
 
     threadInfo,
 }: {
-    username: string,
+    userId: string,
     threadId: mongoose.Types.ObjectId,
     modelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible',
     modelName: string,
@@ -152,7 +152,7 @@ const getConversationList = async ({
     }
 
     const userApiKey = await ModelUserApiKey.findOne({
-        username,
+        userId,
     });
     if (!userApiKey) {
         return [];
@@ -162,10 +162,10 @@ const getConversationList = async ({
 
     let pipelineGetConversations = [] as PipelineStage[];
 
-    // match by username and threadId
+    // match by userId and threadId
     pipelineGetConversations.push({
         $match: {
-            username,
+            userId,
             threadId,
         }
     });
@@ -205,7 +205,7 @@ const getConversationList = async ({
         doesModalSupportImage = await funcDoesModalSupportImage({
             modelProvider: modelProvider,
             modelName: modelName,
-            username: username,
+            userId: userId,
         });
     }
 
@@ -271,10 +271,10 @@ const getConversationList = async ({
 
 const getPersonalContext = async ({
     threadInfo,
-    username,
+    userId,
 }: {
     threadInfo: IChatLlmThread,
-    username: string,
+    userId: string,
 }) => {
     try {
 
@@ -282,7 +282,7 @@ const getPersonalContext = async ({
 
         // context -> user info
         if (threadInfo.isPersonalContextEnabled) {
-            const userInfo = await ModelUser.findOne({ username }).exec();
+            const userInfo = await ModelUser.findById(userId).exec();
             if (userInfo) {
                 if (userInfo.name !== '') {
                     promptUserInfo += `My name is ${userInfo.name}. `;
@@ -322,10 +322,10 @@ const getPersonalContext = async ({
 
 const getUserMemoriesContext = async ({
     threadInfo,
-    username,
+    userId,
 }: {
     threadInfo: IChatLlmThread,
-    username: string,
+    userId: string,
 }) => {
     try {
         if (!threadInfo.isMemoryEnabled) {
@@ -333,7 +333,7 @@ const getUserMemoriesContext = async ({
         }
 
         // Get user's memory limit
-        const user = await ModelUser.findOne({ username }).exec();
+        const user = await ModelUser.findById(userId).exec();
         if (!user) {
             return '';
         }
@@ -347,7 +347,7 @@ const getUserMemoriesContext = async ({
 
         // Fetch memories up to the limit, sorted by most recently updated
         const memories = await ModelUserMemory.find({
-            username: username,
+            userId: userId,
         })
             .sort({ updatedAtUtc: -1 })
             .limit(userMemoriesLimit)
@@ -372,10 +372,10 @@ const getUserMemoriesContext = async ({
 };
 
 const getTasks = async ({
-    username,
+    userId,
     threadId,
 }: {
-    username: string,
+    userId: string,
     threadId: mongoose.Types.ObjectId,
 }) => {
     let taskStr = '';
@@ -392,7 +392,7 @@ const getTasks = async ({
     const resultContexts = await ModelChatLlmThreadContextReference.aggregate([
         {
             $match: {
-                username: username,
+                userId: userId,
                 referenceFrom: 'tasks',
                 referenceId: { $ne: null },
                 threadId: threadId,
@@ -410,7 +410,7 @@ const getTasks = async ({
     const resultTasks = await ModelTask.aggregate([
         {
             $match: {
-                username: username,
+                userId: userId,
                 _id: {
                     $in: contextIds
                 },
@@ -555,10 +555,10 @@ const getTasks = async ({
 }
 
 const getNotes = async ({
-    username,
+    userId,
     threadId,
 }: {
-    username: string,
+    userId: string,
     threadId: mongoose.Types.ObjectId,
 }) => {
     let noteStr = '';
@@ -568,7 +568,7 @@ const getNotes = async ({
     const resultContexts = await ModelChatLlmThreadContextReference.aggregate([
         {
             $match: {
-                username: username,
+                userId: userId,
                 referenceFrom: 'notes',
                 referenceId: { $ne: null },
                 threadId: threadId,
@@ -592,7 +592,7 @@ const getNotes = async ({
         const resultNotes = await ModelNotes.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     _id: {
                         $in: contextIds
                     },
@@ -662,10 +662,10 @@ const getNotes = async ({
 }
 
 const getLifeEvents = async ({
-    username,
+    userId,
     threadId,
 }: {
-    username: string,
+    userId: string,
     threadId: mongoose.Types.ObjectId,
 }) => {
     let lifeEventStr = '';
@@ -673,7 +673,7 @@ const getLifeEvents = async ({
     // Get context references for life events
     const contextReferences = await ModelChatLlmThreadContextReference.find({
         threadId: threadId,
-        username: username,
+        userId: userId,
         referenceFrom: 'lifeEvents',
     });
 
@@ -687,7 +687,7 @@ const getLifeEvents = async ({
         const resultLifeEvents = await ModelLifeEvents.aggregate([
             {
                 $match: {
-                    username: username,
+                    userId: userId,
                     _id: {
                         $in: contextIds as mongoose.Types.ObjectId[]
                     },
@@ -770,17 +770,17 @@ const getLifeEvents = async ({
 const MEMO_BODY_CONTEXT_MAX_CHARS = 12000;
 
 const getMemos = async ({
-    username,
+    userId,
     threadId,
 }: {
-    username: string;
+    userId: string;
     threadId: mongoose.Types.ObjectId;
 }) => {
     let memoStr = '';
 
     const contextReferences = await ModelChatLlmThreadContextReference.find({
         threadId,
-        username,
+        userId,
         referenceFrom: 'memo',
     });
 
@@ -803,7 +803,7 @@ const getMemos = async ({
     const resultMemos = await ModelMemoNote.aggregate([
         {
             $match: {
-                username,
+                userId,
                 _id: { $in: contextIds },
                 trashed: false,
             },
@@ -859,7 +859,7 @@ const getNextMessageFromLast30Conversation = async ({
     threadInfo,
 
     // auth
-    username,
+    userId,
 
     // api key
     userApiKey,
@@ -875,7 +875,7 @@ const getNextMessageFromLast30Conversation = async ({
 }: {
     threadId: mongoose.Types.ObjectId,
     threadInfo: IChatLlmThread,
-    username: string;
+    userId: string;
     userApiKey: tsUserApiKey;
 
     // model name
@@ -917,7 +917,7 @@ const getNextMessageFromLast30Conversation = async ({
     // personal context
     const personalContext = await getPersonalContext({
         threadInfo,
-        username,
+        userId,
     });
     messages.push({
         role: "user",
@@ -927,7 +927,7 @@ const getNextMessageFromLast30Conversation = async ({
     // memory context
     const memoryContext = await getUserMemoriesContext({
         threadInfo,
-        username,
+        userId,
     });
     if (memoryContext.length > 0) {
         messages.push({
@@ -937,11 +937,11 @@ const getNextMessageFromLast30Conversation = async ({
     }
 
     // user info
-    const userInfo = await ModelUser.findOne({ username }).exec();
+    const userInfo = await ModelUser.findById(userId).exec();
 
     // tasks list
     const taskStr = await getTasks({
-        username,
+        userId,
         threadId,
     });
     if (taskStr.length > 0) {
@@ -953,7 +953,7 @@ const getNextMessageFromLast30Conversation = async ({
 
     // notes list
     const noteStr = await getNotes({
-        username,
+        userId,
         threadId,
     });
     if (noteStr.length > 0) {
@@ -965,7 +965,7 @@ const getNextMessageFromLast30Conversation = async ({
 
     // life events list
     const lifeEventStr = await getLifeEvents({
-        username,
+        userId,
         threadId,
     });
     if (lifeEventStr.length > 0) {
@@ -977,7 +977,7 @@ const getNextMessageFromLast30Conversation = async ({
 
     // memo notes (Memo page)
     const memoStr = await getMemos({
-        username,
+        userId,
         threadId,
     });
     if (memoStr.length > 0) {
@@ -989,7 +989,7 @@ const getNextMessageFromLast30Conversation = async ({
 
     // conversation list
     const conversationList = await getConversationList({
-        username,
+        userId,
         threadId,
         modelProvider: aiModelProvider,
         modelName: aiModelName,
@@ -1033,7 +1033,7 @@ const getNextMessageFromLast30Conversation = async ({
                     : new mongoose.Types.ObjectId(configIdValue.toString());
                 
                 const config = await ModelOpenaiCompatibleModel.findOne({
-                    username: username,
+                    userId: userId,
                     _id: configId,
                 });
                 

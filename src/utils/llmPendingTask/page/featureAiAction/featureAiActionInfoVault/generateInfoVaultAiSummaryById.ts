@@ -23,13 +23,13 @@ const  generateInfoVaultAiSummaryById = async ({
         const infoVaultFirst = infoVaultRecords[0];
 
         // Get LLM config using centralized function
-        const llmConfig = await getDefaultLlmModel(infoVaultFirst.username);
+        const llmConfig = await getDefaultLlmModel(infoVaultFirst.userId);
         if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
             return true; // Skip if no LLM available
         }
 
         // Check if Info Vault AI feature is enabled for this user
-        const user = await ModelUser.findOne({ username: infoVaultFirst.username });
+        const user = await ModelUser.findById(infoVaultFirst.userId);
         if (!user || !user.featureAiActionsInfoVault) {
             return true; // Skip if Info Vault AI is not enabled for this user
         }

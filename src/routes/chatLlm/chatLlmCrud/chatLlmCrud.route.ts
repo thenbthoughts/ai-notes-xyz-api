@@ -57,7 +57,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
         // stateDocument -> match
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
                 threadId: threadId,
             }
         }
@@ -105,7 +105,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
         resultNotes.reverse();
 
         const docsWithAm4 = await mergeAnswerMachineV4StreamIntoNotes({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             threadId,
             chatDocs: resultNotes as Record<string, unknown>[],
         });
@@ -133,8 +133,8 @@ router.post(
     answerMachineV4FileUploadMw,
     async (req: Request, res: Response) => {
         try {
-            const username = res.locals.auth_username;
-            const userKeyDoc = await ModelUserApiKey.findOne({ username });
+            const userId = res.locals.auth_userId;
+            const userKeyDoc = await ModelUserApiKey.findOne({ userId });
             const apiKey = getApiKeyByObject(userKeyDoc);
             const shellCfg = getAm4ShellUploadConfig(apiKey as tsUserApiKey);
             if (!shellCfg) {
@@ -158,7 +158,7 @@ router.post(
             const threadObjectId = mongoose.Types.ObjectId.createFromHexString(tid);
             const threadOk = await ModelChatLlmThread.findOne({
                 _id: threadObjectId,
-                username,
+                userId,
             })
                 .select('_id answerEngine')
                 .lean();
@@ -178,7 +178,7 @@ router.post(
                 const reqOk = await ModelAnswerMachineRequestV4.findOne({
                     _id: requestObjectId,
                     threadId: threadObjectId,
-                    username,
+                    userId,
                 })
                     .select('_id')
                     .lean();
@@ -192,7 +192,7 @@ router.post(
             const created = await ModelAnswerMachineFileV4.create({
                 answerMachineRequestV4Id: requestObjectId ?? undefined,
                 threadId: threadObjectId,
-                username,
+                userId,
                 fileName: file.name.slice(0, 500),
                 originalSize: file.data.length,
                 mimeType: (file.mimetype || 'application/octet-stream').slice(0, 200),
@@ -204,7 +204,7 @@ router.post(
             });
 
             const relativePath = buildAm4ShellRelativePath({
-                username,
+                userId,
                 threadId: tid,
                 requestId: requestIdSegment,
                 originalFileName: file.name,
@@ -260,8 +260,8 @@ router.post(
 /** Authenticated proxy: download an AM4 file from Shell via `shellRelativePath`. */
 router.post('/answerMachineFileV4Download', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const username = res.locals.auth_username;
-        const userKeyDoc = await ModelUserApiKey.findOne({ username });
+        const userId = res.locals.auth_userId;
+        const userKeyDoc = await ModelUserApiKey.findOne({ userId });
         const apiKey = getApiKeyByObject(userKeyDoc);
         const shellCfg = getAm4ShellUploadConfig(apiKey as tsUserApiKey);
         if (!shellCfg) {
@@ -280,7 +280,7 @@ router.post('/answerMachineFileV4Download', middlewareUserAuth, async (req: Requ
         const f = await ModelAnswerMachineFileV4.findOne({
             _id: mongoose.Types.ObjectId.createFromHexString(fileDocId),
             threadId: mongoose.Types.ObjectId.createFromHexString(threadBody),
-            username,
+            userId,
         }).lean();
 
         if (!f) {
@@ -335,7 +335,7 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
 
         const note = await ModelChatLlm.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!note) {
             return res.status(404).json({ message: 'Note not found or unauthorized' });
@@ -349,7 +349,7 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
             const fileName = fileUrlParts[fileUrlParts.length - 1];
             if (fileName) {
                 await deleteFileByPath({
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                     parentEntityId: note?.threadId?.toString() || '',
                     fileName: fileName,
                 });

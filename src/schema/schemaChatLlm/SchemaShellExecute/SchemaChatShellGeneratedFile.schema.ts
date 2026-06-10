@@ -15,7 +15,7 @@ const chatShellGeneratedFileSchema = new Schema<IChatShellGeneratedFile>({
         index: true,
         ref: 'chatLlmThread',
     },
-    username: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
     todoId: {
         type: mongoose.Schema.Types.ObjectId,
         default: null,

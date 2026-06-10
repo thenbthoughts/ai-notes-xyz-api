@@ -23,7 +23,7 @@ export const funcSearchReindexTasksById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface ITaskAggregate {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: string;
         title: string;
         description: string;
         priority: string;
@@ -235,7 +235,7 @@ export const funcSearchReindexTasksById = async ({
         // insert new record
         await ModelGlobalSearch.create({
             entityId: task._id,
-            username: task.username,
+            userId: task.userId,
             text: searchableText,
             collectionName: 'tasks',
             taskWorkspaceId: task.taskWorkspaceId,

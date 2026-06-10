@@ -126,7 +126,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     },
 
     // auth
-    username: { type: String, required: true, default: '', index: true, },
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true, },
 
     // auto
     createdAtUtc: {

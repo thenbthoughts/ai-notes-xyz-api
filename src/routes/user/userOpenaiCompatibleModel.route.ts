@@ -33,7 +33,7 @@ router.post('/openaiCompatibleModelGet', middlewareUserAuth, async (req: Request
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -148,7 +148,7 @@ router.post('/openaiCompatibleModelAdd', middlewareUserAuth, async (req: Request
         const isOutputModalityVideo = req.body.isOutputModalityVideo === 'true' ? 'true' : 'false';
 
         const newConfig = await ModelOpenaiCompatibleModel.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             providerName: req.body.providerName || '',
             baseUrl: req.body.baseUrl.trim(),
             apiKey: req.body.apiKey.trim(),
@@ -255,7 +255,7 @@ router.post('/openaiCompatibleModelEdit', middlewareUserAuth, async (req: Reques
             const result = await ModelOpenaiCompatibleModel.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -293,7 +293,7 @@ router.post('/openaiCompatibleModelCopy', middlewareUserAuth, async (req: Reques
         // Find the original configuration
         const originalConfig = await ModelOpenaiCompatibleModel.findOne({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!originalConfig) {
@@ -309,7 +309,7 @@ router.post('/openaiCompatibleModelCopy', middlewareUserAuth, async (req: Reques
 
         // Create new configuration with copied data
         const newConfig = await ModelOpenaiCompatibleModel.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             providerName: copyProviderName,
             baseUrl: originalConfig.baseUrl,
             apiKey: originalConfig.apiKey, // Copy the API key
@@ -351,7 +351,7 @@ router.post('/openaiCompatibleModelDelete', middlewareUserAuth, async (req: Requ
 
         const config = await ModelOpenaiCompatibleModel.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!config) {

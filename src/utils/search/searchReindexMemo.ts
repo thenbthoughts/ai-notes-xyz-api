@@ -15,7 +15,7 @@ export const funcSearchReindexMemoById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface IMemoAgg extends IMemoNote {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: mongoose.Types.ObjectId;
         memoLabels: { name?: string }[];
     }
 
@@ -74,7 +74,7 @@ export const funcSearchReindexMemoById = async ({
 
         await ModelGlobalSearch.create({
             entityId: memo._id,
-            username: memo.username,
+            userId: memo.userId,
             text: searchableText,
             collectionName: 'memoNotes',
             updatedAtUtc: memo.updatedAtUtc || new Date(),

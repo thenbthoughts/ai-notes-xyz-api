@@ -34,7 +34,7 @@ router.post('/userLoginHistory', middlewareUserAuth, async (req: Request, res: R
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -95,10 +95,10 @@ router.post('/userLoginHistory', middlewareUserAuth, async (req: Request, res: R
 // Clear All Records
 router.delete('/clear-all-records', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const { auth_username } = res.locals;
+        const { auth_userId } = res.locals;
 
         // Delete all user device list records for the authenticated user
-        const result = await ModelUserDeviceList.deleteMany({ username: auth_username });
+        const result = await ModelUserDeviceList.deleteMany({ userId: auth_userId });
 
         return res.json({
             message: 'All login history records cleared successfully',
@@ -113,11 +113,11 @@ router.delete('/clear-all-records', middlewareUserAuth, async (req: Request, res
 // Logout All Devices
 router.post('/logout-all-devices', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const { auth_username } = res.locals;
+        const { auth_userId } = res.locals;
 
         // Mark all user device list records as expired for the authenticated user
         const result = await ModelUserDeviceList.updateMany(
-            { username: auth_username },
+            { userId: auth_userId },
             { isExpired: true }
         );
 

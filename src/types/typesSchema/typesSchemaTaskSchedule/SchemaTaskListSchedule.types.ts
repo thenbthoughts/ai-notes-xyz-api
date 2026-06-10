@@ -1,8 +1,9 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export interface tsTaskListSchedule extends Document {
+    _id: Types.ObjectId;
     // auth
-    username: string;
+    userId: Types.ObjectId;
 
     // required
     isActive: boolean;

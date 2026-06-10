@@ -88,13 +88,13 @@ export function sanitizePathSegment(name: string): string {
 
 /** Relative path segments must include `ai-notes-xyz-shell-files` per shell service rules. */
 export function buildAm4ShellRelativePath(params: {
-    username: string;
+    userId: string;
     threadId: string;
     /** Real request id, or `"pending"` before the AM4 request document exists. */
     requestId: string;
     originalFileName: string;
 }): string {
-    const safeUser = sanitizePathSegment(params.username);
+    const safeUser = sanitizePathSegment(params.userId);
     const safeThread = sanitizePathSegment(params.threadId);
     const safeReq = sanitizePathSegment(params.requestId);
     const safeFile = sanitizePathSegment(params.originalFileName);

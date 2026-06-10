@@ -1,8 +1,8 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // User Interface
 interface IUserNotification extends Document {
-    username: string;
+    userId: Types.ObjectId;
 
     // info
     smtpTo: string;

@@ -9,7 +9,7 @@ export interface IChatLlmThreadContextReference extends Document {
     isAddedByAi: boolean;
 
     // auth
-    username: string;
+    userId: mongoose.Types.ObjectId;
 
     // auto
     createdAtUtc: Date;

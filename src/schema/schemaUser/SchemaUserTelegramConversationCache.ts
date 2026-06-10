@@ -13,7 +13,7 @@ const chatEntrySchema = new Schema(
 
 const userTelegramConversationCacheSchema = new Schema<IUserTelegramConversationCache>(
     {
-        username: { type: String, required: true, unique: true, lowercase: true },
+        userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, unique: true },
         chats: { type: [chatEntrySchema], default: [] },
         updatedAtUtc: { type: Date, default: Date.now },
     },

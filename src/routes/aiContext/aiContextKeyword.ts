@@ -16,7 +16,7 @@ const KEYWORD_SOURCE_TYPES = ['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVa
 // Add a single keyword manually (linked to a source, e.g. a note)
 router.post('/add', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
         const sourceId = req.body?.sourceId as string;
         const rawKeyword = req.body?.keyword as string;
         const sourceTypeRaw = (req.body?.sourceType as string) || 'notes';
@@ -37,7 +37,7 @@ router.post('/add', middlewareUserAuth, async (req: Request, res: Response) => {
         const metadataSourceId = new mongoose.Types.ObjectId(sourceId);
 
         const dup = await ModelLlmContextKeyword.findOne({
-            username: auth_username,
+            userId: auth_userId,
             metadataSourceId,
             keyword,
         });
@@ -46,7 +46,7 @@ router.post('/add', middlewareUserAuth, async (req: Request, res: Response) => {
         }
 
         const doc = await ModelLlmContextKeyword.create({
-            username: auth_username,
+            userId: auth_userId,
             keyword,
             aiCategory: '',
             aiSubCategory: '',
@@ -71,7 +71,7 @@ router.post('/add', middlewareUserAuth, async (req: Request, res: Response) => {
 // List AI Context Keywords with aggregation
 router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         let tempStage = {} as PipelineStage;
         const pipelineDocument = [] as PipelineStage[];
@@ -91,9 +91,9 @@ router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => 
 
         // stage -> match -> filters
         let matchStage = {
-            username: auth_username
+            userId: auth_userId
         } as {
-            username: string;
+            userId: string;
             metadataSourceType?: string;
             metadataSourceId?: mongoose.Types.ObjectId;
             keyword?: { $regex: string; $options: string };
@@ -157,7 +157,7 @@ router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => 
         tempStage = {
             $project: {
                 _id: 1,
-                username: 1,
+                userId: 1,
                 keyword: 1,
                 aiCategory: 1,
                 aiSubCategory: 1,
@@ -203,7 +203,7 @@ router.post('/list', middlewareUserAuth, async (req: Request, res: Response) => 
 // get group by ai category
 router.post('/group-by-field', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
         const { groupByField } = req.body;
 
         // Validate groupByField
@@ -211,7 +211,7 @@ router.post('/group-by-field', middlewareUserAuth, async (req: Request, res: Res
         const fieldToGroupBy = validFields.includes(groupByField) ? groupByField : 'aiCategory';
 
         const groupedData = await ModelLlmContextKeyword.aggregate([
-            { $match: { username: auth_username } },
+            { $match: { userId: auth_userId } },
             {
                 $group: {
                     _id: `$${fieldToGroupBy}`,
@@ -236,10 +236,10 @@ router.post('/group-by-field', middlewareUserAuth, async (req: Request, res: Res
 // Get keyword statistics using aggregation
 router.post('/stats', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         const stats = await ModelLlmContextKeyword.aggregate([
-            { $match: { username: auth_username } },
+            { $match: { userId: auth_userId } },
             {
                 $facet: {
                     totalKeywords: [
@@ -311,11 +311,11 @@ router.post('/stats', middlewareUserAuth, async (req: Request, res: Response) =>
 // Revalidate AI Context Keywords - Trigger keyword generation for all sources
 router.post('/revalidate', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        const auth_username = res.locals.auth_username;
+        const auth_userId = res.locals.auth_userId;
 
         // Check if user has valid API keys
         const userApi = await ModelUserApiKey.findOne({
-            username: auth_username,
+            userId: auth_userId,
             $or: [
                 { apiKeyGroqValid: true },
                 { apiKeyOpenrouterValid: true },
@@ -332,19 +332,19 @@ router.post('/revalidate', middlewareUserAuth, async (req: Request, res: Respons
         // Use aggregation to get all source IDs efficiently
         const [notesIds, tasksIds, lifeEventsIds, infoVaultIds] = await Promise.all([
             ModelNotes.aggregate([
-                { $match: { username: auth_username } },
+                { $match: { userId: auth_userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelTask.aggregate([
-                { $match: { username: auth_username } },
+                { $match: { userId: auth_userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelLifeEvents.aggregate([
-                { $match: { username: auth_username } },
+                { $match: { userId: auth_userId } },
                 { $project: { _id: 1 } }
             ]),
             ModelInfoVault.aggregate([
-                { $match: { username: auth_username } },
+                { $match: { userId: auth_userId } },
                 { $project: { _id: 1 } }
             ])
         ]);

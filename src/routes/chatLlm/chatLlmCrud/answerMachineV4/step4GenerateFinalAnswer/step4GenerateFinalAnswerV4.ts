@@ -9,9 +9,9 @@ import fetchLlmUnified, { Message } from '../../../../../utils/llmPendingTask/ut
 import { trackAnswerMachineTokens } from '../../answerMachineShared/tokenTracking';
 import { getLlmConfig } from '../../answerMachineShared/answerMachineGetLlmConfig';
 
-async function getConversationMessages(threadId: mongoose.Types.ObjectId, username: string): Promise<IChatLlm[]> {
+async function getConversationMessages(threadId: mongoose.Types.ObjectId, userId: string | mongoose.Types.ObjectId): Promise<IChatLlm[]> {
     return (await ModelChatLlm.aggregate([
-        { $match: { threadId, username, type: 'text' } },
+        { $match: { threadId, userId: userId.toString(), type: 'text' } },
         { $sort: { createdAtUtc: 1 } },
     ])) as IChatLlm[];
 }
@@ -46,9 +46,9 @@ const step4GenerateFinalAnswerV4 = async ({
         }
 
         const threadId = answerMachineRecord.threadId;
-        const username = answerMachineRecord.username;
+        const userId = answerMachineRecord.userId;
 
-        const thread = await ModelChatLlmThread.findOne({ _id: threadId, username });
+        const thread = await ModelChatLlmThread.findOne({ _id: threadId, userId });
         if (!thread) {
             return { success: false, errorReason: 'Thread not found', data: null };
         }
@@ -58,7 +58,7 @@ const step4GenerateFinalAnswerV4 = async ({
             return { success: false, errorReason: 'Failed to get LLM configuration', data: null };
         }
 
-        const conversationMessages = await getConversationMessages(threadId, username);
+        const conversationMessages = await getConversationMessages(threadId, userId);
         const conversationText = formatConversationMessages(conversationMessages);
 
         const answeredSubQuestions = await ModelAnswerMachineSubQuestionV4.find({
@@ -117,7 +117,7 @@ const step4GenerateFinalAnswerV4 = async ({
         }
 
         try {
-            await trackAnswerMachineTokens(threadId, llmResult.usageStats, username, 'final_answer');
+            await trackAnswerMachineTokens(threadId, llmResult.usageStats, userId, 'final_answer');
         } catch {
             /* empty */
         }

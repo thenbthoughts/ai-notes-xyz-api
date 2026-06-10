@@ -21,7 +21,7 @@ export const funcSearchReindexNotesById = async ({
 }): Promise<IGlobalSearch | null> => {
     interface INotesAggregate extends INotes {
         _id: mongoose.Types.ObjectId;
-        username: string;
+        userId: mongoose.Types.ObjectId;
         notesWorkspace: INotesWorkspace[];
         comments: ISchemaCommentCommon[];
         aiContextFaq: IFaq[];
@@ -170,7 +170,7 @@ export const funcSearchReindexNotesById = async ({
         // insert new record
         await ModelGlobalSearch.create({
             entityId: note._id,
-            username: note.username,
+            userId: note.userId,
             text: searchableText,
             collectionName: 'notes',
             notesWorkspaceId: note.notesWorkspaceId,

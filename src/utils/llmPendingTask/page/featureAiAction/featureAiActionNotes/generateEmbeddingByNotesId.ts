@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { v5 as uuidv5 } from 'uuid';
 
@@ -34,9 +35,9 @@ const findNotesRecord = async (targetRecordId: string | null): Promise<INotes | 
 /**
  * Validate user API keys for Ollama and Qdrant
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | ObjectId) => {
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
@@ -152,17 +153,17 @@ const generateEmbeddingByNotesId = async ({
 
         // Step 2: Check if AI features are enabled for this user
         const user = await ModelUser.findOne({
-            username: notesRecord.username,
+            _id: notesRecord.userId,
             featureAiActionsEnabled: true,
             featureAiActionsNotes: true
         });
         if (!user) {
-            console.log('Notes AI or AI features not enabled for user:', notesRecord.username);
+            console.log('Notes AI or AI features not enabled for user:', notesRecord.userId);
             return true; // Skip embedding generation if AI features or Notes AI is not enabled
         }
 
         // Step 4: Validate API keys
-        const apiKeys = await validateApiKeys(notesRecord.username);
+        const apiKeys = await validateApiKeys(notesRecord.userId);
         if (!apiKeys) {
             return true;
         }
@@ -187,7 +188,7 @@ const generateEmbeddingByNotesId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${notesRecord.username}`;
+        const collectionName = `index-user-${notesRecord.userId}`;
 
         // Step 10: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

@@ -33,7 +33,7 @@ router.post('/notesWorkspaceGet', middlewareUserAuth, async (req: Request, res: 
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -171,7 +171,7 @@ router.post('/notesWorkspaceDelete', middlewareUserAuth, async (req: Request, re
 
         const noteWorkspace = await ModelNotesWorkspace.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!noteWorkspace) {
@@ -192,7 +192,7 @@ router.post('/notesWorkspaceAdd', middlewareUserAuth, async (req: Request, res: 
 
         const now = new Date();
         const newNoteWorkspace = await ModelNotesWorkspace.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             title: req.body.title || title,
             description: req.body.description || '',
             isStar: req.body.isStar === true,
@@ -260,7 +260,7 @@ router.post('/notesWorkspaceEdit', middlewareUserAuth, async (req: Request, res:
             await ModelNotesWorkspace.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -283,7 +283,7 @@ router.post('/notesWorkspaceEdit', middlewareUserAuth, async (req: Request, res:
 router.post('/notesWorkspaceAddDefault', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const defaultNotesWorkspace = await ModelNotesWorkspace.find({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (defaultNotesWorkspace.length >= 1) {
@@ -293,7 +293,7 @@ router.post('/notesWorkspaceAddDefault', middlewareUserAuth, async (req: Request
         }
 
         const newNotesWorkspace = await ModelNotesWorkspace.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             title: 'Your Notes Workspace',
         });
         return res.json({

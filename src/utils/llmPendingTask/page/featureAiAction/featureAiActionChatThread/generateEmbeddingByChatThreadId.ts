@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import { v5 as uuidv5 } from 'uuid';
 
 import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
@@ -34,9 +35,9 @@ const findChatThreadRecord = async (targetRecordId: string | null): Promise<ICha
 /**
  * Validate user API keys for Ollama and Qdrant
  */
-const validateApiKeys = async (username: string) => {
+const validateApiKeys = async (userId: string | ObjectId) => {
     const apiKeys = await ModelUserApiKey.findOne({
-        username: username,
+        userId: userId,
         apiKeyOllamaValid: true,
         apiKeyQdrantValid: true,
     });
@@ -150,7 +151,7 @@ const generateEmbeddingByChatThreadId = async ({
         const chatThreadId = chatThreadRecord._id as ObjectId;
 
         // Step 2: Validate API keys
-        const apiKeys = await validateApiKeys(chatThreadRecord.username);
+        const apiKeys = await validateApiKeys(chatThreadRecord.userId);
         if (!apiKeys) {
             return true;
         }
@@ -175,7 +176,7 @@ const generateEmbeddingByChatThreadId = async ({
         }
 
         // collection name
-        const collectionName = `index-user-${chatThreadRecord.username}`;
+        const collectionName = `index-user-${chatThreadRecord.userId}`;
 
         // Step 7: Ensure collection exists
         await ensureQdrantCollection(qdrantClient, collectionName, embedding.length);

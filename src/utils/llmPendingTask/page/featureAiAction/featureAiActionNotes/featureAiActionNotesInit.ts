@@ -20,19 +20,19 @@ const featureAiActionNotesInit = async ({
         console.log('targetRecordId', targetRecordId);
 
         // Check if Notes AI is enabled for this user
-        const notesForUserCheck = await ModelNotes.findById(targetRecordId).select('username').lean();
+        const notesForUserCheck = await ModelNotes.findById(targetRecordId).select('userId').lean();
         if (!notesForUserCheck) {
             return true;
         }
 
         const user = await ModelUser.findOne({
-            username: notesForUserCheck.username,
+            _id: notesForUserCheck.userId,
             featureAiActionsEnabled: true,
             featureAiActionsNotes: true
         });
 
         if (!user) {
-            console.log('Notes AI not enabled for user:', notesForUserCheck.username);
+            console.log('Notes AI not enabled for user:', notesForUserCheck.userId);
             return true; // Skip AI processing if Notes AI is not enabled
         }
 
@@ -67,7 +67,7 @@ const featureAiActionNotesInit = async ({
         console.log('resultKeywords', resultKeywords);
 
         // reindex the document in global search after all AI actions are complete
-        const notesRecord = await ModelNotes.findById(targetRecordId).select('username').lean();
+        const notesRecord = await ModelNotes.findById(targetRecordId).select('userId').lean();
         if (notesRecord) {
             await reindexDocument({
                 reindexDocumentArr: [{

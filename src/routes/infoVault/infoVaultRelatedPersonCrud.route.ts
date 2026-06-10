@@ -34,7 +34,7 @@ router.post('/infoVaultRelatedPersonGet', middlewareUserAuth, async (req: Reques
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -169,7 +169,7 @@ router.post('/infoVaultRelatedPersonDelete', middlewareUserAuth, async (req: Req
 
         const infoVaultRelatedPerson = await ModelInfoVaultRelatedPerson.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         if (!infoVaultRelatedPerson) {
@@ -201,7 +201,7 @@ router.post('/infoVaultRelatedPersonAdd', middlewareUserAuth, async (req: Reques
         // does infoVault belong to user
         const infoVault = await ModelInfoVault.findOne({
             _id: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!infoVault) {
             return res.status(400).json({ message: 'InfoVault not found or unauthorized' });
@@ -210,7 +210,7 @@ router.post('/infoVaultRelatedPersonAdd', middlewareUserAuth, async (req: Reques
         const now = new Date();
         const newInfoVaultRelatedPerson = await ModelInfoVaultRelatedPerson.create({
             infoVaultId: infoVaultId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             relatedPersonName: req.body.relatedPersonName || '',
             label: req.body.label || 'related',
             createdAtUtc: now,
@@ -258,7 +258,7 @@ router.post('/infoVaultRelatedPersonEdit', middlewareUserAuth, async (req: Reque
             await ModelInfoVaultRelatedPerson.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {

@@ -40,7 +40,7 @@ router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response)
         // stage -> match -> auth
         tempStage = {
             $match: {
-                username: res.locals.auth_username,
+                userId: res.locals.auth_userId,
             }
         };
         pipelineDocument.push(tempStage);
@@ -260,7 +260,7 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
 
         const note = await ModelNotes.findOneAndDelete({
             _id: _id,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
 
         // TODO delete notes from vector db
@@ -271,7 +271,7 @@ router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Respon
 
         // delete files from s3
         await deleteFilesByParentEntityId({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             parentEntityId: _id.toString(),
         });
 
@@ -302,7 +302,7 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
         // does workspace belong to user
         const notesWorkspace = await ModelNotesWorkspace.findOne({
             _id: notesWorkspaceId,
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
         });
         if (!notesWorkspace) {
             return res.status(400).json({ message: 'Notes workspace not found or unauthorized' });
@@ -310,7 +310,7 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
 
         const now = new Date();
         const newNote = await ModelNotes.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             notesWorkspaceId: notesWorkspaceId,
             title: req.body.title || title,
             description: req.body.description || '',
@@ -329,7 +329,7 @@ router.post('/notesAdd', middlewareUserAuth, async (req: Request, res: Response)
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.notes,
             targetRecordId: newNote._id,
         });
@@ -402,7 +402,7 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
             await ModelNotes.updateOne(
                 {
                     _id: _id,
-                    username: res.locals.auth_username,
+                    userId: res.locals.auth_userId,
                 },
                 {
                     $set: {
@@ -414,7 +414,7 @@ router.post('/notesEdit', middlewareUserAuth, async (req: Request, res: Response
 
         // generate Feature AI Actions by source id
         await ModelLlmPendingTaskCron.create({
-            username: res.locals.auth_username,
+            userId: res.locals.auth_userId,
             taskType: llmPendingTaskTypes.page.featureAiActions.notes,
             targetRecordId: _id,
         });
