@@ -1005,21 +1005,29 @@ async function shellStep1LoadThreadAndKeys(params: {
     }
 
     const keys = getApiKeyByObject(userKeyDoc);
-    if (!keys.shellEngineValid || !keys.shellEngineUrl || !keys.shellEngineToken) {
+    const isAnswerMachine = thread.answerEngine === 'answerMachine4';
+    const isShellValid = isAnswerMachine ? keys.apiKeyOpencodeWithShellValid : keys.shellEngineValid;
+    const shellUrl = isAnswerMachine ? keys.opencodeWithCustomShellUrl : keys.shellEngineUrl;
+    const shellToken = isAnswerMachine ? keys.opencodeWithCustomShellToken : keys.shellEngineToken;
+
+    if (!isShellValid || !shellUrl || !shellToken) {
         logStep(1, 'shell engine not configured on keys', {
-            shellEngineValid: keys.shellEngineValid,
-            hasUrl: Boolean(keys.shellEngineUrl),
-            hasToken: Boolean(keys.shellEngineToken),
+            isAnswerMachine,
+            isShellValid,
+            hasUrl: Boolean(shellUrl),
+            hasToken: Boolean(shellToken),
         });
         return {
             ok: false,
-            error: 'Shell execute is enabled but Shell service is not configured in API Keys.',
+            error: isAnswerMachine
+                ? 'Shell execute is enabled but OpenCode with Shell is not configured in API Keys.'
+                : 'Shell execute is enabled but Shell service is not configured in API Keys.',
         };
     }
 
-    const shellOrigin = keys.shellEngineUrl.replace(/\/+$/, '');
+    const shellOrigin = shellUrl.replace(/\/+$/, '');
     const apiBase = `${shellOrigin}/api`;
-    const token = keys.shellEngineToken;
+    const token = shellToken;
     logStep(1, 'shell HTTP target ready', { apiBase, tokenLength: token.length });
 
     return {

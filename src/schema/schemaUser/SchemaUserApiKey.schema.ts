@@ -79,9 +79,9 @@ const userApiKeySchema = new Schema<IUserApiKey>({
 
     // OpenCode + shell (separate shell origin + token; both must validate)
     apiKeyOpencodeWithShellValid: { type: Boolean, default: false },
-    opencodeWithShellUrl: { type: String, default: '' },
-    opencodeWithShellShellUrl: { type: String, default: '' },
-    opencodeWithShellShellToken: { type: String, default: '' },
+    opencodeUrl: { type: String, default: '' },
+    opencodeWithCustomShellUrl: { type: String, default: '' },
+    opencodeWithCustomShellToken: { type: String, default: '' },
 
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },

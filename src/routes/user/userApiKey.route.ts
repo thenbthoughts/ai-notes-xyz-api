@@ -452,20 +452,20 @@ router.post(
     async (req: Request, res: Response) => {
         try {
             const {
-                opencodeWithShellUrl,
+                opencodeUrl,
                 opencodeUsername,
                 opencodePassword,
-                opencodeWithShellShellUrl,
-                opencodeWithShellShellToken,
+                opencodeWithCustomShellUrl,
+                opencodeWithCustomShellToken,
             } = req.body as {
-                opencodeWithShellUrl?: string;
+                opencodeUrl?: string;
                 opencodeUsername?: string;
                 opencodePassword?: string;
-                opencodeWithShellShellUrl?: string;
-                opencodeWithShellShellToken?: string;
+                opencodeWithCustomShellUrl?: string;
+                opencodeWithCustomShellToken?: string;
             };
 
-            const urlRaw = typeof opencodeWithShellUrl === 'string' ? opencodeWithShellUrl : '';
+            const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl : '';
             const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
             const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
 
@@ -493,10 +493,10 @@ router.post(
             }
 
             const shellUrl =
-                typeof opencodeWithShellShellUrl === 'string' ? opencodeWithShellShellUrl : '';
+                typeof opencodeWithCustomShellUrl === 'string' ? opencodeWithCustomShellUrl : '';
             const shellTok =
-                typeof opencodeWithShellShellToken === 'string'
-                    ? opencodeWithShellShellToken
+                typeof opencodeWithCustomShellToken === 'string'
+                    ? opencodeWithCustomShellToken
                     : '';
 
             const shellCheck = await validateShellEngineEndpoints(shellUrl, shellTok);
@@ -511,9 +511,9 @@ router.post(
                 { userId: res.locals.auth_userId },
                 {
                     apiKeyOpencodeWithShellValid: true,
-                    opencodeWithShellUrl: originParsed.origin,
-                    opencodeWithShellShellUrl: shellCheck.origin,
-                    opencodeWithShellShellToken: shellCheck.token,
+                    opencodeUrl: originParsed.origin,
+                    opencodeWithCustomShellUrl: shellCheck.origin,
+                    opencodeWithCustomShellToken: shellCheck.token,
                     opencodeUsername: user,
                     opencodePassword: pass,
                 },
@@ -1776,9 +1776,9 @@ router.post(
                 },
                 opencodeWithShell: {
                     apiKeyOpencodeWithShellValid: false,
-                    opencodeWithShellUrl: '',
-                    opencodeWithShellShellUrl: '',
-                    opencodeWithShellShellToken: '',
+                    opencodeUrl: '',
+                    opencodeWithCustomShellUrl: '',
+                    opencodeWithCustomShellToken: '',
                 },
             };
 

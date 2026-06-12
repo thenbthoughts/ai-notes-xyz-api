@@ -77,9 +77,9 @@ interface IUserApiKey extends Document {
 
     /** OpenCode + ai-notes-xyz-shell token */
     apiKeyOpencodeWithShellValid: boolean;
-    opencodeWithShellUrl: string;
-    opencodeWithShellShellUrl: string;
-    opencodeWithShellShellToken: string;
+    opencodeUrl: string;
+    opencodeWithCustomShellUrl: string;
+    opencodeWithCustomShellToken: string;
 
     // user-email-verify
     userEmailVerifyOtp: number;
