@@ -73,9 +73,7 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     shellEngineUrl: { type: String, default: '' },
     shellEngineToken: { type: String, default: '' },
 
-    // OpenCode server (HTTP Basic against SDK /global/health)
-    apiKeyOpencodeValid: { type: Boolean, default: false },
-    opencodeUrl: { type: String, default: '' },
+    // OpenCode server credentials (shared with OpenCode + shell integration)
     opencodeUsername: { type: String, default: '' },
     opencodePassword: { type: String, default: '' },
 

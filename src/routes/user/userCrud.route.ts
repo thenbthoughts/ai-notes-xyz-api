@@ -37,7 +37,6 @@ router.post(
                 smtpValid: false,
                 telegramValid: false,
                 shellEngineValid: false,
-                apiKeyOpencodeValid: false,
                 apiKeyOpencodeWithShellValid: false,
 
                 // timezone
@@ -74,7 +73,6 @@ router.post(
                             smtpValid: false,
                             telegramValid: false,
                             shellEngineValid: false,
-                            apiKeyOpencodeValid: false,
                             apiKeyOpencodeWithShellValid: false,
                         }
                     },
@@ -166,13 +164,6 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.shellEngineValid === 'boolean') {
                     resultApiKey.shellEngineValid = resultUserInfoApi.shellEngineValid;
-                }
-            }
-
-            // OpenCode
-            if (resultUserInfoApi) {
-                if (typeof resultUserInfoApi?.apiKeyOpencodeValid === 'boolean') {
-                    resultApiKey.apiKeyOpencodeValid = resultUserInfoApi.apiKeyOpencodeValid;
                 }
             }
 

@@ -71,9 +71,7 @@ interface IUserApiKey extends Document {
     shellEngineUrl: string;
     shellEngineToken: string;
 
-    /** OpenCode HTTP API (Basic auth) */
-    apiKeyOpencodeValid: boolean;
-    opencodeUrl: string;
+    /** OpenCode server credentials (shared with OpenCode + shell integration) */
     opencodeUsername: string;
     opencodePassword: string;
 

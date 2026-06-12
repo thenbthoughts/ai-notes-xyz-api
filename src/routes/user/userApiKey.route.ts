@@ -445,67 +445,6 @@ router.post(
     }
 );
 
-// Update User API OpenCode (HTTP Basic + SDK health)
-router.post(
-    '/updateUserApiOpencode',
-    middlewareUserAuth,
-    async (req: Request, res: Response) => {
-        try {
-            const { opencodeUrl, opencodeUsername, opencodePassword } = req.body as {
-                opencodeUrl?: string;
-                opencodeUsername?: string;
-                opencodePassword?: string;
-            };
-
-            const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl : '';
-            const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
-            const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
-
-            const originParsed = parseOpenCodeServiceOrigin(urlRaw);
-            if ('error' in originParsed) {
-                return res.status(400).json({
-                    success: '',
-                    error: originParsed.error,
-                });
-            }
-
-            if (!user || !pass) {
-                return res.status(400).json({
-                    success: '',
-                    error: 'OpenCode userId and password are required',
-                });
-            }
-
-            const health = await validateOpencodeHealth(originParsed.origin, user, pass);
-            if (!health.ok) {
-                return res.status(400).json({
-                    success: '',
-                    error: health.error,
-                });
-            }
-
-            await ModelUserApiKey.findOneAndUpdate(
-                { userId: res.locals.auth_userId },
-                {
-                    apiKeyOpencodeValid: true,
-                    opencodeUrl: originParsed.origin,
-                    opencodeUsername: user,
-                    opencodePassword: pass,
-                },
-                { new: true }
-            );
-
-            return res.json({
-                success: 'Updated',
-                error: '',
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
 // Update User API OpenCode with Shell (OpenCode health + shell about/private)
 router.post(
     '/updateUserApiOpencodeWithShell',
@@ -1762,7 +1701,6 @@ router.post(
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
                 'shellEngine',
-                'opencode',
                 'opencodeWithShell',
             ];
 
@@ -1835,12 +1773,6 @@ router.post(
                     shellEngineValid: false,
                     shellEngineUrl: '',
                     shellEngineToken: '',
-                },
-                opencode: {
-                    apiKeyOpencodeValid: false,
-                    opencodeUrl: '',
-                    opencodeUsername: '',
-                    opencodePassword: '',
                 },
                 opencodeWithShell: {
                     apiKeyOpencodeWithShellValid: false,

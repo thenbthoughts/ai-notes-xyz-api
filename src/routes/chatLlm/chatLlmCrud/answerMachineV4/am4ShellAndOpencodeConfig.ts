@@ -37,12 +37,5 @@ export function getAm4OpencodeConfig(apiKey: tsUserApiKey): {
             password: apiKey.opencodePassword || '',
         };
     }
-    if (apiKey.apiKeyOpencodeValid && apiKey.opencodeUrl?.trim()) {
-        return {
-            baseUrl: apiKey.opencodeUrl.replace(/\/+$/, ''),
-            userId: apiKey.opencodeUsername?.trim() || 'opencode',
-            password: apiKey.opencodePassword || '',
-        };
-    }
     return null;
 }

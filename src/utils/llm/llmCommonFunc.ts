@@ -50,8 +50,6 @@ export interface tsUserApiKey {
     shellEngineToken: string;
 
     // OpenCode
-    apiKeyOpencodeValid: boolean;
-    opencodeUrl: string;
     opencodeUsername: string;
     opencodePassword: string;
 
@@ -115,8 +113,6 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         shellEngineToken: '',
 
         // OpenCode
-        apiKeyOpencodeValid: false,
-        opencodeUrl: '',
         opencodeUsername: '',
         opencodePassword: '',
 
@@ -259,14 +255,6 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
 
             // OpenCode
-            if (typeof apiKeyObject.apiKeyOpencodeValid === 'boolean') {
-                if (apiKeyObject.apiKeyOpencodeValid) {
-                    apiKey.apiKeyOpencodeValid = true;
-                }
-            }
-            if (typeof apiKeyObject.opencodeUrl === 'string') {
-                apiKey.opencodeUrl = apiKeyObject.opencodeUrl;
-            }
             if (typeof apiKeyObject.opencodeUsername === 'string') {
                 apiKey.opencodeUsername = apiKeyObject.opencodeUsername;
             }
