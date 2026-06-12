@@ -445,16 +445,24 @@ router.post(
     }
 );
 
-// Update User API OpenCode (HTTP Basic + SDK health)
+// Update User API OpenCode with Shell (OpenCode health + shell about/private)
 router.post(
-    '/updateUserApiOpencode',
+    '/updateUserApiOpencodeWithShell',
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const { opencodeUrl, opencodeUsername, opencodePassword } = req.body as {
+            const {
+                opencodeUrl,
+                opencodeUsername,
+                opencodePassword,
+                opencodeWithCustomShellUrl,
+                opencodeWithCustomShellToken,
+            } = req.body as {
                 opencodeUrl?: string;
                 opencodeUsername?: string;
                 opencodePassword?: string;
+                opencodeWithCustomShellUrl?: string;
+                opencodeWithCustomShellToken?: string;
             };
 
             const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl : '';
@@ -484,80 +492,11 @@ router.post(
                 });
             }
 
-            await ModelUserApiKey.findOneAndUpdate(
-                { userId: res.locals.auth_userId },
-                {
-                    apiKeyOpencodeValid: true,
-                    opencodeUrl: originParsed.origin,
-                    opencodeUsername: user,
-                    opencodePassword: pass,
-                },
-                { new: true }
-            );
-
-            return res.json({
-                success: 'Updated',
-                error: '',
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
-// Update User API OpenCode with Shell (OpenCode health + shell about/private)
-router.post(
-    '/updateUserApiOpencodeWithShell',
-    middlewareUserAuth,
-    async (req: Request, res: Response) => {
-        try {
-            const {
-                opencodeWithShellUrl,
-                opencodeUsername,
-                opencodePassword,
-                opencodeWithShellShellUrl,
-                opencodeWithShellShellToken,
-            } = req.body as {
-                opencodeWithShellUrl?: string;
-                opencodeUsername?: string;
-                opencodePassword?: string;
-                opencodeWithShellShellUrl?: string;
-                opencodeWithShellShellToken?: string;
-            };
-
-            const urlRaw = typeof opencodeWithShellUrl === 'string' ? opencodeWithShellUrl : '';
-            const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
-            const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
-
-            const originParsed = parseOpenCodeServiceOrigin(urlRaw);
-            if ('error' in originParsed) {
-                return res.status(400).json({
-                    success: '',
-                    error: originParsed.error,
-                });
-            }
-
-            if (!user || !pass) {
-                return res.status(400).json({
-                    success: '',
-                    error: 'OpenCode userId and password are required',
-                });
-            }
-
-            const health = await validateOpencodeHealth(originParsed.origin, user, pass);
-            if (!health.ok) {
-                return res.status(400).json({
-                    success: '',
-                    error: health.error,
-                });
-            }
-
             const shellUrl =
-                typeof opencodeWithShellShellUrl === 'string' ? opencodeWithShellShellUrl : '';
+                typeof opencodeWithCustomShellUrl === 'string' ? opencodeWithCustomShellUrl : '';
             const shellTok =
-                typeof opencodeWithShellShellToken === 'string'
-                    ? opencodeWithShellShellToken
+                typeof opencodeWithCustomShellToken === 'string'
+                    ? opencodeWithCustomShellToken
                     : '';
 
             const shellCheck = await validateShellEngineEndpoints(shellUrl, shellTok);
@@ -572,9 +511,9 @@ router.post(
                 { userId: res.locals.auth_userId },
                 {
                     apiKeyOpencodeWithShellValid: true,
-                    opencodeWithShellUrl: originParsed.origin,
-                    opencodeWithShellShellUrl: shellCheck.origin,
-                    opencodeWithShellShellToken: shellCheck.token,
+                    opencodeUrl: originParsed.origin,
+                    opencodeWithCustomShellUrl: shellCheck.origin,
+                    opencodeWithCustomShellToken: shellCheck.token,
                     opencodeUsername: user,
                     opencodePassword: pass,
                 },
@@ -1762,7 +1701,6 @@ router.post(
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
                 'shellEngine',
-                'opencode',
                 'opencodeWithShell',
             ];
 
@@ -1836,17 +1774,11 @@ router.post(
                     shellEngineUrl: '',
                     shellEngineToken: '',
                 },
-                opencode: {
-                    apiKeyOpencodeValid: false,
-                    opencodeUrl: '',
-                    opencodeUsername: '',
-                    opencodePassword: '',
-                },
                 opencodeWithShell: {
                     apiKeyOpencodeWithShellValid: false,
-                    opencodeWithShellUrl: '',
-                    opencodeWithShellShellUrl: '',
-                    opencodeWithShellShellToken: '',
+                    opencodeUrl: '',
+                    opencodeWithCustomShellUrl: '',
+                    opencodeWithCustomShellToken: '',
                 },
             };
 

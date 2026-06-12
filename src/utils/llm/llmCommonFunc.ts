@@ -50,16 +50,14 @@ export interface tsUserApiKey {
     shellEngineToken: string;
 
     // OpenCode
-    apiKeyOpencodeValid: boolean;
-    opencodeUrl: string;
     opencodeUsername: string;
     opencodePassword: string;
 
     // OpenCode + shell
     apiKeyOpencodeWithShellValid: boolean;
-    opencodeWithShellUrl: string;
-    opencodeWithShellShellUrl: string;
-    opencodeWithShellShellToken: string;
+    opencodeUrl: string;
+    opencodeWithCustomShellUrl: string;
+    opencodeWithCustomShellToken: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -115,16 +113,14 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         shellEngineToken: '',
 
         // OpenCode
-        apiKeyOpencodeValid: false,
-        opencodeUrl: '',
         opencodeUsername: '',
         opencodePassword: '',
 
         // OpenCode + shell
         apiKeyOpencodeWithShellValid: false,
-        opencodeWithShellUrl: '',
-        opencodeWithShellShellUrl: '',
-        opencodeWithShellShellToken: '',
+        opencodeUrl: '',
+        opencodeWithCustomShellUrl: '',
+        opencodeWithCustomShellToken: '',
     } as tsUserApiKey;
 
     try {
@@ -259,14 +255,6 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
 
             // OpenCode
-            if (typeof apiKeyObject.apiKeyOpencodeValid === 'boolean') {
-                if (apiKeyObject.apiKeyOpencodeValid) {
-                    apiKey.apiKeyOpencodeValid = true;
-                }
-            }
-            if (typeof apiKeyObject.opencodeUrl === 'string') {
-                apiKey.opencodeUrl = apiKeyObject.opencodeUrl;
-            }
             if (typeof apiKeyObject.opencodeUsername === 'string') {
                 apiKey.opencodeUsername = apiKeyObject.opencodeUsername;
             }
@@ -280,14 +268,14 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
                     apiKey.apiKeyOpencodeWithShellValid = true;
                 }
             }
-            if (typeof apiKeyObject.opencodeWithShellUrl === 'string') {
-                apiKey.opencodeWithShellUrl = apiKeyObject.opencodeWithShellUrl;
+            if (typeof apiKeyObject.opencodeUrl === 'string') {
+                apiKey.opencodeUrl = apiKeyObject.opencodeUrl;
             }
-            if (typeof apiKeyObject.opencodeWithShellShellUrl === 'string') {
-                apiKey.opencodeWithShellShellUrl = apiKeyObject.opencodeWithShellShellUrl;
+            if (typeof apiKeyObject.opencodeWithCustomShellUrl === 'string') {
+                apiKey.opencodeWithCustomShellUrl = apiKeyObject.opencodeWithCustomShellUrl;
             }
-            if (typeof apiKeyObject.opencodeWithShellShellToken === 'string') {
-                apiKey.opencodeWithShellShellToken = apiKeyObject.opencodeWithShellShellToken;
+            if (typeof apiKeyObject.opencodeWithCustomShellToken === 'string') {
+                apiKey.opencodeWithCustomShellToken = apiKeyObject.opencodeWithCustomShellToken;
             }
         }
         return apiKey;

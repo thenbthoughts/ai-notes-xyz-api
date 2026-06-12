@@ -3,12 +3,12 @@ import type { tsUserApiKey } from '../../../../utils/llm/llmCommonFunc';
 export function getAm4ShellUploadConfig(apiKey: tsUserApiKey): { baseUrl: string; token: string } | null {
     if (
         apiKey.apiKeyOpencodeWithShellValid &&
-        apiKey.opencodeWithShellShellUrl?.trim() &&
-        apiKey.opencodeWithShellShellToken
+        apiKey.opencodeWithCustomShellUrl?.trim() &&
+        apiKey.opencodeWithCustomShellToken
     ) {
         return {
-            baseUrl: apiKey.opencodeWithShellShellUrl.replace(/\/+$/, ''),
-            token: apiKey.opencodeWithShellShellToken,
+            baseUrl: apiKey.opencodeWithCustomShellUrl.replace(/\/+$/, ''),
+            token: apiKey.opencodeWithCustomShellToken,
         };
     }
     if (apiKey.shellEngineValid && apiKey.shellEngineUrl?.trim() && apiKey.shellEngineToken) {
@@ -30,14 +30,7 @@ export function getAm4OpencodeConfig(apiKey: tsUserApiKey): {
     userId: string;
     password: string;
 } | null {
-    if (apiKey.apiKeyOpencodeWithShellValid && apiKey.opencodeWithShellUrl?.trim()) {
-        return {
-            baseUrl: apiKey.opencodeWithShellUrl.replace(/\/+$/, ''),
-            userId: apiKey.opencodeUsername?.trim() || 'opencode',
-            password: apiKey.opencodePassword || '',
-        };
-    }
-    if (apiKey.apiKeyOpencodeValid && apiKey.opencodeUrl?.trim()) {
+    if (apiKey.apiKeyOpencodeWithShellValid && apiKey.opencodeUrl?.trim()) {
         return {
             baseUrl: apiKey.opencodeUrl.replace(/\/+$/, ''),
             userId: apiKey.opencodeUsername?.trim() || 'opencode',
