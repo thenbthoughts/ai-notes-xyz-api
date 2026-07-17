@@ -445,12 +445,14 @@ router.post(
                 systemPrompt,
             });
 
-            // reindex for global search
-            await reindexDocument({
+            // reindex for global search (non-blocking so create responds faster)
+            void reindexDocument({
                 reindexDocumentArr: [{
                     collectionName: 'chatLlmThread',
                     documentId: (newThread._id as mongoose.Types.ObjectId).toString(),
                 }],
+            }).catch((error) => {
+                console.error('Error reindexing new chat thread:', error);
             });
 
             return res.status(201).json({ message: 'Thread created successfully', thread: newThread });
