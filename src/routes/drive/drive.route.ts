@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import path from 'path';
+import fileUpload from 'express-fileupload';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 import { ModelUserS3Bucket } from '../../schema/schemaDrive/SchemaUserS3Bucket.schema';
 import { ModelS3FileIndex } from '../../schema/schemaDrive/SchemaS3FileIndex.schema';
@@ -7,9 +9,25 @@ import { indexFilesFromS3 } from '../../utils/drive/s3IndexFiles';
 import { deleteFileFromS3 } from '../../utils/drive/s3DeleteFile';
 import { createS3Client } from '../../utils/drive/s3ListFiles';
 import { serializeDriveFile } from '../../utils/drive/driveApiHelpers';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+    validateDriveCreateFileName,
+    validateDriveFolderPath,
+    validateDrivePathSegment,
+} from '../../utils/drive/drivePathValidation';
+import {
+    buildDriveFileLocation,
+    upsertDriveFileIndex,
+} from '../../utils/drive/driveUpsertIndex';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const router = Router();
+
+const resolveContentTypeForCreate = (fileName: string): string => {
+    const ext = path.extname(fileName).toLowerCase();
+    if (ext === '.md' || ext === '.markdown') return 'text/markdown; charset=utf-8';
+    if (ext === '.txt') return 'text/plain; charset=utf-8';
+    return 'application/octet-stream';
+};
 
 // Get user's S3 buckets
 router.get('/buckets', middlewareUserAuth, async (req: Request, res: Response) => {
@@ -231,6 +249,215 @@ router.post('/files', middlewareUserAuth, async (req: Request, res: Response) =>
         return res.status(500).json({ message: 'Server error' });
     }
 });
+
+// List folders (for folder picker)
+router.post('/folders', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const userId = res.locals.auth_userId;
+        const { bucketName } = req.body;
+
+        if (!bucketName) {
+            return res.status(400).json({ message: 'bucketName is required' });
+        }
+
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
+        if (!bucket) {
+            return res.status(404).json({ message: 'Bucket not found' });
+        }
+
+        const folders = await ModelS3FileIndex.find({
+            userId,
+            bucketName,
+            isFolder: true,
+        })
+            .sort({ filePath: 1 })
+            .limit(5000);
+
+        return res.status(200).json({
+            success: true,
+            folders: folders.map(serializeDriveFile),
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create a new text or markdown file in a folder
+router.post('/file', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const userId = res.locals.auth_userId;
+        const {
+            bucketName,
+            folderPath = '',
+            fileName,
+            fileType = 'txt',
+            content = '',
+            overwrite = false,
+        } = req.body;
+
+        if (!bucketName) {
+            return res.status(400).json({ message: 'bucketName is required' });
+        }
+
+        const folderResult = validateDriveFolderPath(folderPath);
+        if (!folderResult.valid) {
+            return res.status(400).json({ message: folderResult.error });
+        }
+
+        const type = fileType === 'md' || fileType === 'markdown' ? 'md' : 'txt';
+        const nameResult = validateDriveCreateFileName(fileName, type);
+        if (!nameResult.valid) {
+            return res.status(400).json({ message: nameResult.error });
+        }
+
+        if (typeof content !== 'string') {
+            return res.status(400).json({ message: 'content must be a string' });
+        }
+
+        const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
+        if (!bucket) {
+            return res.status(404).json({ message: 'Bucket not found' });
+        }
+
+        const location = buildDriveFileLocation({
+            bucket,
+            parentPath: folderResult.normalized,
+            fileName: nameResult.normalized,
+        });
+
+        const existing = await ModelS3FileIndex.findOne({
+            userId,
+            bucketName,
+            fileKey: location.fileKey,
+        });
+        if (existing && !overwrite) {
+            return res.status(409).json({ message: 'A file with this name already exists in the folder' });
+        }
+
+        const contentType = resolveContentTypeForCreate(nameResult.normalized);
+        const bodyBuffer = Buffer.from(content, 'utf-8');
+
+        const s3Client = createS3Client(bucket);
+        await s3Client.send(
+            new PutObjectCommand({
+                Bucket: bucket.bucketName,
+                Key: location.fileKey,
+                Body: bodyBuffer,
+                ContentType: contentType,
+            })
+        );
+
+        const { file } = await upsertDriveFileIndex({
+            userId,
+            bucket,
+            parentPath: folderResult.normalized,
+            fileName: nameResult.normalized,
+            fileSize: bodyBuffer.byteLength,
+            contentType,
+        });
+
+        return res.status(201).json({ success: true, file });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Upload a file into a folder (multipart)
+router.post(
+    '/upload',
+    middlewareUserAuth,
+    fileUpload({
+        limits: { fileSize: 1024 * 1024 * 512 },
+        abortOnLimit: true,
+    }),
+    async (req: Request, res: Response) => {
+        try {
+            const userId = res.locals.auth_userId;
+            const bucketName = req.body?.bucketName as string | undefined;
+            const folderPath = (req.body?.folderPath as string | undefined) ?? '';
+            const overwrite =
+                req.body?.overwrite === true ||
+                req.body?.overwrite === 'true' ||
+                req.body?.overwrite === '1';
+            const customFileName = req.body?.fileName as string | undefined;
+
+            if (!bucketName) {
+                return res.status(400).json({ message: 'bucketName is required' });
+            }
+
+            if (!req.files || Object.keys(req.files).length === 0) {
+                return res.status(400).json({ message: 'No file uploaded' });
+            }
+
+            const uploaded = req.files.file;
+            if (!uploaded || Array.isArray(uploaded)) {
+                return res.status(400).json({ message: 'Upload a single file using the "file" field' });
+            }
+
+            const folderResult = validateDriveFolderPath(folderPath);
+            if (!folderResult.valid) {
+                return res.status(400).json({ message: folderResult.error });
+            }
+
+            const rawName = (customFileName && String(customFileName).trim()) || uploaded.name;
+            const nameResult = validateDrivePathSegment(rawName, 'file');
+            if (!nameResult.valid) {
+                return res.status(400).json({ message: nameResult.error });
+            }
+
+            const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
+            if (!bucket) {
+                return res.status(404).json({ message: 'Bucket not found' });
+            }
+
+            const location = buildDriveFileLocation({
+                bucket,
+                parentPath: folderResult.normalized,
+                fileName: nameResult.normalized,
+            });
+
+            const existing = await ModelS3FileIndex.findOne({
+                userId,
+                bucketName,
+                fileKey: location.fileKey,
+            });
+            if (existing && !overwrite) {
+                return res.status(409).json({ message: 'A file with this name already exists in the folder' });
+            }
+
+            const contentType =
+                uploaded.mimetype ||
+                resolveContentTypeForCreate(nameResult.normalized) ||
+                'application/octet-stream';
+
+            const s3Client = createS3Client(bucket);
+            await s3Client.send(
+                new PutObjectCommand({
+                    Bucket: bucket.bucketName,
+                    Key: location.fileKey,
+                    Body: uploaded.data,
+                    ContentType: contentType,
+                })
+            );
+
+            const { file } = await upsertDriveFileIndex({
+                userId,
+                bucket,
+                parentPath: folderResult.normalized,
+                fileName: nameResult.normalized,
+                fileSize: uploaded.size,
+                contentType,
+            });
+
+            return res.status(201).json({ success: true, file });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
 
 // Get file content
 router.get('/file', middlewareUserAuth, async (req: Request, res: Response) => {
