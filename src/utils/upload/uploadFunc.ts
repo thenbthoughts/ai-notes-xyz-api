@@ -29,6 +29,8 @@ export interface GetFileOptions {
     fileName: string;
     storageType?: StorageType;
     s3Config?: S3Config;
+    /** Inclusive byte range for partial reads (HTTP Range / video seeking). */
+    range?: { start: number; end: number };
 }
 
 export interface PutFileResult {
@@ -41,6 +43,8 @@ export interface GetFileResult {
     success: boolean;
     content?: Buffer;
     contentType?: string;
+    /** Total file size in bytes (full object, not just the returned slice). */
+    totalSize?: number;
     error?: string;
 }
 
@@ -198,8 +202,7 @@ export const putFile = async (options: PutFileOptions): Promise<PutFileResult> =
  * });
  */
 export const getFile = async (options: GetFileOptions): Promise<GetFileResult> => {
-    const { fileName, storageType = 'gridfs', s3Config } = options;
-
+    const { fileName, storageType = 'gridfs', s3Config, range } = options;
     try {
         // GridFS Download
         if (storageType === 'gridfs') {
@@ -217,7 +220,14 @@ export const getFile = async (options: GetFileOptions): Promise<GetFileResult> =
             }
 
             const fileInfo = files[0];
-            const downloadStream = bucket.openDownloadStream(fileInfo._id);
+            const totalSize = typeof fileInfo.length === 'number' ? fileInfo.length : undefined;
+            // GridFS end is exclusive; HTTP Range end is inclusive
+            const downloadStream = range
+                ? bucket.openDownloadStream(fileInfo._id, {
+                    start: range.start,
+                    end: range.end + 1,
+                })
+                : bucket.openDownloadStream(fileInfo._id);
 
             // Convert stream to buffer
             const chunks: Uint8Array[] = [];
@@ -230,6 +240,7 @@ export const getFile = async (options: GetFileOptions): Promise<GetFileResult> =
                 success: true,
                 content,
                 contentType: fileInfo.contentType,
+                totalSize,
             };
         }
 
@@ -255,6 +266,9 @@ export const getFile = async (options: GetFileOptions): Promise<GetFileResult> =
                 new GetObjectCommand({
                     Bucket: s3Config.bucketName,
                     Key: fileName,
+                    ...(range
+                        ? { Range: `bytes=${range.start}-${range.end}` }
+                        : {}),
                 })
             );
 
@@ -285,10 +299,22 @@ export const getFile = async (options: GetFileOptions): Promise<GetFileResult> =
             }
             const content = Buffer.concat(chunks);
 
+            let totalSize: number | undefined;
+            if (s3Object.ContentRange) {
+                // e.g. "bytes 0-1023/2048"
+                const totalMatch = /\/(\d+)$/.exec(s3Object.ContentRange);
+                if (totalMatch) {
+                    totalSize = parseInt(totalMatch[1], 10);
+                }
+            } else if (typeof s3Object.ContentLength === 'number') {
+                totalSize = s3Object.ContentLength;
+            }
+
             return {
                 success: true,
                 content,
                 contentType: s3Object.ContentType,
+                totalSize,
             };
         }
 

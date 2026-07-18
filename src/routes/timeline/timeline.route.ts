@@ -4,143 +4,159 @@ import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../middleware/middlewareUserAuth';
 
 import { ModelRecordEmptyTable } from '../../schema/schemaOther/NoRecordTable';
+import {
+    getChatMediaAttachmentsLookupStage,
+    getCommentMediaAttachmentsLookupStage,
+    getInfoVaultMediaAttachmentsStages,
+    getMemoMediaAttachmentsLookupStage,
+    timelineNormalizeStage,
+} from '../../utils/timeline/timelineNormalize';
 
-// Router
 const router = Router();
+
+type TimelineCollection =
+    | 'tasks'
+    | 'notes'
+    | 'lifeEvents'
+    | 'infoVault'
+    | 'chatLlmThread'
+    | 'memoNotes';
+
+const entityTypeMap = {
+    tasks: 'task',
+    notes: 'note',
+    lifeEvents: 'lifeEvent',
+    chatLlmThread: 'chatLlmThread',
+    infoVault: 'infoVault',
+    memoNotes: 'memo',
+} as const;
+
+const getMediaLookupStages = (
+    userId: unknown,
+    collectionName: TimelineCollection
+): PipelineStage[] => {
+    switch (collectionName) {
+        case 'tasks':
+        case 'notes':
+        case 'lifeEvents':
+            return [getCommentMediaAttachmentsLookupStage(userId)];
+        case 'infoVault':
+            return getInfoVaultMediaAttachmentsStages(userId);
+        case 'chatLlmThread':
+            return [getChatMediaAttachmentsLookupStage(userId)];
+        case 'memoNotes':
+            return [getMemoMediaAttachmentsLookupStage(userId)];
+        default:
+            return [
+                {
+                    $addFields: {
+                        mediaAttachments: [],
+                    },
+                },
+            ];
+    }
+};
 
 const getUnionPipeline = ({
     userId,
     collectionName,
 }: {
-    userId: string;
-    collectionName: 'tasks' | 'notes' | 'lifeEvents' | 'infoVault' | 'chatLlmThread';
+    userId: unknown;
+    collectionName: TimelineCollection;
 }) => {
-    if (collectionName === 'tasks') {
-        return {
-            $unionWith: {
-                coll: 'tasks',
-                pipeline: [
-                    {
-                        $match: {
-                            userId: userId,
-                        }
-                    },
-                    {
-                        $addFields: {
-                            entityType: 'task',
-                            entityId: '$_id',
-                        }
-                    }
-                ]
-            }
-        };
+    const pipeline: any[] = [
+        {
+            $match: {
+                userId,
+            },
+        },
+        {
+            $addFields: {
+                entityType: entityTypeMap[collectionName],
+                entityId: '$_id',
+            },
+        },
+        ...getMediaLookupStages(userId, collectionName),
+    ];
+
+    // Soft-deleted / trashed memos stay out of the main timeline
+    if (collectionName === 'memoNotes') {
+        pipeline.splice(1, 0, {
+            $match: {
+                trashed: { $ne: true },
+            },
+        });
     }
 
-    if (collectionName === 'notes') {
-        return {
-            $unionWith: {
-                coll: 'notes',
-                pipeline: [
-                    {
-                        $match: {
-                            userId: userId,
-                        }
-                    },
-                    {
-                        $addFields: {
-                            entityType: 'note',
-                            entityId: '$_id',
-                        }
-                    }
-                ]
-            }
-        };
-    }
-
-    if (collectionName === 'lifeEvents') {
-        return {
-            $unionWith: {
-                coll: 'lifeEvents',
-                pipeline: [
-                    {
-                        $match: {
-                            userId: userId,
-                        }
-                    },
-                    {
-                        $addFields: {
-                            entityType: 'lifeEvent',
-                            entityId: '$_id',
-                        }
-                    }
-                ]
-            }
-        };
-    }
-
-    if (collectionName === 'chatLlmThread') {
-        return {
-            $unionWith: {
-                coll: 'chatLlmThread',
-                pipeline: [
-                    {
-                        $match: {
-                            userId: userId,
-                        }
-                    },
-                    {
-                        $addFields: {
-                            entityType: 'chatLlmThread',
-                            entityId: '$_id',
-                        }
-                    }
-                ]
-            }
-        };
-    }
-
-    if (collectionName === 'infoVault') {
-        return {
-            $unionWith: {
-                coll: 'infoVault',
-                pipeline: [
-                    {
-                        $match: {
-                            userId: userId,
-                        }
-                    },
-                    {
-                        $addFields: {
-                            entityType: 'infoVault',
-                            entityId: '$_id',
-                        }
-                    }
-                ]
-            }
-        };
-    }
-
-    return null;
+    return {
+        $unionWith: {
+            coll: collectionName,
+            pipeline,
+        },
+    } as PipelineStage;
 };
 
-// Get Timeline API
+const toId = (value: unknown) => {
+    if (value instanceof mongoose.Types.ObjectId) return value.toString();
+    if (typeof value === 'string') return value;
+    return value != null ? String(value) : '';
+};
+
+const serializeMediaAttachment = (attachment: Record<string, unknown>) => ({
+    _id: toId(attachment._id),
+    fileType: attachment.fileType || '',
+    fileUrl: attachment.fileUrl || '',
+    fileTitle: attachment.fileTitle || '',
+    fileDescription: attachment.fileDescription || '',
+    commentText: attachment.commentText || '',
+    createdAtUtc: attachment.createdAtUtc || null,
+    updatedAtUtc: attachment.updatedAtUtc || null,
+});
+
+const serializeTimelineDoc = (doc: Record<string, unknown>) => {
+    const mediaAttachmentsRaw = Array.isArray(doc.mediaAttachments)
+        ? (doc.mediaAttachments as Record<string, unknown>[])
+        : [];
+
+    const mediaAttachments = mediaAttachmentsRaw.map(serializeMediaAttachment);
+
+    return {
+        ...doc,
+        _id: toId(doc._id),
+        entityId: toId(doc.entityId),
+        parentEntityId: doc.parentEntityId ? toId(doc.parentEntityId) : toId(doc._id),
+        workspaceId: doc.workspaceId ? toId(doc.workspaceId) : undefined,
+        updatedAtUtc: doc.updatedAtUtc,
+        createdAtUtc: doc.createdAtUtc,
+        title: doc.title || '',
+        content: doc.content || '',
+        fileType: doc.mediaFileType || doc.fileType || '',
+        fileUrl: doc.mediaFileUrl || doc.fileUrl || '',
+        fileTitle: doc.mediaFileTitle || doc.fileTitle || '',
+        fileDescription: doc.fileDescription || '',
+        photoUrl: doc.photoUrl || '',
+        parentEntityType: doc.parentEntityType || doc.entityType,
+        isAi: doc.isAi ?? false,
+        mediaAttachments,
+        mediaFileType: undefined,
+        mediaFileUrl: undefined,
+        mediaFileTitle: undefined,
+        commentId: undefined,
+        _parentTask: undefined,
+        _parentNote: undefined,
+    };
+};
+
 router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
-        // args
         let page = 1;
         let perPage = 20;
 
-        // set arg -> page
-        if (typeof req.body?.page === 'number') {
-            if (req.body.page >= 1) {
-                page = req.body.page;
-            }
+        if (typeof req.body?.page === 'number' && req.body.page >= 1) {
+            page = req.body.page;
         }
-        // set arg -> perPage
-        if (typeof req.body?.perPage === 'number') {
-            if (req.body.perPage >= 1) {
-                perPage = req.body.perPage;
-            }
+        if (typeof req.body?.perPage === 'number' && req.body.perPage >= 1) {
+            perPage = Math.min(req.body.perPage, 100);
         }
 
         const userId = res.locals.auth_userId;
@@ -148,87 +164,46 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
         const pipelineDocument: PipelineStage[] = [];
         const pipelineCount: PipelineStage[] = [];
 
-        // union pipeline -> task
-        const unionPipelineTasks = getUnionPipeline({
-            userId: userId,
-            collectionName: 'tasks',
-        });
-        if (unionPipelineTasks !== null) {
-            pipelineDocument.push(unionPipelineTasks);
-            pipelineCount.push(unionPipelineTasks);
+        const unionCollections: TimelineCollection[] = [
+            'tasks',
+            'notes',
+            'lifeEvents',
+            'chatLlmThread',
+            'infoVault',
+            'memoNotes',
+        ];
+
+        for (const collectionName of unionCollections) {
+            pipelineDocument.push(getUnionPipeline({ userId, collectionName }));
+            pipelineCount.push(getUnionPipeline({ userId, collectionName }));
         }
 
-        // union pipeline -> note
-        const unionPipelineNotes = getUnionPipeline({
-            userId: userId,
-            collectionName: 'notes',
-        });
-        if (unionPipelineNotes !== null) {
-            pipelineDocument.push(unionPipelineNotes);
-            pipelineCount.push(unionPipelineNotes);
-        }
+        // Comments are not separate timeline rows — their files appear on the parent entity.
+        pipelineDocument.push(timelineNormalizeStage);
+        pipelineCount.push(timelineNormalizeStage);
 
-        // union pipeline -> lifeEvent
-        const unionPipelineLifeEvents = getUnionPipeline({
-            userId: userId,
-            collectionName: 'lifeEvents',
-        });
-        if (unionPipelineLifeEvents !== null) {
-            pipelineDocument.push(unionPipelineLifeEvents);
-            pipelineCount.push(unionPipelineLifeEvents);
-        }
-
-        // union pipeline -> chatLlmThread
-        const unionPipelineChatLlmThread = getUnionPipeline({
-            userId: userId,
-            collectionName: 'chatLlmThread',
-        });
-        if (unionPipelineChatLlmThread !== null) {
-            pipelineDocument.push(unionPipelineChatLlmThread);
-            pipelineCount.push(unionPipelineChatLlmThread);
-        }
-
-        // union pipeline -> infoVault
-        const unionPipelineInfoVault = getUnionPipeline({
-            userId: userId,
-            collectionName: 'infoVault',
-        });
-        if (unionPipelineInfoVault !== null) {
-            pipelineDocument.push(unionPipelineInfoVault);
-            pipelineCount.push(unionPipelineInfoVault);
-        }
-
-        // Sort stage
-        tempStage = {
-            $sort: { updatedAtUtc: -1 }
-        };
+        tempStage = { $sort: { updatedAtUtc: -1 } };
         pipelineDocument.push(tempStage);
         pipelineCount.push(tempStage);
 
-        // Pagination
-        tempStage = {
-            $skip: (page - 1) * perPage
-        };
-        pipelineDocument.push(tempStage);
-        tempStage = {
-            $limit: perPage
-        };
+        tempStage = { $skip: (page - 1) * perPage };
         pipelineDocument.push(tempStage);
 
-        // Count pipeline
-        tempStage = {
-            $count: 'count'
-        };
+        tempStage = { $limit: perPage };
+        pipelineDocument.push(tempStage);
+
+        tempStage = { $count: 'count' };
         pipelineCount.push(tempStage);
 
-        // Execute aggregation
         const resultTimeline = await ModelRecordEmptyTable.aggregate(pipelineDocument);
         const countResult = await ModelRecordEmptyTable.aggregate(pipelineCount);
-        const totalCount = countResult.length > 0 ? (countResult[0]?.count || 0) : 0;
+        const totalCount = countResult.length > 0 ? countResult[0]?.count || 0 : 0;
 
         return res.json({
             message: 'Timeline retrieved successfully',
-            docs: resultTimeline,
+            docs: resultTimeline.map((doc) =>
+                serializeTimelineDoc(doc as Record<string, unknown>)
+            ),
             count: totalCount,
         });
     } catch (error) {
@@ -238,4 +213,3 @@ router.post('/timelineGet', middlewareUserAuth, async (req: Request, res: Respon
 });
 
 export default router;
-

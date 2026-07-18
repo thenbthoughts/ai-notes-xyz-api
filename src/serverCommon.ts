@@ -40,7 +40,8 @@ app.use(cors({
         callback(null, false);
     },
     methods: 'GET,POST,PUT,DELETE,PATCH',
-    allowedHeaders: ['Content-Type', 'Set-Cookie', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Set-Cookie', 'Authorization', 'Range'],
+    exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'Content-Type'],
     credentials: true,
 }));
 

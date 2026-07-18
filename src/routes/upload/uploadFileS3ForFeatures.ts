@@ -19,7 +19,51 @@ router.use(fileUpload({
     limits: { fileSize: 1024 * 1024 * 1024 },
 }));
 
-// Get File API
+/** Parse a single HTTP Range header value into inclusive start/end, or null if invalid. */
+const parseByteRange = (
+    rangeHeader: string | undefined,
+    totalSize: number,
+): { start: number; end: number } | null => {
+    if (!rangeHeader || totalSize <= 0) {
+        return null;
+    }
+    const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+    if (!match) {
+        return null;
+    }
+
+    const startStr = match[1];
+    const endStr = match[2];
+    let start: number;
+    let end: number;
+
+    if (startStr === '' && endStr !== '') {
+        // suffix range: bytes=-500
+        const suffixLength = parseInt(endStr, 10);
+        if (Number.isNaN(suffixLength) || suffixLength <= 0) {
+            return null;
+        }
+        start = Math.max(0, totalSize - suffixLength);
+        end = totalSize - 1;
+    } else if (startStr !== '') {
+        start = parseInt(startStr, 10);
+        end = endStr !== '' ? parseInt(endStr, 10) : totalSize - 1;
+        if (Number.isNaN(start) || Number.isNaN(end)) {
+            return null;
+        }
+    } else {
+        return null;
+    }
+
+    if (start < 0 || start >= totalSize || start > end) {
+        return null;
+    }
+
+    end = Math.min(end, totalSize - 1);
+    return { start, end };
+};
+
+// Get File API — supports HTTP Range so <video>/<audio> can seek/stream
 router.get(
     '/getFile',
     middlewareUserAuth,
@@ -48,21 +92,45 @@ router.get(
                 bucketName: userApiKey.apiKeyS3BucketName || '',
             } : undefined;
 
+            const knownSize =
+                typeof fileRecord.size === 'number' && fileRecord.size > 0
+                    ? fileRecord.size
+                    : undefined;
+
+            // When size is known, parse Range before fetching so we only read the needed bytes.
+            // When size is unknown, fetch full file first, then slice if a Range was requested.
+            const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined;
+            const preparsedRange = knownSize ? parseByteRange(rangeHeader, knownSize) : null;
+
+            if (rangeHeader && knownSize && !preparsedRange) {
+                res.setHeader('Content-Range', `bytes */${knownSize}`);
+                return res.status(416).json({ message: 'Requested range not satisfiable' });
+            }
+
             const fileData = await getFile({
                 fileName: fileRecord.fileUploadPath,
                 storageType: storageType as 'gridfs' | 's3',
                 s3Config,
+                ...(preparsedRange ? { range: preparsedRange } : {}),
             });
 
             if (!fileData.success || !fileData.content) {
                 return res.status(404).json({ message: fileData.error || 'File not found' });
             }
 
+            const totalSize =
+                knownSize ??
+                fileData.totalSize ??
+                fileData.content.length;
+
             const contentType =
                 fileRecord.contentType ||
+                fileData.contentType ||
                 mime.getType(fileRecord.originalName || fileRecord.fileUploadPath) ||
                 'application/octet-stream';
             res.setHeader('Content-Type', contentType);
+            res.setHeader('Accept-Ranges', 'bytes');
+
             const safeName = (fileRecord.originalName || path.basename(fileRecord.fileUploadPath) || 'file').replace(
                 /["\r\n]/g,
                 '_',
@@ -77,8 +145,34 @@ router.get(
             const disposition =
                 isPdf && isShellGenerated && !inlinePreview ? 'attachment' : 'inline';
             res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}"`);
+
+            const range =
+                preparsedRange ||
+                (rangeHeader ? parseByteRange(rangeHeader, totalSize) : null);
+
+            if (rangeHeader && !range) {
+                res.setHeader('Content-Range', `bytes */${totalSize}`);
+                return res.status(416).json({ message: 'Requested range not satisfiable' });
+            }
+
+            if (range) {
+                // If we already fetched only the range from storage, content is the slice;
+                // otherwise slice the full buffer (size was unknown at fetch time).
+                const body = preparsedRange
+                    ? fileData.content
+                    : fileData.content.subarray(range.start, range.end + 1);
+
+                res.status(206);
+                res.setHeader(
+                    'Content-Range',
+                    `bytes ${range.start}-${range.end}/${totalSize}`,
+                );
+                res.setHeader('Content-Length', body.length.toString());
+                return res.send(body);
+            }
+
             res.setHeader('Content-Length', fileData.content.length.toString());
-            res.send(fileData.content);
+            return res.send(fileData.content);
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
