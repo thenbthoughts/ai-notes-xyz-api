@@ -347,7 +347,7 @@ router.put('/file', middlewareUserAuth, async (req: Request, res: Response) => {
     }
 });
 
-// Delete file
+// Delete file or folder (folders: index-only cascade; files: S3 + index)
 router.delete('/file', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const userId = res.locals.auth_userId;
@@ -367,6 +367,31 @@ router.delete('/file', middlewareUserAuth, async (req: Request, res: Response) =
         const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
+        }
+
+        // Folders are virtual index entries — remove this folder and descendants from the index
+        if (fileIndex.isFolder) {
+            const folderPath = fileIndex.filePath || '';
+            const escapeRegex = (value: string) =>
+                value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            await ModelS3FileIndex.deleteMany({
+                userId,
+                bucketName,
+                $or: [
+                    { _id: fileIndex._id },
+                    { filePath: folderPath },
+                    ...(folderPath
+                        ? [
+                              { filePath: { $regex: `^${escapeRegex(folderPath)}/` } },
+                              { parentPath: folderPath },
+                              { parentPath: { $regex: `^${escapeRegex(folderPath)}/` } },
+                          ]
+                        : []),
+                ],
+            });
+
+            return res.status(200).json({ success: true });
         }
         
         // Delete from S3
