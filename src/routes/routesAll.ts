@@ -92,6 +92,7 @@ import routesAiContextFaq from './aiContext/aiContextFaq';
 
 // timeline
 import routesTimeline from './timeline/timeline.route';
+import routesTimelineFiles from './timeline/timelineFiles.route';
 
 const router = Router();
 
@@ -194,6 +195,7 @@ router.use('/ai-context/faq', routesAiContextFaq);
 
 // routes -> timeline
 router.use('/timeline/crud', routesTimeline);
+router.use('/timeline/files', routesTimelineFiles);
 
 /*
 Example:
