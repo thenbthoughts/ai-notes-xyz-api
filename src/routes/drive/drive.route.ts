@@ -6,6 +6,7 @@ import { ModelS3FileIndex } from '../../schema/schemaDrive/SchemaS3FileIndex.sch
 import { indexFilesFromS3 } from '../../utils/drive/s3IndexFiles';
 import { deleteFileFromS3 } from '../../utils/drive/s3DeleteFile';
 import { createS3Client } from '../../utils/drive/s3ListFiles';
+import { serializeDriveFile } from '../../utils/drive/driveApiHelpers';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const router = Router();
@@ -182,60 +183,42 @@ router.post('/index/:bucketName', middlewareUserAuth, async (req: Request, res: 
     }
 });
 
-// List files/folders
+// List files/folders (folder browse)
 router.post('/files', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
         const userId = res.locals.auth_userId;
         const { bucketName, parentPath = '', page = 1, perPage = 10000 } = req.body;
-        
+
         if (!bucketName) {
             return res.status(400).json({ message: 'bucketName is required' });
         }
-        
-        // Get bucket to know its prefix
+
         const bucket = await ModelUserS3Bucket.findOne({ userId, bucketName });
         if (!bucket) {
             return res.status(404).json({ message: 'Bucket not found' });
         }
-        
-        // Use parentPath for querying - it's simpler and more reliable
-        // parentPath is already calculated correctly during indexing
-        const query: any = {
+
+        const query: Record<string, unknown> = {
             userId,
             bucketName,
             parentPath: parentPath || '',
         };
-        
+
         const skip = (page - 1) * perPage;
-        
-        // Sort: folders first (isFolder: true = 1, false = 0, so -1 means descending = folders first)
-        // Then sort by fileName alphabetically
+
         const files = await ModelS3FileIndex.find(query)
-            .sort({ 
-                isFolder: -1,  // Folders first (true comes before false)
-                fileName: 1   // Then alphabetical by name
+            .sort({
+                isFolder: -1,
+                fileName: 1,
             })
             .skip(skip)
             .limit(perPage);
-        
+
         const totalCount = await ModelS3FileIndex.countDocuments(query);
-        
+
         return res.status(200).json({
             success: true,
-            files: files.map(file => ({
-                _id: file._id,
-                fileKey: file.fileKey,
-                fileKeyArr: file.fileKeyArr || [],
-                filePath: file.filePath,
-                fileName: file.fileName,
-                fileType: file.fileType,
-                fileSize: file.fileSize,
-                contentType: file.contentType,
-                isFolder: file.isFolder,
-                parentPath: file.parentPath,
-                lastModified: file.lastModified,
-                indexedAt: file.indexedAt,
-            })),
+            files: files.map(serializeDriveFile),
             pagination: {
                 page,
                 perPage,

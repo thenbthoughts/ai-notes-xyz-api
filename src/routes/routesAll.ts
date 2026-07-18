@@ -84,6 +84,7 @@ import routesSearchCrud from './search/search.route';
 
 // drive
 import routesDrive from './drive/drive.route';
+import routesDriveLibrary from './drive/driveLibrary.route';
 
 // ai context
 import routesAiContextKeyword from './aiContext/aiContextKeyword';
@@ -185,6 +186,7 @@ router.use('/search/crud', routesSearchCrud);
 
 // routes -> drive
 router.use('/drive', routesDrive);
+router.use('/drive/library', routesDriveLibrary);
 
 // routes -> ai context
 router.use('/ai-context/keyword', routesAiContextKeyword);
