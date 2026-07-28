@@ -10,6 +10,11 @@ const llmPendingTaskTypes = {
             infoVault: 'featureAiActions_infoVault',
         },
 
+        // Agent background loop (one tick per pending task; re-enqueues while running)
+        agent: {
+            agentTick: 'pageAgent_agentTick',
+        },
+
         // task schedule
         taskSchedule: {
             taskSchedule_taskAdd: 'pageTaskSchedule_taskAdd',

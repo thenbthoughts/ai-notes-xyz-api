@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Router, Request, Response } from 'express';
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
@@ -6,6 +7,11 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import { ModelChatLlmAnswerMachineTokenRecord } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaChatLlmAnswerMachineTokenRecord.schema';
 import { ModelAnswerMachineRequestV4 } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineRequestV4.schema';
 import { ModelAnswerMachineSubQuestionV4 } from '../../../schema/schemaChatLlm/SchemaAnswerMachine/SchemaAnswerMachineSubQuestionV4.schema';
+import { ModelAgentInstance } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
+import { ModelAgentGoal } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
+import { ModelAgentUpdate } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
+import { ModelAgentMemory } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
+import cancelPendingAgentTickTasks from '../../../utils/llmPendingTask/page/agent/cancelPendingAgentTickTasks';
 
 const router = Router();
 
@@ -37,6 +43,30 @@ export interface AnswerMachinePollingResponse {
         maxTokensPerQuery: number;
         count: number;
     }>;
+}
+
+export interface AgentPollingResponse {
+    isProcessing: boolean;
+    status: 'running' | 'paused' | 'stopped' | 'completed' | 'error' | 'not_started';
+    agentInstanceId: string | null;
+    tickCount: number;
+    goals: Array<{
+        id: string;
+        title: string;
+        description: string;
+        status: string;
+        result: string;
+        orderIndex: number;
+    }>;
+    updates: Array<{
+        id: string;
+        updateType: string;
+        message: string;
+        tickNumber: number;
+        createdAtUtc: string;
+        payload: Record<string, unknown>;
+    }>;
+    memoryCount: number;
 }
 
 router.post(
@@ -284,6 +314,191 @@ router.post(
             return res.status(200).json({ success: true, message: 'Cancellation requested.' });
         } catch (error) {
             console.error('Error in answerMachineV4Cancel:', error);
+            return res.status(500).json({
+                message: 'Server error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    }
+);
+
+router.post(
+    '/agentStatus',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_userId = res.locals.auth_userId;
+            const threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const thread = await ModelChatLlmThread.findOne({
+                _id: threadId,
+                userId: auth_userId,
+            });
+            if (!thread) {
+                return res.status(404).json({ message: 'Thread not found' });
+            }
+
+            if (thread.answerEngine !== 'agent') {
+                const empty: AgentPollingResponse = {
+                    isProcessing: false,
+                    status: 'not_started',
+                    agentInstanceId: null,
+                    tickCount: 0,
+                    goals: [],
+                    updates: [],
+                    memoryCount: 0,
+                };
+                return res.status(200).json(empty);
+            }
+
+            const latestAgent = await ModelAgentInstance.findOne({
+                threadId,
+                userId: auth_userId,
+            }).sort({ createdAtUtc: -1 });
+
+            if (!latestAgent) {
+                const empty: AgentPollingResponse = {
+                    isProcessing: false,
+                    status: 'not_started',
+                    agentInstanceId: null,
+                    tickCount: 0,
+                    goals: [],
+                    updates: [],
+                    memoryCount: 0,
+                };
+                return res.status(200).json(empty);
+            }
+
+            const sinceUpdateId = getMongodbObjectOrNull(req.body.sinceUpdateId);
+
+            const goals = await ModelAgentGoal.find({
+                agentInstanceId: latestAgent._id,
+            }).sort({ orderIndex: 1 });
+
+            const updateFilter: Record<string, unknown> = {
+                agentInstanceId: latestAgent._id,
+            };
+            if (sinceUpdateId) {
+                updateFilter._id = { $gt: sinceUpdateId };
+            }
+
+            const updates = await ModelAgentUpdate.find(updateFilter)
+                .sort({ createdAtUtc: -1 })
+                .limit(sinceUpdateId ? 50 : 20)
+                .lean();
+
+            const memoryCount = await ModelAgentMemory.countDocuments({
+                agentInstanceId: latestAgent._id,
+            });
+
+            const isProcessing = latestAgent.status === 'running';
+
+            const response: AgentPollingResponse = {
+                isProcessing,
+                status: latestAgent.status,
+                agentInstanceId: String(latestAgent._id),
+                tickCount: latestAgent.tickCount || 0,
+                goals: goals.map((g) => ({
+                    id: String(g._id),
+                    title: g.title,
+                    description: g.description,
+                    status: g.status,
+                    result: g.result || '',
+                    orderIndex: g.orderIndex,
+                })),
+                updates: updates
+                    .slice()
+                    .reverse()
+                    .map((u) => ({
+                        id: String(u._id),
+                        updateType: u.updateType,
+                        message: u.message,
+                        tickNumber: u.tickNumber || 0,
+                        createdAtUtc: u.createdAtUtc
+                            ? new Date(u.createdAtUtc).toISOString()
+                            : '',
+                        payload: (u.payload as Record<string, unknown>) || {},
+                    })),
+                memoryCount,
+            };
+
+            return res.status(200).json(response);
+        } catch (error) {
+            console.error('Error in agentStatus polling:', error);
+            return res.status(500).json({
+                message: 'Server error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    }
+);
+
+router.post(
+    '/agentCancel',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_userId = res.locals.auth_userId;
+            const threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const thread = await ModelChatLlmThread.findOne({
+                _id: threadId,
+                userId: auth_userId,
+            }).select('_id answerEngine');
+            if (!thread) {
+                return res.status(404).json({ message: 'Thread not found' });
+            }
+            if (thread.answerEngine !== 'agent') {
+                return res.status(400).json({ message: 'Thread is not using Agent' });
+            }
+
+            const latestRunning = await ModelAgentInstance.findOne({
+                threadId,
+                userId: auth_userId,
+                status: { $in: ['running', 'paused'] },
+            }).sort({ createdAtUtc: -1 });
+
+            if (!latestRunning) {
+                return res.status(404).json({ message: 'No active Agent run to cancel' });
+            }
+
+            await ModelAgentInstance.updateOne(
+                { _id: latestRunning._id, userId: auth_userId },
+                {
+                    $set: {
+                        cancellationRequestedUtc: new Date(),
+                        status: 'stopped',
+                        updatedAtUtc: new Date(),
+                        tickLockUntilUtc: null,
+                    },
+                }
+            );
+
+            await cancelPendingAgentTickTasks({
+                agentInstanceId: latestRunning._id as mongoose.Types.ObjectId,
+            });
+
+            await ModelAgentUpdate.create({
+                agentInstanceId: latestRunning._id,
+                userId: auth_userId,
+                threadId,
+                updateType: 'status',
+                message: 'Agent cancelled by user.',
+                payload: {},
+                goalId: null,
+                tickNumber: latestRunning.tickCount || 0,
+                createdAtUtc: new Date(),
+            });
+
+            return res.status(200).json({ success: true, message: 'Agent cancelled.' });
+        } catch (error) {
+            console.error('Error in agentCancel:', error);
             return res.status(500).json({
                 message: 'Server error',
                 error: error instanceof Error ? error.message : 'Unknown error',
