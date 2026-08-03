@@ -29,6 +29,7 @@ import featureAiActionLifeEventsInit from "./page/featureAiAction/featureAiActio
 import featureAiActionInfoVaultInit from "./page/featureAiAction/featureAiActionInfoVault/featureAiActionInfoVaultInit";
 import featureAiActionChatThreadInit from "./page/featureAiAction/featureAiActionChatThread/featureAiActionChatThreadInit";
 import featureAiActionChatMessageInit from "./page/featureAiAction/featureAiActionChatMessage/featureAiActionChatMessageInit";
+import agentTickByPendingTask from "./page/agent/agentTickByPendingTask";
 
 const llmPendingTaskProcessFunc = async ({
     _id,
@@ -174,6 +175,12 @@ const llmPendingTaskProcessFunc = async ({
 
             case llmPendingTaskTypes.page.featureAiActions.chatMessage:
                 isTaskDone = await featureAiActionChatMessageInit({
+                    targetRecordId: resultTask.targetRecordId,
+                });
+                break;
+
+            case llmPendingTaskTypes.page.agent.agentTick:
+                isTaskDone = await agentTickByPendingTask({
                     targetRecordId: resultTask.targetRecordId,
                 });
                 break;

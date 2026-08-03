@@ -11,6 +11,7 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 
 import answerMachineInitiateFuncV4 from './answerMachineV4/answerMachineInitiateFuncV4';
+import agentInitiateFunc from './agent/agentInitiateFunc';
 import { runChatShellForThread } from './shellExecute/runChatShellForThread';
 
 // Router
@@ -192,7 +193,7 @@ router.post(
                 threadId: threadId,
                 userId: auth_userId,
                 isAi: false,
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAtUtc: -1 });
             if (!lastMessage) {
                 return res.status(400).json({ message: 'Last message not found' });
             }
@@ -218,6 +219,48 @@ router.post(
             return res.status(500).json({ message: 'Server error', error: error });
         } finally {
             req.off('close', abortIfClientGone);
+        }
+    }
+);
+
+// Agent (background infinite loop with goals + polling)
+router.post(
+    '/agent',
+    middlewareUserAuth,
+    middlewareActionDatetime,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_userId = res.locals.auth_userId;
+
+            let threadId = getMongodbObjectOrNull(req.body.threadId);
+            if (threadId === null) {
+                return res.status(400).json({ message: 'Thread ID cannot be null' });
+            }
+
+            const lastMessage = await ModelChatLlm.findOne({
+                threadId: threadId,
+                userId: auth_userId,
+                isAi: false,
+            }).sort({ createdAtUtc: -1 });
+            if (!lastMessage) {
+                return res.status(400).json({ message: 'Last message not found' });
+            }
+
+            const result = await agentInitiateFunc({
+                messageId: lastMessage._id,
+            });
+
+            if (result.success === false) {
+                return res.status(500).json({ message: 'Server error', error: result.errorReason });
+            }
+
+            return res.status(200).json({
+                message: 'Success',
+                agentInstanceId: result.agentInstanceId,
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error', error: error });
         }
     }
 );

@@ -43,7 +43,7 @@ export interface IChatLlmThread extends Document {
     isMemoryEnabled: boolean;
 
     // answer type
-    answerEngine: 'conciseAnswer' | 'answerMachine4';
+    answerEngine: 'conciseAnswer' | 'answerMachine4' | 'agent';
 
     // answerEngine -> answerMachine
     answerMachineMinNumberOfIterations: number;

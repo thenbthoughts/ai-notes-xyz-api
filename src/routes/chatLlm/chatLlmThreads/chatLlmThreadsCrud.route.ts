@@ -329,7 +329,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4' || answerEngine === 'agent') {
                     addData.answerEngine = answerEngine;
                 }
             };
@@ -595,7 +595,7 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4' || answerEngine === 'agent') {
                     updateData.answerEngine = answerEngine;
                 }
             };
