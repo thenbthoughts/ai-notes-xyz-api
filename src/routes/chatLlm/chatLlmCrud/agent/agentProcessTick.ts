@@ -1,35 +1,18 @@
 import mongoose from 'mongoose';
-
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelAgentInstance } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
 import { ModelAgentGoal } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
-import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
+import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
-import {
-    searchAgentDomain,
-    type AgentDomainSearchSource,
-} from './agentDomainAccess';
-import agentCreateExcelFile from './agentCreateExcelFile';
-import agentCreateExcelViaShell from './agentCreateExcelViaShell';
+import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
+import { defaultAgentToolRegistry, writeUpdate } from './agentToolRegistry';
 
 const TICK_LOCK_MS = 300_000;
 
-type AgentAction =
-    | 'search_notes'
-    | 'search_tasks'
-    | 'search_life_events'
-    | 'search_info_vault'
-    | 'write_memory'
-    | 'create_excel'
-    | 'complete_goal'
-    | 'fail_goal'
-    | 'post_message'
-    | 'noop';
-
 interface AgentTickDecision {
-    action: AgentAction;
+    action: string;
     query?: string;
     memoryKey?: string;
     memoryContent?: string;
@@ -71,21 +54,9 @@ const parseDecision = (raw: string): AgentTickDecision => {
             reason: 'fallback_parse',
         };
     }
-    const action = String(parsed.action || 'noop') as AgentAction;
-    const allowed: AgentAction[] = [
-        'search_notes',
-        'search_tasks',
-        'search_life_events',
-        'search_info_vault',
-        'write_memory',
-        'create_excel',
-        'complete_goal',
-        'fail_goal',
-        'post_message',
-        'noop',
-    ];
+    const action = String(parsed.action || 'noop');
     return {
-        action: allowed.includes(action) ? action : 'noop',
+        action,
         query: typeof parsed.query === 'string' ? parsed.query : '',
         memoryKey: typeof parsed.memoryKey === 'string' ? parsed.memoryKey : 'note',
         memoryContent: typeof parsed.memoryContent === 'string' ? parsed.memoryContent : '',
@@ -102,46 +73,6 @@ const parseDecision = (raw: string): AgentTickDecision => {
         columns: parsed.columns,
         rows: parsed.rows ?? parsed.excelRows,
     };
-};
-
-const sourceForAction = (action: AgentAction): AgentDomainSearchSource | null => {
-    if (action === 'search_notes') return 'notes';
-    if (action === 'search_tasks') return 'tasks';
-    if (action === 'search_life_events') return 'lifeEvents';
-    if (action === 'search_info_vault') return 'infoVault';
-    return null;
-};
-
-const writeUpdate = async ({
-    agentInstanceId,
-    userId,
-    threadId,
-    updateType,
-    message,
-    payload,
-    goalId,
-    tickNumber,
-}: {
-    agentInstanceId: mongoose.Types.ObjectId;
-    userId: mongoose.Types.ObjectId;
-    threadId: mongoose.Types.ObjectId;
-    updateType: string;
-    message: string;
-    payload?: Record<string, unknown>;
-    goalId?: mongoose.Types.ObjectId | null;
-    tickNumber: number;
-}) => {
-    await ModelAgentUpdate.create({
-        agentInstanceId,
-        userId,
-        threadId,
-        updateType,
-        message,
-        payload: payload || {},
-        goalId: goalId || null,
-        tickNumber,
-        createdAtUtc: new Date(),
-    });
 };
 
 const agentProcessTick = async ({
@@ -190,10 +121,29 @@ const agentProcessTick = async ({
             message: 'Agent stopped by cancellation request.',
             tickNumber: agent.tickCount,
         });
+        await writeAgentLog({
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            action: 'agent_stopped',
+            message: 'Agent stopped by cancellation request.',
+            level: 'warn',
+            tickNumber: agent.tickCount,
+        });
         return;
     }
 
     const tickNumber = (agent.tickCount || 0) + 1;
+
+    await writeAgentLog({
+        agentInstanceId: agent._id as mongoose.Types.ObjectId,
+        userId: agent.userId,
+        threadId: agent.threadId,
+        action: 'tick_start',
+        message: `Tick ${tickNumber} started`,
+        level: 'debug',
+        tickNumber,
+    });
 
     try {
         let currentGoal = await ModelAgentGoal.findOne({
@@ -267,6 +217,15 @@ const agentProcessTick = async ({
                 message: 'All goals completed. Agent finished.',
                 tickNumber,
             });
+            await writeAgentLog({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                action: 'agent_completed',
+                message: 'All goals completed. Agent finished.',
+                tickNumber,
+                payload: { summary: summary.slice(0, 1000) },
+            });
             return;
         }
 
@@ -274,58 +233,50 @@ const agentProcessTick = async ({
             agentInstanceId: agent._id,
         })
             .sort({ createdAtUtc: -1 })
-            .limit(20)
-            .lean();
+            .limit(20);
 
         const recentUpdates = await ModelAgentUpdate.find({
             agentInstanceId: agent._id,
         })
             .sort({ createdAtUtc: -1 })
-            .limit(10)
-            .lean();
+            .limit(10);
 
         const llmConfig = await getLlmConfig({ threadId: agent.threadId });
         if (!llmConfig) {
             throw new Error('No LLM config available for agent tick');
         }
 
-        const systemPrompt = `You are a background agent. The user is NOT available to answer clarifying questions.
-You have access to the user's personal data domains:
-- notes
-- tasks
-- lifeEvents
-- infoVault
+        const systemPrompt = `You are an autonomous AI Agent powered by a modular Tool Registry.
+The user is NOT available to answer clarifying questions.
 
-You also have per-instance memory and can create downloadable Excel (.xlsx) files.
+Available Tools:
+${defaultAgentToolRegistry.getToolDescriptions()}
 
-Current goal must be completed. Each response is ONE action as JSON only:
+Current goal must be completed. Return JSON ONLY with your chosen action and arguments:
 {
-  "action": "search_notes"|"search_tasks"|"search_life_events"|"search_info_vault"|"write_memory"|"create_excel"|"complete_goal"|"fail_goal"|"post_message"|"noop",
-  "query": "search text when searching",
-  "memoryKey": "short key",
-  "memoryContent": "what to store",
+  "action": "<tool_name>",
+  "query": "search query or calculation expression",
+  "memoryKey": "short memory key",
+  "memoryContent": "content to store",
   "memoryType": "fact"|"observation"|"plan"|"result"|"other",
   "goalResult": "final result text when completing/failing goal",
-  "message": "short user-visible message when post_message or create_excel",
-  "fileName": "my-file.xlsx when create_excel",
+  "message": "short message to post when posting message or creating excel",
+  "fileName": "export.xlsx when create_excel",
   "sheetName": "Sheet1 when create_excel",
-  "columns": ["ColA","ColB"] ,
-  "rows": [{"ColA":"v1","ColB":"v2"}] ,
-  "reason": "why this action"
+  "columns": ["ColA", "ColB"],
+  "rows": [{"ColA": "val1", "ColB": "val2"}],
+  "code": "const fs = require('fs'); ... (REQUIRED valid executable code when action is execute_script)",
+  "reason": "explanation of tool choice"
 }
 
 Rules:
-- Prefer searching domains before completing a goal when the goal needs personal context.
-- Use write_memory to retain useful findings.
-- If the user asks for Excel, spreadsheet, xlsx, or a downloadable file of tabular/list data, you MUST use create_excel with the full rows (not just complete_goal with text). Include enough rows to satisfy the request (e.g. major cities by region). Excel is generated on the Shell Engine under ai-notes-xyz/task/{id}/files.
-- After a successful create_excel, call complete_goal on the next tick summarizing the filename and row count.
-- For generative/list goals without an Excel request, produce content via complete_goal (or create_excel if a spreadsheet is clearly better).
-- Never wait for user input. Make reasonable assumptions and finish.
-- Use post_message only for brief progress notes, not to ask questions.
-- Avoid noop unless you truly need another tick after a search/memory write. Do not noop while waiting for the user.
-- Use complete_goal when the goal is done; include goalResult with the deliverable.
-- Use fail_goal only if impossible.
-- Keep actions small; the loop will continue on the next tick.`;
+- Runtime Preference Hierarchy: (1) Node.js first (node), (2) Python 3 second (python3 / python), (3) system CLI utilities.
+- When calling execute_script, you MUST provide valid, complete, runnable code in the "code" field.
+- If a command fails or python is not found, the agent system automatically falls back to python3 and invokes LLM self-healing to generate an alternate solution.
+- Search domain data before completing goals requiring personal context.
+- Use write_memory to store facts and findings.
+- Complete goal via complete_goal when done.
+- Keep actions focused and progress toward completing the goal.`;
 
         const recentNoopCount = recentUpdates.filter((u) =>
             typeof u.message === 'string' && /\bnoop\b/i.test(u.message)
@@ -360,12 +311,12 @@ Rules:
                 wantsExcel,
                 alreadyCreatedExcel,
                 instruction: alreadyCreatedExcel
-                    ? 'Excel file was already created and posted to chat with a download button. Call complete_goal now for the current goal (mention the filename). Do not create another Excel file.'
+                    ? 'Excel file was already created. Call complete_goal now for current goal (mention filename).'
                     : wantsExcel
-                      ? 'The user wants an Excel/downloadable file. Call create_excel NOW with fileName ending in .xlsx and rows as objects (e.g. Region + City). Do not only reply with text.'
+                      ? 'User requested Excel. Call create_excel NOW with fileName ending in .xlsx and structured rows.'
                       : recentNoopCount >= 2
-                        ? 'You have noop\'d too many times. You MUST complete_goal now with the best deliverable you can produce. Do not ask the user anything.'
-                        : 'Produce progress toward completing the current goal. Do not ask the user for clarification.',
+                        ? 'Too many noops. Call complete_goal now with best deliverable.'
+                        : 'Progress toward completing current goal using registered tools.',
             },
             null,
             2
@@ -376,16 +327,28 @@ Rules:
             { role: 'user', content: userPrompt },
         ];
 
-        const llmResult = await fetchLlmUnified({
-            provider: llmConfig.provider,
-            apiKey: llmConfig.apiKey,
-            apiEndpoint: llmConfig.apiEndpoint,
-            model: llmConfig.model,
-            messages,
-            temperature: 0.3,
-            maxTokens: 4000,
-            responseFormat: 'json_object',
-            headersExtra: llmConfig.customHeaders,
+        const logCtx = {
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            goalId: currentGoal._id as mongoose.Types.ObjectId,
+            tickNumber,
+        };
+
+        const llmResult = await fetchLlmUnifiedLogged({
+            logCtx,
+            purpose: 'agent_tick_decision',
+            params: {
+                provider: llmConfig.provider,
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                model: llmConfig.model,
+                messages,
+                temperature: 0.3,
+                maxTokens: 4000,
+                responseFormat: 'json_object',
+                headersExtra: llmConfig.customHeaders,
+            },
         });
 
         const decision = parseDecision(llmResult.content || '');
@@ -401,210 +364,41 @@ Rules:
             payload: { action: decision.action, reason: decision.reason || '' },
         });
 
-        const domainSource = sourceForAction(decision.action);
-        if (domainSource) {
-            const hits = await searchAgentDomain({
-                userId: agent.userId,
-                source: domainSource,
-                query: decision.query || currentGoal.title,
-                limit: 8,
-            });
-
-            const hitText = hits.length
-                ? hits.map((h) => `- [${h.source}] ${h.title}: ${h.summary}`).join('\n')
-                : 'No results.';
-
-            await ModelAgentMemory.create({
-                agentInstanceId: agent._id,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                key: `search_${domainSource}_${tickNumber}`,
-                content: `Query: ${decision.query || currentGoal.title}\n${hitText}`.slice(0, 8000),
-                memoryType: 'observation',
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
-
-            await writeUpdate({
-                agentInstanceId: agent._id as mongoose.Types.ObjectId,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                updateType: 'domain_search',
-                message: `Searched ${domainSource}: ${hits.length} hit(s)`,
-                goalId: currentGoal._id as mongoose.Types.ObjectId,
-                tickNumber,
-                payload: { source: domainSource, hitsCount: hits.length, query: decision.query || '' },
-            });
-        } else if (decision.action === 'write_memory') {
-            const content = (decision.memoryContent || decision.message || '').trim();
-            if (content) {
-                await ModelAgentMemory.create({
-                    agentInstanceId: agent._id,
-                    userId: agent.userId,
-                    threadId: agent.threadId,
-                    key: (decision.memoryKey || `mem_${tickNumber}`).slice(0, 120),
-                    content: content.slice(0, 8000),
-                    memoryType: decision.memoryType || 'observation',
-                    createdAtUtc: new Date(),
-                    updatedAtUtc: new Date(),
-                });
-                await writeUpdate({
+        const tool = defaultAgentToolRegistry.getTool(decision.action);
+        if (tool) {
+            await tool.execute(
+                {
                     agentInstanceId: agent._id as mongoose.Types.ObjectId,
                     userId: agent.userId,
                     threadId: agent.threadId,
-                    updateType: 'memory_written',
-                    message: `Memory saved: ${decision.memoryKey || 'note'}`,
-                    goalId: currentGoal._id as mongoose.Types.ObjectId,
+                    currentGoal,
+                    memories,
+                    recentUpdates,
                     tickNumber,
-                });
-            }
-        } else if (decision.action === 'post_message') {
-            const msg = (decision.message || decision.goalResult || '').trim();
-            if (msg) {
-                await ModelChatLlm.create({
-                    type: 'text',
-                    content: msg,
-                    userId: agent.userId.toString(),
-                    threadId: agent.threadId,
-                    isAi: true,
-                    tags: ['agent'],
-                    aiModelProvider: llmConfig.provider,
-                    aiModelName: llmConfig.model,
-                    createdAtUtc: new Date(),
-                    updatedAtUtc: new Date(),
-                });
-                await writeUpdate({
-                    agentInstanceId: agent._id as mongoose.Types.ObjectId,
-                    userId: agent.userId,
-                    threadId: agent.threadId,
-                    updateType: 'message',
-                    message: msg.slice(0, 500),
-                    goalId: currentGoal._id as mongoose.Types.ObjectId,
-                    tickNumber,
-                });
-            }
-        } else if (decision.action === 'create_excel') {
-            const viaShell = await agentCreateExcelViaShell({
-                userId: agent.userId,
-                threadId: agent.threadId,
-                taskId: String(agent._id),
-                fileName: decision.fileName || 'export.xlsx',
-                sheetName: decision.sheetName || 'Sheet1',
-                columns: decision.columns,
-                rows: decision.rows,
-                message: decision.message || decision.goalResult || '',
-                aiModelProvider: llmConfig.provider,
-                aiModelName: llmConfig.model,
-            });
-
-            let excelResult = viaShell;
-            if (!viaShell.success) {
-                const fallback = await agentCreateExcelFile({
-                    userId: agent.userId,
-                    threadId: agent.threadId,
-                    fileName: decision.fileName || 'export.xlsx',
-                    sheetName: decision.sheetName || 'Sheet1',
-                    columns: decision.columns,
-                    rows: decision.rows,
-                    message:
-                        `${decision.message || decision.goalResult || 'Excel file ready.'}\n\n` +
-                        `_(Generated locally — Shell Engine unavailable: ${viaShell.errorReason})_`,
-                    aiModelProvider: llmConfig.provider,
-                    aiModelName: llmConfig.model,
-                });
-                if (!fallback.success) {
-                    throw new Error(
-                        `Shell Excel failed: ${viaShell.errorReason}; local fallback failed: ${fallback.errorReason}`,
-                    );
-                }
-                excelResult = {
-                    success: true,
-                    errorReason: '',
-                    fileName: fallback.fileName,
-                    objectKey: fallback.objectKey,
-                    rowCount: fallback.rowCount,
-                    messageId: fallback.messageId,
-                    workspaceDir: '',
-                    shellAbsolutePath: '',
-                };
-            }
-
-            await ModelAgentMemory.create({
-                agentInstanceId: agent._id,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                key: `excel_${tickNumber}`,
-                content: `Created Excel file ${excelResult.fileName} (${excelResult.rowCount} rows)${
-                    viaShell.success ? ` via shell workspace ${viaShell.workspaceDir}` : ' via local fallback'
-                }. objectKey=${excelResult.objectKey}`,
-                memoryType: 'result',
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
-
-            await writeUpdate({
-                agentInstanceId: agent._id as mongoose.Types.ObjectId,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                updateType: 'excel_created',
-                message: `Excel created: ${excelResult.fileName} (${excelResult.rowCount} rows${
-                    viaShell.success ? `, shell:${viaShell.workspaceDir}` : ', local'
-                })`,
-                goalId: currentGoal._id as mongoose.Types.ObjectId,
-                tickNumber,
-                payload: {
-                    fileName: excelResult.fileName,
-                    rowCount: excelResult.rowCount,
-                    objectKey: excelResult.objectKey,
-                    messageId: excelResult.messageId,
-                    method: viaShell.success ? 'shell_task_files' : 'local_fallback',
-                    workspaceDir: viaShell.workspaceDir || '',
-                    shellAbsolutePath: viaShell.shellAbsolutePath || '',
-                    shellError: viaShell.success ? '' : viaShell.errorReason,
+                    llmConfig,
+                    logCtx,
                 },
-            });
-        } else if (decision.action === 'complete_goal' || decision.action === 'fail_goal') {
-            const isFail = decision.action === 'fail_goal';
-            currentGoal.status = isFail ? 'failed' : 'completed';
-            currentGoal.result = (decision.goalResult || decision.message || decision.reason || '').slice(0, 8000);
-            currentGoal.completedAtUtc = new Date();
-            currentGoal.updatedAtUtc = new Date();
-            await currentGoal.save();
-
-            await ModelAgentMemory.create({
-                agentInstanceId: agent._id,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                key: `goal_${currentGoal.orderIndex}_result`,
-                content: currentGoal.result,
-                memoryType: 'result',
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
-
-            await writeUpdate({
-                agentInstanceId: agent._id as mongoose.Types.ObjectId,
-                userId: agent.userId,
-                threadId: agent.threadId,
-                updateType: isFail ? 'goal_failed' : 'goal_completed',
-                message: `${isFail ? 'Failed' : 'Completed'} goal: ${currentGoal.title}`,
-                goalId: currentGoal._id as mongoose.Types.ObjectId,
-                tickNumber,
-                payload: { result: currentGoal.result },
-            });
-
-            await ModelChatLlm.create({
-                type: 'text',
-                content: `${isFail ? 'Goal failed' : 'Goal completed'}: ${currentGoal.title}\n\n${currentGoal.result || '(no details)'}`,
-                userId: agent.userId.toString(),
-                threadId: agent.threadId,
-                isAi: true,
-                tags: ['agent'],
-                aiModelProvider: llmConfig.provider,
-                aiModelName: llmConfig.model,
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
+                decision as unknown as Record<string, unknown>
+            );
+        } else {
+            // Fallback for unrecognized action
+            const fallbackTool = defaultAgentToolRegistry.getTool('noop');
+            if (fallbackTool) {
+                await fallbackTool.execute(
+                    {
+                        agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                        userId: agent.userId,
+                        threadId: agent.threadId,
+                        currentGoal,
+                        memories,
+                        recentUpdates,
+                        tickNumber,
+                        llmConfig,
+                        logCtx,
+                    },
+                    decision as unknown as Record<string, unknown>
+                );
+            }
         }
 
         await ModelAgentInstance.findByIdAndUpdate(agent._id, {
@@ -614,6 +408,18 @@ Rules:
                 tickLockUntilUtc: null,
                 updatedAtUtc: new Date(),
             },
+        });
+
+        await writeAgentLog({
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            action: 'tick_end',
+            message: `Tick ${tickNumber} finished (${decision.action})`,
+            level: 'debug',
+            goalId: currentGoal._id as mongoose.Types.ObjectId,
+            tickNumber,
+            payload: { action: decision.action },
         });
     } catch (error) {
         console.error('agentProcessTick error:', error);

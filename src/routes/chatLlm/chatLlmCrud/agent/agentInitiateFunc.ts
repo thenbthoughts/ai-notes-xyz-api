@@ -6,10 +6,11 @@ import { ModelAgentInstance } from '../../../../schema/schemaChatLlm/SchemaAgent
 import { ModelAgentGoal } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
-import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
+import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import enqueueAgentTickPendingTask from '../../../../utils/llmPendingTask/page/agent/enqueueAgentTickPendingTask';
 import cancelPendingAgentTickTasks from '../../../../utils/llmPendingTask/page/agent/cancelPendingAgentTickTasks';
+import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
 
 const parseGoalsFromText = (text: string): Array<{ title: string; description: string }> => {
     const lines = text
@@ -103,6 +104,17 @@ const agentInitiateFunc = async ({
                 }
             );
             await cancelPendingAgentTickTasks({ agentInstanceId: prevIds });
+            const prevThreadId = new mongoose.Types.ObjectId(String(message.threadId));
+            for (const prevId of prevIds) {
+                await writeAgentLog({
+                    agentInstanceId: prevId,
+                    userId: thread.userId as mongoose.Types.ObjectId,
+                    threadId: prevThreadId,
+                    action: 'agent_stopped',
+                    message: 'Previous agent stopped because a new agent was started on this thread.',
+                    level: 'warn',
+                });
+            }
         }
 
         const userText =
@@ -110,13 +122,36 @@ const agentInitiateFunc = async ({
 
         let goals = parseGoalsFromText(userText);
 
-        // Optionally refine goals with LLM
         const threadObjectId = message.threadId
             ? new mongoose.Types.ObjectId(String(message.threadId))
             : null;
         if (!threadObjectId) {
             return { success: false, errorReason: 'Thread ID missing on message', agentInstanceId: null };
         }
+
+        // Create instance early so goal-refine LLM (and later ticks) can write agentLog rows.
+        const agentInstance = await ModelAgentInstance.create({
+            threadId: message.threadId,
+            parentMessageId: messageId,
+            userId: thread.userId,
+            status: 'running',
+            errorReason: '',
+            tickCount: 0,
+            lastTickAtUtc: null,
+            tickLockUntilUtc: null,
+            cancellationRequestedUtc: null,
+            summary: '',
+            createdAtUtc: new Date(),
+            updatedAtUtc: new Date(),
+        });
+
+        const logCtx = {
+            agentInstanceId: agentInstance._id as mongoose.Types.ObjectId,
+            userId: thread.userId as mongoose.Types.ObjectId,
+            threadId: threadObjectId,
+            tickNumber: 0,
+        };
+
         const llmConfig = await getLlmConfig({ threadId: threadObjectId });
         if (llmConfig && userText) {
             try {
@@ -128,16 +163,20 @@ const agentInitiateFunc = async ({
                     },
                     { role: 'user', content: userText },
                 ];
-                const llmResult = await fetchLlmUnified({
-                    provider: llmConfig.provider,
-                    apiKey: llmConfig.apiKey,
-                    apiEndpoint: llmConfig.apiEndpoint,
-                    model: llmConfig.model,
-                    messages,
-                    temperature: 0.2,
-                    maxTokens: 1200,
-                    responseFormat: 'json_object',
-                    headersExtra: llmConfig.customHeaders,
+                const llmResult = await fetchLlmUnifiedLogged({
+                    logCtx,
+                    purpose: 'agent_goal_refine',
+                    params: {
+                        provider: llmConfig.provider,
+                        apiKey: llmConfig.apiKey,
+                        apiEndpoint: llmConfig.apiEndpoint,
+                        model: llmConfig.model,
+                        messages,
+                        temperature: 0.2,
+                        maxTokens: 1200,
+                        responseFormat: 'json_object',
+                        headersExtra: llmConfig.customHeaders,
+                    },
                 });
                 const parsed = extractJsonObject(llmResult.content || '');
                 const arr = parsed?.goals;
@@ -160,21 +199,6 @@ const agentInitiateFunc = async ({
                 console.error('agentInitiateFunc goal LLM refine failed:', e);
             }
         }
-
-        const agentInstance = await ModelAgentInstance.create({
-            threadId: message.threadId,
-            parentMessageId: messageId,
-            userId: thread.userId,
-            status: 'running',
-            errorReason: '',
-            tickCount: 0,
-            lastTickAtUtc: null,
-            tickLockUntilUtc: null,
-            cancellationRequestedUtc: null,
-            summary: '',
-            createdAtUtc: new Date(),
-            updatedAtUtc: new Date(),
-        });
 
         const now = new Date();
         const goalDocs = goals.map((g, i) => ({
@@ -213,6 +237,14 @@ const agentInitiateFunc = async ({
             goalId: null,
             tickNumber: 0,
             createdAtUtc: now,
+        });
+
+        await writeAgentLog({
+            ...logCtx,
+            action: 'agent_started',
+            message: `Agent started with ${goals.length} goal(s). Running in background.`,
+            payload: { goalsCount: goals.length, goals: goals.map((g) => g.title) },
+            tickNumber: 0,
         });
 
         await ModelChatLlm.create({

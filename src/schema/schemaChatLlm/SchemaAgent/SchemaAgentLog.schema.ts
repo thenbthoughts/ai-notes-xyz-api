@@ -1,8 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
 
-import { IAgentUpdate } from '../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentUpdate.types';
+import { IAgentLog } from '../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentLog.types';
 
-const agentUpdateSchema = new Schema<IAgentUpdate>({
+const agentLogSchema = new Schema<IAgentLog>({
     agentInstanceId: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
@@ -21,27 +21,21 @@ const agentUpdateSchema = new Schema<IAgentUpdate>({
         index: true,
         ref: 'chatLlmThread',
     },
-    updateType: {
+    level: {
         type: String,
-        enum: [
-            'status',
-            'goal_started',
-            'goal_completed',
-            'goal_failed',
-            'memory_written',
-            'domain_search',
-            'message',
-            'error',
-            'tick',
-            'excel_created',
-            'script_executed',
-            'tool_result',
-        ],
-        default: 'status',
+        enum: ['info', 'warn', 'error', 'debug'],
+        default: 'info',
         index: true,
     },
+    action: {
+        type: String,
+        default: 'other',
+        index: true,
+    },
+    title: { type: String, default: '' },
     message: { type: String, default: '' },
     payload: { type: Schema.Types.Mixed, default: {} },
+    raw: { type: Schema.Types.Mixed, default: null },
     goalId: {
         type: mongoose.Schema.Types.ObjectId,
         default: null,
@@ -51,13 +45,14 @@ const agentUpdateSchema = new Schema<IAgentUpdate>({
     createdAtUtc: { type: Date, default: () => new Date(), index: true },
 });
 
-agentUpdateSchema.index({ agentInstanceId: 1, createdAtUtc: -1 });
-agentUpdateSchema.index({ threadId: 1, createdAtUtc: -1 });
+agentLogSchema.index({ agentInstanceId: 1, createdAtUtc: -1 });
+agentLogSchema.index({ threadId: 1, createdAtUtc: -1 });
+agentLogSchema.index({ agentInstanceId: 1, action: 1, createdAtUtc: -1 });
 
-const ModelAgentUpdate = mongoose.model<IAgentUpdate>(
-    'agentUpdate',
-    agentUpdateSchema,
-    'agentUpdate'
+const ModelAgentLog = mongoose.model<IAgentLog>(
+    'agentLog',
+    agentLogSchema,
+    'agentLog'
 );
 
-export { ModelAgentUpdate };
+export { ModelAgentLog };

@@ -11,7 +11,9 @@ import { ModelAgentInstance } from '../../../schema/schemaChatLlm/SchemaAgent/Sc
 import { ModelAgentGoal } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
 import { ModelAgentUpdate } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
 import { ModelAgentMemory } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
+import { ModelAgentLog } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
 import cancelPendingAgentTickTasks from '../../../utils/llmPendingTask/page/agent/cancelPendingAgentTickTasks';
+import writeAgentLog from '../chatLlmCrud/agent/agentWriteLog';
 
 const router = Router();
 
@@ -65,6 +67,17 @@ export interface AgentPollingResponse {
         tickNumber: number;
         createdAtUtc: string;
         payload: Record<string, unknown>;
+    }>;
+    logs: Array<{
+        id: string;
+        level: string;
+        action: string;
+        title: string;
+        message: string;
+        tickNumber: number;
+        createdAtUtc: string;
+        payload: Record<string, unknown>;
+        raw: unknown;
     }>;
     memoryCount: number;
 }
@@ -349,6 +362,7 @@ router.post(
                     tickCount: 0,
                     goals: [],
                     updates: [],
+                    logs: [],
                     memoryCount: 0,
                 };
                 return res.status(200).json(empty);
@@ -367,12 +381,14 @@ router.post(
                     tickCount: 0,
                     goals: [],
                     updates: [],
+                    logs: [],
                     memoryCount: 0,
                 };
                 return res.status(200).json(empty);
             }
 
             const sinceUpdateId = getMongodbObjectOrNull(req.body.sinceUpdateId);
+            const sinceLogId = getMongodbObjectOrNull(req.body.sinceLogId);
 
             const goals = await ModelAgentGoal.find({
                 agentInstanceId: latestAgent._id,
@@ -388,6 +404,18 @@ router.post(
             const updates = await ModelAgentUpdate.find(updateFilter)
                 .sort({ createdAtUtc: -1 })
                 .limit(sinceUpdateId ? 50 : 20)
+                .lean();
+
+            const logFilter: Record<string, unknown> = {
+                agentInstanceId: latestAgent._id,
+            };
+            if (sinceLogId) {
+                logFilter._id = { $gt: sinceLogId };
+            }
+
+            const logs = await ModelAgentLog.find(logFilter)
+                .sort({ createdAtUtc: -1 })
+                .limit(sinceLogId ? 150 : 80)
                 .lean();
 
             const memoryCount = await ModelAgentMemory.countDocuments({
@@ -421,6 +449,22 @@ router.post(
                             ? new Date(u.createdAtUtc).toISOString()
                             : '',
                         payload: (u.payload as Record<string, unknown>) || {},
+                    })),
+                logs: logs
+                    .slice()
+                    .reverse()
+                    .map((l) => ({
+                        id: String(l._id),
+                        level: l.level || 'info',
+                        action: l.action || 'other',
+                        title: (l.title || l.message || l.action || 'log').slice(0, 200),
+                        message: l.message || '',
+                        tickNumber: l.tickNumber || 0,
+                        createdAtUtc: l.createdAtUtc
+                            ? new Date(l.createdAtUtc).toISOString()
+                            : '',
+                        payload: (l.payload as Record<string, unknown>) || {},
+                        raw: l.raw ?? null,
                     })),
                 memoryCount,
             };
@@ -494,6 +538,16 @@ router.post(
                 goalId: null,
                 tickNumber: latestRunning.tickCount || 0,
                 createdAtUtc: new Date(),
+            });
+
+            await writeAgentLog({
+                agentInstanceId: latestRunning._id as mongoose.Types.ObjectId,
+                userId: auth_userId,
+                threadId,
+                action: 'agent_cancelled',
+                message: 'Agent cancelled by user.',
+                level: 'warn',
+                tickNumber: latestRunning.tickCount || 0,
             });
 
             return res.status(200).json({ success: true, message: 'Agent cancelled.' });
