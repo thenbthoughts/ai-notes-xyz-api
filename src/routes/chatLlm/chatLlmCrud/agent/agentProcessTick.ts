@@ -1,11 +1,16 @@
 import mongoose from 'mongoose';
+import axios from 'axios';
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelAgentInstance } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
 import { ModelAgentGoal } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
+import { ModelAgentLog } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
+import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.schema';
+import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { agentTaskFilesDir, getAgentShellConfig } from './agentShellWorkspace';
 import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
 import { defaultAgentToolRegistry, writeUpdate } from './agentToolRegistry';
 
@@ -28,16 +33,22 @@ interface AgentTickDecision {
 
 const extractJsonObject = (raw: string): Record<string, unknown> | null => {
     const trimmed = raw.trim();
+    if (!trimmed) return null;
     try {
-        return JSON.parse(trimmed) as Record<string, unknown>;
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed as Record<string, unknown>;
+        }
     } catch {
-        /* continue */
+        /* try regex */
     }
-    const start = trimmed.indexOf('{');
-    const end = trimmed.lastIndexOf('}');
-    if (start >= 0 && end > start) {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (match) {
         try {
-            return JSON.parse(trimmed.slice(start, end + 1)) as Record<string, unknown>;
+            const parsed = JSON.parse(match[0]);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed as Record<string, unknown>;
+            }
         } catch {
             return null;
         }
@@ -46,40 +57,34 @@ const extractJsonObject = (raw: string): Record<string, unknown> | null => {
 };
 
 const parseDecision = (raw: string): AgentTickDecision => {
-    const parsed = extractJsonObject(raw);
-    if (!parsed) {
-        return {
-            action: 'complete_goal',
-            goalResult: raw.slice(0, 2000) || 'Completed with unstructured response.',
-            reason: 'fallback_parse',
-        };
+    const json = extractJsonObject(raw);
+    if (!json) {
+        return { action: 'noop', reason: 'Unparseable LLM decision output' };
     }
-    const action = String(parsed.action || 'noop');
+
+    const action = typeof json.action === 'string' ? json.action.trim() : 'noop';
     return {
         action,
-        query: typeof parsed.query === 'string' ? parsed.query : '',
-        memoryKey: typeof parsed.memoryKey === 'string' ? parsed.memoryKey : 'note',
-        memoryContent: typeof parsed.memoryContent === 'string' ? parsed.memoryContent : '',
-        memoryType: (['fact', 'observation', 'plan', 'result', 'other'] as const).includes(
-            parsed.memoryType as 'fact'
-        )
-            ? (parsed.memoryType as 'fact' | 'observation' | 'plan' | 'result' | 'other')
-            : 'observation',
-        goalResult: typeof parsed.goalResult === 'string' ? parsed.goalResult : '',
-        message: typeof parsed.message === 'string' ? parsed.message : '',
-        reason: typeof parsed.reason === 'string' ? parsed.reason : '',
-        fileName: typeof parsed.fileName === 'string' ? parsed.fileName : '',
-        sheetName: typeof parsed.sheetName === 'string' ? parsed.sheetName : '',
-        columns: parsed.columns,
-        rows: parsed.rows ?? parsed.excelRows,
+        query: typeof json.query === 'string' ? json.query : undefined,
+        memoryKey: typeof json.memoryKey === 'string' ? json.memoryKey : undefined,
+        memoryContent: typeof json.memoryContent === 'string' ? json.memoryContent : undefined,
+        memoryType: (['fact', 'observation', 'plan', 'result', 'other'] as const).includes(json.memoryType as any)
+            ? (json.memoryType as any)
+            : undefined,
+        goalResult: typeof json.goalResult === 'string' ? json.goalResult : undefined,
+        message: typeof json.message === 'string' ? json.message : undefined,
+        reason: typeof json.reason === 'string' ? json.reason : undefined,
+        fileName: typeof json.fileName === 'string' ? json.fileName : undefined,
+        sheetName: typeof json.sheetName === 'string' ? json.sheetName : undefined,
+        columns: json.columns,
+        rows: json.rows,
     };
 };
 
-const agentProcessTick = async ({
-    agentInstanceId,
-}: {
-    agentInstanceId: mongoose.Types.ObjectId;
-}): Promise<void> => {
+/**
+ * Executes a single tick step for a running Agent instance.
+ */
+export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId | string): Promise<void> => {
     const now = new Date();
     const lockUntil = new Date(now.getTime() + TICK_LOCK_MS);
 
@@ -87,10 +92,8 @@ const agentProcessTick = async ({
         {
             _id: agentInstanceId,
             status: 'running',
-            $or: [
-                { tickLockUntilUtc: null },
-                { tickLockUntilUtc: { $lte: now } },
-            ],
+            cancellationRequestedUtc: null,
+            $or: [{ tickLockUntilUtc: null }, { tickLockUntilUtc: { $lt: now } }],
         },
         {
             $set: {
@@ -105,117 +108,60 @@ const agentProcessTick = async ({
         return;
     }
 
-    if (agent.cancellationRequestedUtc) {
-        await ModelAgentInstance.findByIdAndUpdate(agent._id, {
-            $set: {
-                status: 'stopped',
-                tickLockUntilUtc: null,
-                updatedAtUtc: new Date(),
-            },
-        });
-        await writeUpdate({
-            agentInstanceId: agent._id as mongoose.Types.ObjectId,
-            userId: agent.userId,
-            threadId: agent.threadId,
-            updateType: 'status',
-            message: 'Agent stopped by cancellation request.',
-            tickNumber: agent.tickCount,
-        });
-        await writeAgentLog({
-            agentInstanceId: agent._id as mongoose.Types.ObjectId,
-            userId: agent.userId,
-            threadId: agent.threadId,
-            action: 'agent_stopped',
-            message: 'Agent stopped by cancellation request.',
-            level: 'warn',
-            tickNumber: agent.tickCount,
-        });
-        return;
-    }
-
-    const tickNumber = (agent.tickCount || 0) + 1;
-
-    await writeAgentLog({
-        agentInstanceId: agent._id as mongoose.Types.ObjectId,
-        userId: agent.userId,
-        threadId: agent.threadId,
-        action: 'tick_start',
-        message: `Tick ${tickNumber} started`,
-        level: 'debug',
-        tickNumber,
-    });
-
     try {
-        let currentGoal = await ModelAgentGoal.findOne({
-            agentInstanceId: agent._id,
-            status: 'in_progress',
-        }).sort({ orderIndex: 1 });
-
-        if (!currentGoal) {
-            currentGoal = await ModelAgentGoal.findOne({
-                agentInstanceId: agent._id,
-                status: 'pending',
-            }).sort({ orderIndex: 1 });
-
-            if (currentGoal) {
-                currentGoal.status = 'in_progress';
-                currentGoal.updatedAtUtc = new Date();
-                await currentGoal.save();
-                await writeUpdate({
-                    agentInstanceId: agent._id as mongoose.Types.ObjectId,
-                    userId: agent.userId,
-                    threadId: agent.threadId,
-                    updateType: 'goal_started',
-                    message: `Started goal: ${currentGoal.title}`,
-                    goalId: currentGoal._id as mongoose.Types.ObjectId,
-                    tickNumber,
-                    payload: { title: currentGoal.title },
-                });
-            }
+        if (agent.cancellationRequestedUtc) {
+            await ModelAgentInstance.findByIdAndUpdate(agent._id, {
+                $set: {
+                    status: 'stopped',
+                    tickLockUntilUtc: null,
+                    updatedAtUtc: new Date(),
+                },
+            });
+            await writeUpdate({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                updateType: 'status',
+                message: 'Agent stopped upon user request.',
+                tickNumber: agent.tickCount || 0,
+            });
+            await writeAgentLog({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                action: 'agent_stopped',
+                message: 'Agent stopped upon user request.',
+                tickNumber: agent.tickCount || 0,
+            });
+            return;
         }
 
+        const goals = await ModelAgentGoal.find({
+            agentInstanceId: agent._id,
+        }).sort({ orderIndex: 1 });
+
+        const currentGoal = goals.find((g) => g.status === 'in_progress' || g.status === 'pending');
+
         if (!currentGoal) {
-            // All goals done
-            const completedGoals = await ModelAgentGoal.find({
-                agentInstanceId: agent._id,
-            }).sort({ orderIndex: 1 });
-
-            const summary = completedGoals
-                .map((g, i) => `${i + 1}. [${g.status}] ${g.title}${g.result ? `\n   ${g.result}` : ''}`)
-                .join('\n');
-
-            const llmConfig = await getLlmConfig({ threadId: agent.threadId });
-            await ModelChatLlm.create({
-                type: 'text',
-                content: `Agent finished all goals.\n\n${summary}`,
-                userId: agent.userId.toString(),
-                threadId: agent.threadId,
-                isAi: true,
-                tags: ['agent'],
-                aiModelProvider: llmConfig?.provider || '',
-                aiModelName: llmConfig?.model || '',
-                createdAtUtc: new Date(),
-                updatedAtUtc: new Date(),
-            });
-
+            const completedCount = goals.filter((g) => g.status === 'completed').length;
+            const summary = `Completed ${completedCount} of ${goals.length} goals.`;
             await ModelAgentInstance.findByIdAndUpdate(agent._id, {
                 $set: {
                     status: 'completed',
                     summary: summary.slice(0, 4000),
-                    tickCount: tickNumber,
+                    tickCount: agent.tickCount || 0,
                     lastTickAtUtc: new Date(),
                     tickLockUntilUtc: null,
                     updatedAtUtc: new Date(),
                 },
             });
-
             await writeUpdate({
                 agentInstanceId: agent._id as mongoose.Types.ObjectId,
                 userId: agent.userId,
                 threadId: agent.threadId,
                 updateType: 'status',
                 message: 'All goals completed. Agent finished.',
-                tickNumber,
+                tickNumber: agent.tickCount || 0,
             });
             await writeAgentLog({
                 agentInstanceId: agent._id as mongoose.Types.ObjectId,
@@ -223,10 +169,120 @@ const agentProcessTick = async ({
                 threadId: agent.threadId,
                 action: 'agent_completed',
                 message: 'All goals completed. Agent finished.',
-                tickNumber,
-                payload: { summary: summary.slice(0, 1000) },
+                tickNumber: agent.tickCount || 0,
+                payload: { summary },
             });
             return;
+        }
+
+        const tickNumber = (agent.tickCount || 0) + 1;
+
+        if (currentGoal.status === 'pending') {
+            currentGoal.status = 'in_progress';
+            currentGoal.updatedAtUtc = new Date();
+            await currentGoal.save();
+
+            await writeUpdate({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                updateType: 'goal_started',
+                message: `Started goal: ${currentGoal.title}`,
+                goalId: currentGoal._id as mongoose.Types.ObjectId,
+                tickNumber,
+            });
+            await writeAgentLog({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                action: 'goal_started',
+                title: `Started goal: ${currentGoal.title}`,
+                message: `Started goal: ${currentGoal.title}`,
+                goalId: currentGoal._id as mongoose.Types.ObjectId,
+                tickNumber,
+            });
+        }
+
+        await writeUpdate({
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            updateType: 'tick',
+            message: `Tick ${tickNumber} started`,
+            goalId: currentGoal._id as mongoose.Types.ObjectId,
+            tickNumber,
+        });
+
+        // 1. Past 10 Messages
+        const recentChatDocs = await ModelChatLlm.find({ threadId: agent.threadId })
+            .sort({ createdAtUtc: -1 })
+            .limit(10);
+        const past10Messages = recentChatDocs.reverse().map((m) => ({
+            role: m.isAi ? 'assistant' : 'user',
+            content: m.content.slice(0, 1000),
+            createdAt: m.createdAtUtc,
+        }));
+
+        // 2. Past Goal Results
+        const pastGoalResults = goals.map((g) => ({
+            orderIndex: g.orderIndex,
+            title: g.title,
+            status: g.status,
+            result: g.result || '(none)',
+        }));
+
+        // 3. Last 50 Logs
+        const recentLogDocs = await ModelAgentLog.find({ agentInstanceId: agent._id })
+            .sort({ createdAtUtc: -1 })
+            .limit(50);
+        const last50Logs = recentLogDocs.reverse().map((l) => ({
+            tick: l.tickNumber,
+            action: l.action,
+            title: l.title,
+            message: l.message.slice(0, 400),
+            level: l.level,
+        }));
+
+        // 4. Dynamic Folder & File Structure of ai-notes-xyz-shell-files/agent/chat_id
+        const agentShellDir = agentTaskFilesDir(String(agent.threadId));
+        let shellWorkspaceListing: { relativePath: string; isDir: boolean; size: number }[] = [];
+        try {
+            const apiKeyDoc = await ModelUserApiKey.findOne({ userId: agent.userId });
+            if (apiKeyDoc) {
+                const apiKey = getApiKeyByObject(apiKeyDoc);
+                const shell = getAgentShellConfig(apiKey);
+                if (shell) {
+                    const shellRes = await axios.get(
+                        `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`,
+                        {
+                            params: { relativeDir: agentShellDir, maxFiles: 1000 },
+                            timeout: 10_000,
+                            headers: { 'X-API-Token': shell.token },
+                            validateStatus: () => true,
+                        }
+                    );
+                    if (shellRes.status === 200 && shellRes.data && typeof shellRes.data === 'object') {
+                        const rawList = (shellRes.data as { files?: unknown }).files;
+                        if (Array.isArray(rawList)) {
+                            shellWorkspaceListing = rawList
+                                .map((item) => {
+                                    if (!item || typeof item !== 'object') return null;
+                                    const o = item as Record<string, unknown>;
+                                    const rel = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
+                                    if (!rel) return null;
+                                    return {
+                                        relativePath: rel,
+                                        isDir: Boolean(o.isDir),
+                                        size: typeof o.size === 'number' ? o.size : 0,
+                                    };
+                                })
+                                .filter((i): i is NonNullable<typeof i> => i !== null);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to fetch dynamic shell file structure for tick:', e);
         }
 
         const memories = await ModelAgentMemory.find({
@@ -282,20 +338,20 @@ Rules:
             typeof u.message === 'string' && /\bnoop\b/i.test(u.message)
         ).length;
 
-        const userRequestMem = memories.find((m) => m.key === 'user_request');
-        const userRequestText = userRequestMem?.content || '';
-        const wantsExcel = /\b(excel|xlsx|spreadsheet|downloadable|download)\b/i.test(
-            `${userRequestText}\n${currentGoal.title}\n${currentGoal.description}`
-        );
-        const alreadyCreatedExcel = recentUpdates.some((u) => u.updateType === 'excel_created')
-            || memories.some((m) => typeof m.key === 'string' && m.key.startsWith('excel_'));
-
         const userPrompt = JSON.stringify(
             {
                 currentGoal: {
                     title: currentGoal.title,
                     description: currentGoal.description,
                     status: currentGoal.status,
+                },
+                past10ChatMessages: past10Messages,
+                pastGoalResults,
+                last50AgentLogs: last50Logs,
+                shellWorkspace: {
+                    directoryPath: agentShellDir,
+                    fileCount: shellWorkspaceListing.length,
+                    filesAndFolders: shellWorkspaceListing,
                 },
                 memory: memories.map((m) => ({
                     key: m.key,
@@ -308,15 +364,9 @@ Rules:
                 })),
                 tickNumber,
                 recentNoopCount,
-                wantsExcel,
-                alreadyCreatedExcel,
-                instruction: alreadyCreatedExcel
-                    ? 'Excel file was already created. Call complete_goal now for current goal (mention filename).'
-                    : wantsExcel
-                      ? 'User requested Excel. Call create_excel NOW with fileName ending in .xlsx and structured rows.'
-                      : recentNoopCount >= 2
-                        ? 'Too many noops. Call complete_goal now with best deliverable.'
-                        : 'Progress toward completing current goal using registered tools.',
+                instruction: recentNoopCount >= 2
+                    ? 'Too many noops. Call complete_goal now with best deliverable.'
+                    : 'Progress toward completing current goal using registered tools.',
             },
             null,
             2
@@ -381,7 +431,6 @@ Rules:
                 decision as unknown as Record<string, unknown>
             );
         } else {
-            // Fallback for unrecognized action
             const fallbackTool = defaultAgentToolRegistry.getTool('noop');
             if (fallbackTool) {
                 await fallbackTool.execute(
@@ -396,7 +445,7 @@ Rules:
                         llmConfig,
                         logCtx,
                     },
-                    decision as unknown as Record<string, unknown>
+                    { reason: `Unrecognized action: ${decision.action}` }
                 );
             }
         }
@@ -409,38 +458,32 @@ Rules:
                 updatedAtUtc: new Date(),
             },
         });
-
-        await writeAgentLog({
-            agentInstanceId: agent._id as mongoose.Types.ObjectId,
-            userId: agent.userId,
-            threadId: agent.threadId,
-            action: 'tick_end',
-            message: `Tick ${tickNumber} finished (${decision.action})`,
-            level: 'debug',
-            goalId: currentGoal._id as mongoose.Types.ObjectId,
-            tickNumber,
-            payload: { action: decision.action },
+    } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        await ModelAgentInstance.findByIdAndUpdate(agent._id, {
+            $set: {
+                status: 'error',
+                errorReason: errMsg.slice(0, 1000),
+                tickLockUntilUtc: null,
+                updatedAtUtc: new Date(),
+            },
         });
-    } catch (error) {
-        console.error('agentProcessTick error:', error);
-        const errMsg = error instanceof Error ? error.message : 'Unknown error';
         await writeUpdate({
             agentInstanceId: agent._id as mongoose.Types.ObjectId,
             userId: agent.userId,
             threadId: agent.threadId,
             updateType: 'error',
-            message: errMsg,
-            tickNumber,
+            message: `Agent tick error: ${errMsg}`,
+            tickNumber: agent.tickCount || 0,
         });
-        await ModelAgentInstance.findByIdAndUpdate(agent._id, {
-            $set: {
-                status: 'error',
-                errorReason: errMsg,
-                tickCount: tickNumber,
-                lastTickAtUtc: new Date(),
-                tickLockUntilUtc: null,
-                updatedAtUtc: new Date(),
-            },
+        await writeAgentLog({
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            action: 'agent_error',
+            message: errMsg,
+            level: 'error',
+            tickNumber: agent.tickCount || 0,
         });
     }
 };

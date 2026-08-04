@@ -40,7 +40,7 @@ const agentTickByPendingTask = async ({
             return true;
         }
 
-        await agentProcessTick({ agentInstanceId });
+        await agentProcessTick(agentInstanceId);
 
         const agentAfter = await ModelAgentInstance.findById(agentInstanceId)
             .select('_id userId status')
