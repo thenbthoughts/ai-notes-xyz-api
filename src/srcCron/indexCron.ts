@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 
+import agentCronTick from '../routes/chatLlm/chatLlmCrud/agent/agentCron';
 import answerMachineV4CronTick from '../routes/chatLlm/chatLlmCrud/answerMachineV4/answerMachineV4Cron';
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
@@ -66,6 +67,16 @@ const initCron = () => {
         '*/10 * * * * *',
         async () => {
             await answerMachineV4CronTick();
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/2 * * * * *',
+        async () => {
+            await agentCronTick();
         },
         {
             noOverlap: true,

@@ -225,5 +225,67 @@ router.get('/download', middlewareUserAuth, async (req: Request, res: Response) 
         });
     }
 });
+/**
+ * POST /api/chat-llm/shell-files/delete
+ * Delete a file or directory inside root ai-notes-xyz-shell-files
+ */
+router.post('/delete', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        const userId = res.locals.auth_userId;
+        const rawPath = typeof req.body.relativePath === 'string' ? req.body.relativePath : '';
+        if (!rawPath) {
+            return res.status(400).json({ message: 'relativePath parameter is required' });
+        }
+
+        const relativePath = sanitizeRelativePath(rawPath);
+        const apiKeyDoc = await ModelUserApiKey.findOne({ userId });
+        if (!apiKeyDoc) {
+            return res.status(400).json({ message: 'User API keys not found' });
+        }
+        const apiKey = getApiKeyByObject(apiKeyDoc);
+        const shell = getAgentShellConfig(apiKey);
+
+        if (!shell) {
+            return res.status(400).json({ message: 'Shell Engine is not configured in settings.' });
+        }
+
+        // 1. Try Shell Engine file delete API
+        const shellRes = await axios.post(
+            `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/delete`,
+            { relativePath },
+            {
+                timeout: 30_000,
+                headers: { 'X-API-Token': shell.token, 'Content-Type': 'application/json' },
+                validateStatus: () => true,
+            }
+        );
+
+        if (shellRes.status === 200) {
+            return res.json({ success: true, message: 'Deleted successfully' });
+        }
+
+        // 2. Fallback: run shell command rm -rf
+        const execRes = await axios.post(
+            `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/execute`,
+            { command: `rm -rf "${relativePath}" 2>&1` },
+            {
+                timeout: 30_000,
+                headers: { 'X-API-Token': shell.token, 'Content-Type': 'application/json' },
+                validateStatus: () => true,
+            }
+        );
+
+        if (execRes.status === 200) {
+            return res.json({ success: true, message: 'Deleted successfully' });
+        }
+
+        return res.status(400).json({ message: 'Failed to delete file/folder' });
+    } catch (error) {
+        console.error('shell-files delete error:', error);
+        return res.status(500).json({
+            message: error instanceof Error ? error.message : 'Failed to delete file',
+        });
+    }
+});
 
 export default router;

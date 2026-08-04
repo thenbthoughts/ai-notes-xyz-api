@@ -49,7 +49,7 @@ export interface AnswerMachinePollingResponse {
 
 export interface AgentPollingResponse {
     isProcessing: boolean;
-    status: 'running' | 'paused' | 'stopped' | 'completed' | 'error' | 'not_started';
+    status: 'pending' | 'success' | 'failed' | 'not_started';
     agentInstanceId: string | null;
     tickCount: number;
     goals: Array<{
@@ -422,11 +422,18 @@ router.post(
                 agentInstanceId: latestAgent._id,
             });
 
-            const isProcessing = latestAgent.status === 'running';
+            let mappedStatus: 'pending' | 'success' | 'failed' = 'pending';
+            if (latestAgent.status === 'success') {
+                mappedStatus = 'success';
+            } else if (latestAgent.status === 'failed') {
+                mappedStatus = 'failed';
+            }
+
+            const isProcessing = mappedStatus === 'pending';
 
             const response: AgentPollingResponse = {
                 isProcessing,
-                status: latestAgent.status,
+                status: mappedStatus,
                 agentInstanceId: String(latestAgent._id),
                 tickCount: latestAgent.tickCount || 0,
                 goals: goals.map((g) => ({
@@ -505,7 +512,7 @@ router.post(
             const latestRunning = await ModelAgentInstance.findOne({
                 threadId,
                 userId: auth_userId,
-                status: { $in: ['running', 'paused'] },
+                status: 'pending',
             }).sort({ createdAtUtc: -1 });
 
             if (!latestRunning) {
@@ -517,7 +524,7 @@ router.post(
                 {
                     $set: {
                         cancellationRequestedUtc: new Date(),
-                        status: 'stopped',
+                        status: 'failed',
                         updatedAtUtc: new Date(),
                         tickLockUntilUtc: null,
                     },
@@ -556,6 +563,55 @@ router.post(
             return res.status(500).json({
                 message: 'Server error',
                 error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    }
+);
+
+router.post(
+    '/agentProgressList',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_userId = res.locals.auth_userId;
+            const runningAgents = await ModelAgentInstance.find({
+                userId: auth_userId,
+                status: 'pending',
+            }).sort({ updatedAtUtc: -1 });
+
+            const list = await Promise.all(
+                runningAgents.map(async (agent) => {
+                    const thread = await ModelChatLlmThread.findById(agent.threadId).select('threadTitle').lean();
+                    const goals = await ModelAgentGoal.find({ agentInstanceId: agent._id }).sort({ orderIndex: 1 });
+                    const inProgressGoal = goals.find((g) => g.status === 'in_progress') || goals.find((g) => g.status === 'pending');
+                    const completedGoalsCount = goals.filter((g) => g.status === 'completed').length;
+
+                    return {
+                        agentInstanceId: String(agent._id),
+                        threadId: String(agent.threadId),
+                        threadTitle: thread?.threadTitle || 'Chat Thread',
+                        status: agent.status,
+                        tickCount: agent.tickCount || 0,
+                        goalsCount: goals.length,
+                        completedGoalsCount,
+                        currentGoalTitle: inProgressGoal?.title || 'Processing...',
+                        lastTickAtUtc: agent.lastTickAtUtc || agent.updatedAtUtc,
+                        createdAtUtc: agent.createdAtUtc,
+                    };
+                })
+            );
+
+            return res.status(200).json({
+                success: true,
+                count: list.length,
+                agents: list,
+            });
+        } catch (error) {
+            console.error('agentProgressList error:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Server error',
+                error: error instanceof Error ? error.message : String(error),
             });
         }
     }

@@ -9,7 +9,8 @@ import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified'
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { AgentToolContext, AgentToolDefinition, AgentToolResult } from './agentToolTypes';
 import { searchAgentDomain, AgentDomainSearchSource } from './agentDomainAccess';
-import { agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellWriteFile } from './agentShellWorkspace';
+import axios from 'axios';
+import { agentTaskFilesDir, agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellWriteFile } from './agentShellWorkspace';
 import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
 
 const updateTypeToLogAction = (updateType: string, payload?: Record<string, unknown>): string => {
@@ -93,6 +94,40 @@ const generateCodeViaLlm = async (
             : `print('Task: ${promptText.replace(/'/g, "\\'")}')`;
     }
 
+    const agentShellDir = agentTaskFilesDir(String(ctx.threadId));
+    let fileListText = '(no workspace files listed)';
+    try {
+        const apiKeyDoc = await ModelUserApiKey.findOne({ userId: ctx.userId });
+        if (apiKeyDoc) {
+            const apiKey = getApiKeyByObject(apiKeyDoc);
+            const shell = getAgentShellConfig(apiKey);
+            if (shell) {
+                const shellRes = await axios.get(
+                    `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`,
+                    {
+                        params: { relativeDir: agentShellDir, maxFiles: 100 },
+                        timeout: 5000,
+                        headers: { 'X-API-Token': shell.token },
+                        validateStatus: () => true,
+                    }
+                );
+                if (shellRes.status === 200 && shellRes.data && Array.isArray((shellRes.data as any).files)) {
+                    fileListText = (shellRes.data as any).files
+                        .map((f: any) => {
+                            const rel = String(f.relativePath || '').replace(/\\/g, '/');
+                            const abs = String(f.absolutePath || '').replace(/\\/g, '/');
+                            const folderIdx = rel.indexOf(`${agentShellDir}/`);
+                            const localRel = folderIdx !== -1 ? rel.slice(folderIdx + agentShellDir.length + 1) : rel;
+                            return `- absolutePath: "${abs || `/app/data/${rel}`}"\n  pathInAgentFolder: "${localRel}"\n  size: ${f.size || 0} bytes`;
+                        })
+                        .join('\n');
+                }
+            }
+        }
+    } catch {
+        /* ignore */
+    }
+
     const messages: Message[] = [
         {
             role: 'system',
@@ -100,7 +135,19 @@ const generateCodeViaLlm = async (
         },
         {
             role: 'user',
-            content: `Goal / Task: ${promptText}\nGoal Title: ${ctx.currentGoal.title}\nGoal Description: ${ctx.currentGoal.description}`,
+            content: `Goal / Task: ${promptText}
+Goal Title: ${ctx.currentGoal.title}
+Goal Description: ${ctx.currentGoal.description}
+
+Available Workspace Directory: ${agentShellDir}
+Available Files in Workspace & Uploads:
+${fileListText}
+
+CRITICAL FILE PATH RULES:
+- Use either the exact \`absolutePath\` (e.g. '/app/data/ai-notes-xyz-shell-files/agent/...') OR \`pathInAgentFolder\` (e.g. 'uploads/filename.jpg').
+- NEVER use full workspace prefix 'ai-notes-xyz-shell-files/agent/...' as a relative path when running inside the agent folder!
+- Do NOT use placeholder/imaginary filenames like 'input.jpg', 'image.png', or 'test.txt'. Use the real file paths from the listing above.
+- Save output files directly in the workspace directory or uploads/ folder.`,
         },
     ];
 
@@ -369,14 +416,18 @@ export class AgentToolRegistry {
                                 }
 
                                 if (repairCmd) {
-                                    const repairResult = await shellExecuteCommand({
-                                        shell,
-                                        command: `${repairCmd} 2>&1`,
-                                        timeoutMs: 120_000,
-                                        logCtx: ctx.logCtx,
-                                    });
-                                    execStdout = repairResult.stdout || 'Repaired command executed successfully';
-                                    lastErr = '';
+                                    try {
+                                        const repairResult = await shellExecuteCommand({
+                                            shell,
+                                            command: `${repairCmd} 2>&1`,
+                                            timeoutMs: 120_000,
+                                            logCtx: ctx.logCtx,
+                                        });
+                                        execStdout = repairResult.stdout || 'Repaired command executed successfully';
+                                        lastErr = '';
+                                    } catch (rErr) {
+                                        lastErr = rErr instanceof Error ? rErr.message : String(rErr);
+                                    }
                                 }
                             }
                         } catch (repairError) {
@@ -386,7 +437,35 @@ export class AgentToolRegistry {
                 }
 
                 if (lastErr && !execStdout) {
-                    throw new Error(`Script execution failed: ${lastErr}`);
+                    const errorMsg = `Script execution failed: ${lastErr}`.trim();
+                    
+                    await ModelAgentMemory.create({
+                        agentInstanceId: ctx.agentInstanceId,
+                        userId: ctx.userId,
+                        threadId: ctx.threadId,
+                        key: `script_err_${ctx.tickNumber}`,
+                        content: errorMsg.slice(-1000), // Keep the end of the error where the actual issue usually is
+                        memoryType: 'observation',
+                        createdAtUtc: new Date(),
+                        updatedAtUtc: new Date(),
+                    });
+
+                    await writeUpdate({
+                        agentInstanceId: ctx.agentInstanceId,
+                        userId: ctx.userId,
+                        threadId: ctx.threadId,
+                        updateType: 'error',
+                        message: errorMsg.slice(0, 500),
+                        goalId: ctx.currentGoal._id,
+                        tickNumber: ctx.tickNumber,
+                    });
+
+                    return {
+                        success: false,
+                        action: 'execute_script',
+                        resultSummary: 'Script execution failed',
+                        error: lastErr,
+                    };
                 }
 
                 await writeUpdate({

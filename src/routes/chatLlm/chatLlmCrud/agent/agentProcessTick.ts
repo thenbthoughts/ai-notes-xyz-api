@@ -11,10 +11,9 @@ import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { agentTaskFilesDir, getAgentShellConfig } from './agentShellWorkspace';
+import syncThreadUploadsToAgentWorkspace from './agentSyncUploads';
 import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
 import { defaultAgentToolRegistry, writeUpdate } from './agentToolRegistry';
-
-const TICK_LOCK_MS = 300_000;
 
 interface AgentTickDecision {
     action: string;
@@ -59,7 +58,7 @@ const extractJsonObject = (raw: string): Record<string, unknown> | null => {
 const parseDecision = (raw: string): AgentTickDecision => {
     const json = extractJsonObject(raw);
     if (!json) {
-        return { action: 'noop', reason: 'Unparseable LLM decision output' };
+        return { action: 'noop', reason: 'Failed to parse JSON response' };
     }
 
     const action = typeof json.action === 'string' ? json.action.trim() : 'noop';
@@ -68,9 +67,13 @@ const parseDecision = (raw: string): AgentTickDecision => {
         query: typeof json.query === 'string' ? json.query : undefined,
         memoryKey: typeof json.memoryKey === 'string' ? json.memoryKey : undefined,
         memoryContent: typeof json.memoryContent === 'string' ? json.memoryContent : undefined,
-        memoryType: (['fact', 'observation', 'plan', 'result', 'other'] as const).includes(json.memoryType as any)
-            ? (json.memoryType as any)
-            : undefined,
+        memoryType:
+            json.memoryType === 'fact' ||
+            json.memoryType === 'observation' ||
+            json.memoryType === 'plan' ||
+            json.memoryType === 'result'
+                ? json.memoryType
+                : 'other',
         goalResult: typeof json.goalResult === 'string' ? json.goalResult : undefined,
         message: typeof json.message === 'string' ? json.message : undefined,
         reason: typeof json.reason === 'string' ? json.reason : undefined,
@@ -86,18 +89,17 @@ const parseDecision = (raw: string): AgentTickDecision => {
  */
 export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId | string): Promise<void> => {
     const now = new Date();
-    const lockUntil = new Date(now.getTime() + TICK_LOCK_MS);
 
-    const agent = await ModelAgentInstance.findOneAndUpdate(
+    let agent = await ModelAgentInstance.findOneAndUpdate(
         {
             _id: agentInstanceId,
-            status: 'running',
+            status: 'pending',
+            statusIsRunning: false,
             cancellationRequestedUtc: null,
-            $or: [{ tickLockUntilUtc: null }, { tickLockUntilUtc: { $lt: now } }],
         },
         {
             $set: {
-                tickLockUntilUtc: lockUntil,
+                statusIsRunning: true,
                 updatedAtUtc: now,
             },
         },
@@ -112,8 +114,8 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
         if (agent.cancellationRequestedUtc) {
             await ModelAgentInstance.findByIdAndUpdate(agent._id, {
                 $set: {
-                    status: 'stopped',
-                    tickLockUntilUtc: null,
+                    status: 'failed',
+                    statusIsRunning: false,
                     updatedAtUtc: new Date(),
                 },
             });
@@ -147,11 +149,11 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
             const summary = `Completed ${completedCount} of ${goals.length} goals.`;
             await ModelAgentInstance.findByIdAndUpdate(agent._id, {
                 $set: {
-                    status: 'completed',
+                    status: 'success',
+                    statusIsRunning: false,
                     summary: summary.slice(0, 4000),
                     tickCount: agent.tickCount || 0,
                     lastTickAtUtc: new Date(),
-                    tickLockUntilUtc: null,
                     updatedAtUtc: new Date(),
                 },
             });
@@ -243,9 +245,27 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
             level: l.level,
         }));
 
-        // 4. Dynamic Folder & File Structure of ai-notes-xyz-shell-files/agent/chat_id
+        // 4. Runtime sync of user uploaded files/photos (R2/S3/GridFS -> Buffer -> ai-notes-xyz-shell-files/agent/chat_id/uploads/*)
+        const logCtx = {
+            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+            userId: agent.userId,
+            threadId: agent.threadId,
+            goalId: currentGoal._id as mongoose.Types.ObjectId,
+            tickNumber,
+        };
+
+        await syncThreadUploadsToAgentWorkspace({
+            userId: agent.userId,
+            threadId: agent.threadId,
+            logCtx,
+        });
+
+        // 5. Dynamic Folder & File Structure of ai-notes-xyz-shell-files/agent/chat_id
         const agentShellDir = agentTaskFilesDir(String(agent.threadId));
-        let shellWorkspaceListing: { relativePath: string; isDir: boolean; size: number }[] = [];
+        let shellWorkspaceListing: { relativePath: string; absolutePath: string; isDir: boolean; size: number }[] = [];
+        let containerWorkingDir = '/app/data/ai-notes-xyz-shell-files';
+        let agentFolderAbsolutePath = `/app/data/${agentShellDir}`;
+
         try {
             const apiKeyDoc = await ModelUserApiKey.findOne({ userId: agent.userId });
             if (apiKeyDoc) {
@@ -262,7 +282,8 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                         }
                     );
                     if (shellRes.status === 200 && shellRes.data && typeof shellRes.data === 'object') {
-                        const rawList = (shellRes.data as { files?: unknown }).files;
+                        const body = shellRes.data as Record<string, unknown>;
+                        const rawList = body.files;
                         if (Array.isArray(rawList)) {
                             shellWorkspaceListing = rawList
                                 .map((item) => {
@@ -270,8 +291,32 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                                     const o = item as Record<string, unknown>;
                                     const rel = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
                                     if (!rel) return null;
+
+                                    // Filter out node_modules, .git, and package-lock.json from prompt context
+                                    if (/\b(node_modules|\.git)\b/i.test(rel) || /package-lock\.json$/i.test(rel)) {
+                                        return null;
+                                    }
+
+                                    const abs = typeof o.absolutePath === 'string' && o.absolutePath.trim()
+                                        ? o.absolutePath.replace(/\\/g, '/')
+                                        : `/app/data/${rel}`;
+
+                                    if (abs.includes('/agent/')) {
+                                        const idx = abs.indexOf('/agent/');
+                                        containerWorkingDir = abs.slice(0, idx);
+                                        agentFolderAbsolutePath = abs.slice(0, idx + `/agent/${agent.threadId}`.length);
+                                    } else if (abs.includes('/ai-notes-xyz-shell-files/')) {
+                                        const idx = abs.indexOf('/ai-notes-xyz-shell-files/');
+                                        containerWorkingDir = abs.slice(0, idx + '/ai-notes-xyz-shell-files'.length);
+                                    }
+
+                                    const folderIdx = rel.indexOf(`${agentShellDir}/`);
+                                    const pathInAgentFolder = folderIdx !== -1 ? rel.slice(folderIdx + agentShellDir.length + 1) : rel;
+
                                     return {
                                         relativePath: rel,
+                                        pathInAgentFolder,
+                                        absolutePath: abs,
                                         isDir: Boolean(o.isDir),
                                         size: typeof o.size === 'number' ? o.size : 0,
                                     };
@@ -327,7 +372,9 @@ Current goal must be completed. Return JSON ONLY with your chosen action and arg
 
 Rules:
 - Runtime Preference Hierarchy: (1) Node.js first (node), (2) Python 3 second (python3 / python), (3) system CLI utilities.
+- You are allowed to initialize Node packages using 'npm init -y' and install any needed packages (e.g. sharp, jimp, exceljs, canvas) or python packages (e.g. pillow, opencv-python, pandas) via shell commands or child processes.
 - When calling execute_script, you MUST provide valid, complete, runnable code in the "code" field.
+- When referencing workspace files in code, use either their exact \`absolutePath\` (e.g. '/app/data/ai-notes-xyz-shell-files/agent/...') OR \`pathInAgentFolder\` (e.g. 'uploads/file.jpg'). Do NOT prepend 'ai-notes-xyz-shell-files/agent/...' to local relative paths inside the script.
 - If a command fails or python is not found, the agent system automatically falls back to python3 and invokes LLM self-healing to generate an alternate solution.
 - Search domain data before completing goals requiring personal context.
 - Use write_memory to store facts and findings.
@@ -349,14 +396,16 @@ Rules:
                 pastGoalResults,
                 last50AgentLogs: last50Logs,
                 shellWorkspace: {
-                    directoryPath: agentShellDir,
+                    workingDirectoryPath: containerWorkingDir,
+                    agentFolderAbsolutePath: agentFolderAbsolutePath || `${containerWorkingDir}/agent/${agent.threadId}`,
+                    agentFolderRelativePath: agentShellDir,
                     fileCount: shellWorkspaceListing.length,
                     filesAndFolders: shellWorkspaceListing,
                 },
                 memory: memories.map((m) => ({
                     key: m.key,
                     type: m.memoryType,
-                    content: m.content.slice(0, 400),
+                    content: m.content.slice(0, 1500),
                 })),
                 recentUpdates: recentUpdates.map((u) => ({
                     type: u.updateType,
@@ -376,14 +425,6 @@ Rules:
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
         ];
-
-        const logCtx = {
-            agentInstanceId: agent._id as mongoose.Types.ObjectId,
-            userId: agent.userId,
-            threadId: agent.threadId,
-            goalId: currentGoal._id as mongoose.Types.ObjectId,
-            tickNumber,
-        };
 
         const llmResult = await fetchLlmUnifiedLogged({
             logCtx,
@@ -453,8 +494,8 @@ Rules:
         await ModelAgentInstance.findByIdAndUpdate(agent._id, {
             $set: {
                 tickCount: tickNumber,
+                statusIsRunning: false,
                 lastTickAtUtc: new Date(),
-                tickLockUntilUtc: null,
                 updatedAtUtc: new Date(),
             },
         });
@@ -462,9 +503,9 @@ Rules:
         const errMsg = err instanceof Error ? err.message : String(err);
         await ModelAgentInstance.findByIdAndUpdate(agent._id, {
             $set: {
-                status: 'error',
+                status: 'failed',
+                statusIsRunning: false,
                 errorReason: errMsg.slice(0, 1000),
-                tickLockUntilUtc: null,
                 updatedAtUtc: new Date(),
             },
         });

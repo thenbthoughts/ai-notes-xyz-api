@@ -86,7 +86,7 @@ const agentInitiateFunc = async ({
         const previousAgents = await ModelAgentInstance.find({
             threadId: message.threadId,
             userId: thread.userId,
-            status: { $in: ['running', 'paused'] },
+            status: 'pending',
         })
             .select('_id')
             .lean();
@@ -97,7 +97,8 @@ const agentInitiateFunc = async ({
                 { _id: { $in: prevIds } },
                 {
                     $set: {
-                        status: 'stopped',
+                        status: 'failed',
+                        statusIsRunning: false,
                         updatedAtUtc: new Date(),
                         cancellationRequestedUtc: new Date(),
                     },
@@ -134,7 +135,8 @@ const agentInitiateFunc = async ({
             threadId: message.threadId,
             parentMessageId: messageId,
             userId: thread.userId,
-            status: 'running',
+            status: 'pending',
+            statusIsRunning: true,
             errorReason: '',
             tickCount: 0,
             lastTickAtUtc: null,
@@ -258,6 +260,10 @@ const agentInitiateFunc = async ({
             aiModelName: llmConfig?.model || '',
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
+        });
+
+        await ModelAgentInstance.findByIdAndUpdate(agentInstance._id, {
+            $set: { statusIsRunning: false }
         });
 
         await enqueueAgentTickPendingTask({
