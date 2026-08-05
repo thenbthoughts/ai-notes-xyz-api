@@ -1,6 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 
-export type AgentInstanceStatus = 'running' | 'paused' | 'stopped' | 'completed' | 'error';
+export type AgentInstanceStatus = 'pending' | 'success' | 'failed';
 
 export interface IAgentInstance extends Document {
     _id: mongoose.Types.ObjectId;
@@ -8,6 +8,7 @@ export interface IAgentInstance extends Document {
     parentMessageId: mongoose.Types.ObjectId;
     userId: mongoose.Types.ObjectId;
     status: AgentInstanceStatus;
+    statusIsRunning: boolean;
     errorReason: string;
     tickCount: number;
     lastTickAtUtc: Date | null;

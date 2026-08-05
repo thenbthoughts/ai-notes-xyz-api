@@ -31,22 +31,22 @@ const agentTickByPendingTask = async ({
             return true;
         }
 
-        if (agentBefore.status !== 'running') {
+        if (agentBefore.status !== 'pending') {
             console.log(
-                'agentTickByPendingTask: agent not running, skip',
+                'agentTickByPendingTask: agent not pending, skip',
                 String(agentInstanceId),
                 agentBefore.status
             );
             return true;
         }
 
-        await agentProcessTick({ agentInstanceId });
+        await agentProcessTick(agentInstanceId);
 
         const agentAfter = await ModelAgentInstance.findById(agentInstanceId)
             .select('_id userId status')
             .lean();
 
-        if (agentAfter?.status === 'running') {
+        if (agentAfter?.status === 'pending') {
             // force: current cron row is still "pending" until processFunc marks success,
             // so the normal dedupe would skip and the agent loop would stall after tick 1.
             await enqueueAgentTickPendingTask({

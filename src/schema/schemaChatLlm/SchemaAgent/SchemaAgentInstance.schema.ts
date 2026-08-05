@@ -23,8 +23,13 @@ const agentInstanceSchema = new Schema<IAgentInstance>({
     },
     status: {
         type: String,
-        enum: ['running', 'paused', 'stopped', 'completed', 'error'],
-        default: 'running',
+        enum: ['pending', 'success', 'failed'],
+        default: 'pending',
+        index: true,
+    },
+    statusIsRunning: {
+        type: Boolean,
+        default: false,
         index: true,
     },
     errorReason: { type: String, default: '' },
