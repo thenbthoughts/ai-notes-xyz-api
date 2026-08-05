@@ -1,18 +1,55 @@
 import mongoose from 'mongoose';
 import path from 'path';
+import axios from 'axios';
 
 import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { getFile, StorageType } from '../../../../utils/upload/uploadFunc';
-import { getAgentShellConfig, shellWriteFile } from './agentShellWorkspace';
-import { AgentLogContext } from './agentWriteLog';
+import { agentTaskFilesDir, getAgentShellConfig, shellWriteFile, type AgentShellConfig } from './agentShellWorkspace';
+import { AgentLogContext, writeAgentLogFromContext } from './agentWriteLog';
+
+type ShellListedFile = { relativePath: string; size: number };
+
+const listShellFilesQuiet = async (
+    shell: AgentShellConfig,
+    relativeDir: string
+): Promise<ShellListedFile[]> => {
+    try {
+        const shellRes = await axios.get(`${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`, {
+            params: { relativeDir, maxFiles: 500 },
+            timeout: 8_000,
+            headers: { 'X-API-Token': shell.token },
+            validateStatus: () => true,
+        });
+        if (shellRes.status !== 200 || !shellRes.data || typeof shellRes.data !== 'object') {
+            return [];
+        }
+        const raw = (shellRes.data as { files?: unknown }).files;
+        if (!Array.isArray(raw)) return [];
+        return raw
+            .map((item) => {
+                if (!item || typeof item !== 'object') return null;
+                const o = item as Record<string, unknown>;
+                const rel = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
+                if (!rel) return null;
+                return {
+                    relativePath: rel,
+                    size: typeof o.size === 'number' ? o.size : -1,
+                };
+            })
+            .filter((x): x is ShellListedFile => x !== null);
+    } catch {
+        return [];
+    }
+};
 
 /**
  * Sync user attachments & inline message photos for a chat thread:
  *   Storage (R2/S3/GridFS) -> Buffer -> ai-notes-xyz-shell-files/agent/${chat_id}/uploads/${recordId}_${fileName}
- * Executed dynamically at agent runtime when starting/ticking.
+ *
+ * Skips re-upload when the same basename already exists in the shell workspace with the same byte size.
  */
 export const syncThreadUploadsToAgentWorkspace = async ({
     userId,
@@ -24,7 +61,6 @@ export const syncThreadUploadsToAgentWorkspace = async ({
     logCtx?: AgentLogContext | null;
 }): Promise<void> => {
     try {
-        const userIdStr = String(userId);
         const threadIdStr = String(threadId);
 
         const apiKeyDoc = await ModelUserApiKey.findOne({ userId });
@@ -34,20 +70,19 @@ export const syncThreadUploadsToAgentWorkspace = async ({
         if (!shell) return;
 
         const defaultStorageType: StorageType = apiKey.fileStorageType === 's3' ? 's3' : 'gridfs';
-        const defaultS3Config = defaultStorageType === 's3' && apiKey.apiKeyS3Valid ? {
-            region: apiKey.apiKeyS3Region || 'auto',
-            endpoint: apiKey.apiKeyS3Endpoint || '',
-            accessKeyId: apiKey.apiKeyS3AccessKeyId || '',
-            secretAccessKey: apiKey.apiKeyS3SecretAccessKey || '',
-            bucketName: apiKey.apiKeyS3BucketName || '',
-        } : undefined;
+        const defaultS3Config =
+            defaultStorageType === 's3' && apiKey.apiKeyS3Valid
+                ? {
+                      region: apiKey.apiKeyS3Region || 'auto',
+                      endpoint: apiKey.apiKeyS3Endpoint || '',
+                      accessKeyId: apiKey.apiKeyS3AccessKeyId || '',
+                      secretAccessKey: apiKey.apiKeyS3SecretAccessKey || '',
+                      bucketName: apiKey.apiKeyS3BucketName || '',
+                  }
+                : undefined;
 
-        // 1. Query uploads associated by parentEntityId
         const directUploads = await ModelUserFileUpload.find({
-            $or: [
-                { parentEntityId: threadIdStr },
-                { parentEntityId: String(threadIdStr) },
-            ],
+            $or: [{ parentEntityId: threadIdStr }, { parentEntityId: String(threadIdStr) }],
         });
 
         const recordsToSync: Array<{
@@ -64,7 +99,6 @@ export const syncThreadUploadsToAgentWorkspace = async ({
             storageType: rec.storageType === 's3' ? 's3' : 'gridfs',
         }));
 
-        // 2. Scan chat messages for getFile?fileName=... URL references
         const chatMsgs = await ModelChatLlm.find({ threadId }).select('content').lean();
         const urlRegex = /getFile\?fileName=([^\s"'&\)]+)/g;
 
@@ -74,7 +108,11 @@ export const syncThreadUploadsToAgentWorkspace = async ({
             let match: RegExpExecArray | null;
             while ((match = urlRegex.exec(content)) !== null) {
                 const rawPath = decodeURIComponent(match[1]);
-                if (rawPath && !recordsToSync.some((r) => r.fileUploadPath === rawPath) && !additionalFilePaths.includes(rawPath)) {
+                if (
+                    rawPath &&
+                    !recordsToSync.some((r) => r.fileUploadPath === rawPath) &&
+                    !additionalFilePaths.includes(rawPath)
+                ) {
                     additionalFilePaths.push(rawPath);
                 }
             }
@@ -100,7 +138,17 @@ export const syncThreadUploadsToAgentWorkspace = async ({
 
         if (recordsToSync.length === 0) return;
 
+        const agentDir = agentTaskFilesDir(threadIdStr);
+        const uploadsDir = `${agentDir}/uploads`;
+        const existingFiles = await listShellFilesQuiet(shell, uploadsDir);
+        const existingByBase = new Map<string, number>();
+        for (const f of existingFiles) {
+            existingByBase.set(path.basename(f.relativePath), f.size);
+        }
+
         const processedPaths = new Set<string>();
+        let skipped = 0;
+        let uploaded = 0;
 
         for (const item of recordsToSync) {
             if (processedPaths.has(item.fileUploadPath)) continue;
@@ -109,34 +157,50 @@ export const syncThreadUploadsToAgentWorkspace = async ({
             const rawOriginalName = item.originalName || path.basename(item.fileUploadPath) || 'file';
             const cleanOriginalName = rawOriginalName.replace(/[^\w.\- ()[\]]+/g, '_');
 
-            // Format prefix: {idPrefix}_{cleanOriginalName}
             const prefixedFileName = cleanOriginalName.startsWith(`${item.idPrefix}_`)
                 ? cleanOriginalName
                 : `${item.idPrefix}_${cleanOriginalName}`;
 
-            const targetRelPath = `ai-notes-xyz-shell-files/agent/${threadIdStr}/uploads/${prefixedFileName}`;
+            const targetRelPath = `${uploadsDir}/${prefixedFileName}`;
 
             const recordStorageType: StorageType = item.storageType === 's3' ? 's3' : 'gridfs';
             const s3ConfigToUse = recordStorageType === 's3' ? defaultS3Config : undefined;
 
-            // Read R2/S3/GridFS -> Buffer
             const downloadRes = await getFile({
                 fileName: item.fileUploadPath,
                 storageType: recordStorageType,
                 s3Config: s3ConfigToUse,
             });
 
-            if (downloadRes.success && downloadRes.content) {
-                // Upload Buffer -> Shell Engine workspace path under uploads/
-                await shellWriteFile({
-                    shell,
-                    relativePath: targetRelPath,
-                    buffer: downloadRes.content,
-                    fileName: prefixedFileName,
-                    mimeType: item.contentType || 'application/octet-stream',
-                    logCtx,
-                });
+            if (!(downloadRes.success && downloadRes.content)) continue;
+
+            const size = downloadRes.content.length;
+            const existingSize = existingByBase.get(prefixedFileName);
+            if (existingSize === size) {
+                skipped += 1;
+                continue;
             }
+
+            await shellWriteFile({
+                shell,
+                relativePath: targetRelPath,
+                buffer: downloadRes.content,
+                fileName: prefixedFileName,
+                mimeType: item.contentType || 'application/octet-stream',
+                logCtx,
+            });
+            existingByBase.set(prefixedFileName, size);
+            uploaded += 1;
+        }
+
+        if (logCtx && uploaded > 0) {
+            await writeAgentLogFromContext(logCtx, {
+                action: 'shell_upload',
+                title: `Uploads sync: ${uploaded} new, ${skipped} skipped`,
+                message: `Thread uploads synced (${uploaded} uploaded, ${skipped} already present)`,
+                level: 'info',
+                payload: { uploaded, skipped, uploadsDir },
+            });
         }
     } catch (err) {
         console.error('syncThreadUploadsToAgentWorkspace runtime sync error:', err);

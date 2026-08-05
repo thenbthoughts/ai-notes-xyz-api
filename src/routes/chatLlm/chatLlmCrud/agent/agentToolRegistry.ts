@@ -81,8 +81,55 @@ const isExecutableCode = (str: string, type: 'node' | 'python'): boolean => {
     if (type === 'node') {
         return /\b(const|let|var|require|function|console|fs|path|process|exports|module)\b/.test(clean);
     } else {
-        return /\b(import|from|def|class|print|with|open|sys|os)\b/.test(clean);
+        return /\b(import|from|def|class|print|with|open|sys|os|PIL|Image)\b/.test(clean);
     }
+};
+
+/** Prefer explicit args, then filename extension, then code heuristics. Never run .py with node. */
+const resolveScriptType = (
+    args: Record<string, unknown>,
+    fileName: string,
+    code: string,
+): 'node' | 'python' => {
+    const ext = path.extname(fileName || '').toLowerCase();
+    if (ext === '.py') return 'python';
+    if (ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.ts') return 'node';
+
+    const explicit = typeof args.scriptType === 'string' ? args.scriptType.toLowerCase().trim() : '';
+    if (explicit === 'python' || explicit === 'python3' || explicit === 'py') return 'python';
+    if (explicit === 'node' || explicit === 'js' || explicit === 'javascript') return 'node';
+
+    const action = typeof args.action === 'string' ? args.action.toLowerCase().trim() : '';
+    if (action === 'python') return 'python';
+    if (action === 'node') return 'node';
+
+    const py = isExecutableCode(code, 'python');
+    const js = isExecutableCode(code, 'node');
+    if (py && !js) return 'python';
+    if (js && !py) return 'node';
+    if (py && js) {
+        // Image/pillow work almost always Python
+        if (/\b(PIL|pillow|Image\.open|cv2)\b/i.test(code)) return 'python';
+    }
+    return 'node';
+};
+
+const buildScriptExecCommand = (
+    scriptType: 'node' | 'python',
+    absDir: string,
+    scriptFileName: string,
+    absolutePath: string,
+): string => {
+    const runner = scriptType === 'python' ? 'python3' : 'node';
+    const dir = absDir.replace(/"/g, '');
+    const abs = absolutePath.replace(/"/g, '');
+    const file = scriptFileName.replace(/"/g, '');
+    // Prefer cwd = script dir (so relative uploads/ paths work); fall back to absolute file path.
+    return (
+        `if [ -d "${dir}" ]; then cd "${dir}" && ${runner} "./${file}" 2>&1; ` +
+        `elif [ -f "${abs}" ]; then ${runner} "${abs}" 2>&1; ` +
+        `else echo "Script not found: ${file} (dir=${dir})" >&2; exit 1; fi`
+    );
 };
 
 const generateCodeViaLlm = async (
@@ -360,22 +407,43 @@ export class AgentToolRegistry {
         // 6. Execute Script Tool (Node.js preference / Python 3 secondary + Code Auto-Gen & Self-Healing)
         this.register({
             name: 'execute_script',
-            description: 'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace (ai-notes-xyz-shell-files/agent/chat_id). Preference: (1) Node.js, (2) Python 3.',
+            description:
+                'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace. For Python set scriptType="python" and fileName ending in .py. For image work (resize/compress) prefer Python + Pillow.',
             execute: async (ctx, args) => {
-                const scriptType = (typeof args.scriptType === 'string' && args.scriptType.toLowerCase() === 'python') || args.action === 'python' ? 'python' : 'node';
-                let rawCode = typeof args.code === 'string' && args.code.trim() ? args.code.trim() : (typeof args.script === 'string' ? args.script.trim() : '');
-                const promptReason = typeof args.reason === 'string' ? args.reason : ctx.currentGoal.description || ctx.currentGoal.title;
+                let rawCode =
+                    typeof args.code === 'string' && args.code.trim()
+                        ? args.code.trim()
+                        : typeof args.script === 'string'
+                          ? args.script.trim()
+                          : '';
+                const promptReason =
+                    typeof args.reason === 'string' ? args.reason : ctx.currentGoal.description || ctx.currentGoal.title;
+
+                let rawFileName =
+                    typeof args.fileName === 'string' && args.fileName.trim() && args.fileName.trim() !== 'file'
+                        ? args.fileName.trim()
+                        : '';
+
+                let scriptType = resolveScriptType(args, rawFileName, rawCode);
 
                 // Validate code vs English text
                 if (!isExecutableCode(rawCode, scriptType)) {
                     rawCode = await generateCodeViaLlm(ctx, promptReason, scriptType);
+                    // Re-resolve in case generated code is clearly the other language
+                    scriptType = resolveScriptType(args, rawFileName, rawCode);
                 }
 
-                let rawFileName = typeof args.fileName === 'string' && args.fileName.trim() && args.fileName.trim() !== 'file'
-                    ? args.fileName.trim()
-                    : `script_${Date.now()}.${scriptType === 'python' ? 'py' : 'js'}`;
+                if (!rawFileName) {
+                    rawFileName = `script_${Date.now()}.${scriptType === 'python' ? 'py' : 'js'}`;
+                }
 
-                if (!path.extname(rawFileName)) {
+                // Force extension to match interpreter (prevents node-on-.py)
+                const ext = path.extname(rawFileName).toLowerCase();
+                if (scriptType === 'python' && ext !== '.py') {
+                    rawFileName = `${rawFileName.replace(/\.[^.]+$/, '') || rawFileName}.py`;
+                } else if (scriptType === 'node' && !['.js', '.mjs', '.cjs'].includes(ext)) {
+                    rawFileName = `${rawFileName.replace(/\.[^.]+$/, '') || rawFileName}.js`;
+                } else if (!ext) {
                     rawFileName = `${rawFileName}.${scriptType === 'python' ? 'py' : 'js'}`;
                 }
 
@@ -396,33 +464,75 @@ export class AgentToolRegistry {
                     shell,
                     relativePath: scriptRel,
                     buffer: Buffer.from(rawCode || '// script execution\n', 'utf8'),
-                    fileName: rawFileName,
+                    fileName: path.basename(rawFileName),
                     mimeType: scriptType === 'python' ? 'text/x-python' : 'application/javascript',
                     logCtx: ctx.logCtx,
                 });
 
                 const absDir = path.dirname(scriptWritten.absolutePath).replace(/\\/g, '/');
-                const relDir = path.dirname(scriptRel).replace(/\\/g, '/');
                 const scriptFileName = path.basename(scriptRel);
+                const absolutePath = scriptWritten.absolutePath.replace(/\\/g, '/');
 
-                const findDirCmd = `TARGET_DIR=$(find /app /data /root /tmp / -type f -name "${scriptFileName}" 2>/dev/null | head -n 1 | xargs dirname 2>/dev/null); if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; else cd "${absDir}" 2>/dev/null || cd "${relDir}" 2>/dev/null || cd "/app/${relDir}" 2>/dev/null; fi`;
-
-                const execCmd = scriptType === 'node'
-                    ? `(${findDirCmd}) && node "${scriptFileName}" 2>&1`
-                    : `(${findDirCmd}) && (python3 "${scriptFileName}" 2>&1 || python "${scriptFileName}" 2>&1)`;
+                const runOnce = async (stype: 'node' | 'python'): Promise<{ stdout: string; err: string }> => {
+                    const cmd = buildScriptExecCommand(stype, absDir, scriptFileName, absolutePath);
+                    try {
+                        const execResult = await shellExecuteCommand({
+                            shell,
+                            command: cmd,
+                            timeoutMs: 120_000,
+                            logCtx: ctx.logCtx,
+                            executeFilePath: scriptRel,
+                        });
+                        return { stdout: execResult.stdout || '', err: '' };
+                    } catch (err) {
+                        return { stdout: '', err: err instanceof Error ? err.message : String(err) };
+                    }
+                };
 
                 let execStdout = '';
                 let lastErr = '';
-                try {
-                    const execResult = await shellExecuteCommand({
-                        shell,
-                        command: execCmd,
-                        timeoutMs: 120_000,
-                        logCtx: ctx.logCtx,
-                    });
-                    execStdout = execResult.stdout || '';
-                } catch (err) {
-                    lastErr = err instanceof Error ? err.message : String(err);
+                let usedType = scriptType;
+
+                {
+                    const first = await runOnce(scriptType);
+                    execStdout = first.stdout;
+                    lastErr = first.err;
+                }
+
+                // Deterministic interpreter fix: never LLM-repair "node ran a .py"
+                if (
+                    lastErr &&
+                    usedType === 'node' &&
+                    (/\.py$/i.test(scriptFileName) ||
+                        /ERR_UNKNOWN_FILE_EXTENSION|Unknown file extension ["']\.py["']/i.test(lastErr))
+                ) {
+                    const second = await runOnce('python');
+                    if (!second.err || second.stdout) {
+                        execStdout = second.stdout;
+                        lastErr = second.err;
+                        usedType = 'python';
+                    }
+                }
+
+                // Path miss: retry once with absolute path only
+                if (lastErr && /can't open file|No such file or directory|Script not found/i.test(lastErr)) {
+                    const runner = usedType === 'python' ? 'python3' : 'node';
+                    try {
+                        const retry = await shellExecuteCommand({
+                            shell,
+                            command: `${runner} "${absolutePath}" 2>&1`,
+                            timeoutMs: 120_000,
+                            logCtx: ctx.logCtx,
+                            executeFilePath: scriptRel,
+                        });
+                        execStdout = retry.stdout || '';
+                        lastErr = '';
+                    } catch (err) {
+                        lastErr = err instanceof Error ? err.message : String(err);
+                    }
+                }
+
+                if (lastErr) {
                     await writeAgentLog({
                         agentInstanceId: ctx.agentInstanceId,
                         userId: ctx.userId,
@@ -435,19 +545,25 @@ export class AgentToolRegistry {
                         tickNumber: ctx.tickNumber,
                     });
 
-                    // LLM Self-Healing Repair
+                    // LLM Self-Healing Repair — use the correct interpreter (never hardcode node for .py)
                     if (ctx.logCtx) {
                         try {
                             const llmConfig = await getLlmConfig({ threadId: ctx.threadId });
                             if (llmConfig) {
+                                const runner = usedType === 'python' ? 'python3' : 'node';
                                 const repairMessages: Message[] = [
                                     {
                                         role: 'system',
-                                        content: `You are a script repair engineer. To execute ${scriptFileName} on the container, use find to locate its folder: TARGET_DIR=$(find /app /data /root /tmp / -type f -name '${scriptFileName}' 2>/dev/null | head -n 1 | xargs dirname); cd "$TARGET_DIR" && node '${scriptFileName}' 2>&1. Return JSON ONLY: {"command": "fixed shell command"}`,
+                                        content:
+                                            `You are a script repair engineer. The script is ${scriptFileName} (${usedType}). ` +
+                                            `Working directory should be: ${absDir}. Absolute path: ${absolutePath}. ` +
+                                            `Return JSON ONLY: {"command":"fixed shell command"}. ` +
+                                            `The command MUST use ${runner} (not the wrong interpreter). Example: ` +
+                                            `cd "${absDir}" && ${runner} "./${scriptFileName}" 2>&1`,
                                     },
                                     {
                                         role: 'user',
-                                        content: `Script execution error:\n${lastErr}\n\nFile relative path: ${scriptRel}\nScript code preview:\n${rawCode.slice(0, 1500)}`,
+                                        content: `Script execution error:\n${lastErr}\n\nFile relative path: ${scriptRel}\nScript type: ${usedType}\nScript code preview:\n${rawCode.slice(0, 1500)}`,
                                     },
                                 ];
 
@@ -474,6 +590,16 @@ export class AgentToolRegistry {
                                     /* pass */
                                 }
 
+                                // Guard: refuse repair cmds that run .py with node
+                                if (
+                                    repairCmd &&
+                                    usedType === 'python' &&
+                                    /\bnode\b/.test(repairCmd) &&
+                                    !/\bpython3?\b/.test(repairCmd)
+                                ) {
+                                    repairCmd = `cd "${absDir}" && python3 "./${scriptFileName}" 2>&1`;
+                                }
+
                                 if (repairCmd) {
                                     try {
                                         const repairResult = await shellExecuteCommand({
@@ -497,13 +623,13 @@ export class AgentToolRegistry {
 
                 if (lastErr && !execStdout) {
                     const errorMsg = `Script execution failed: ${lastErr}`.trim();
-                    
+
                     await ModelAgentMemory.create({
                         agentInstanceId: ctx.agentInstanceId,
                         userId: ctx.userId,
                         threadId: ctx.threadId,
                         key: `script_err_${ctx.tickNumber}`,
-                        content: errorMsg.slice(-1000), // Keep the end of the error where the actual issue usually is
+                        content: errorMsg.slice(-1000),
                         memoryType: 'observation',
                         createdAtUtc: new Date(),
                         updatedAtUtc: new Date(),
@@ -532,10 +658,10 @@ export class AgentToolRegistry {
                     userId: ctx.userId,
                     threadId: ctx.threadId,
                     updateType: 'script_executed',
-                    message: `Executed ${scriptType} script: ${rawFileName}`,
+                    message: `Executed ${usedType} script: ${rawFileName}`,
                     goalId: ctx.currentGoal._id,
                     tickNumber: ctx.tickNumber,
-                    payload: { scriptType, fileName: rawFileName, stdout: execStdout.slice(0, 1000) },
+                    payload: { scriptType: usedType, fileName: rawFileName, stdout: execStdout.slice(0, 1000) },
                 });
 
                 return {

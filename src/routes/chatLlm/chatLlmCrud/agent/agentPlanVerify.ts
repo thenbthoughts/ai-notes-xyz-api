@@ -91,6 +91,11 @@ Prefer this workflow for life/advice questions (e.g. "how to improve my life"):
 - Store important findings with write_memory
 - When enough evidence exists, set readyToSynthesize=true (do NOT invent personal facts)
 
+For file/script goals (resize/compress images, generate files):
+- Use execute_script with scriptType "python" for image work (Pillow) and fileName ending in .py
+- Use execute_script with scriptType "node" for JS; fileName ending in .js
+- Never run a .py file with node
+
 Available tools:
 ${toolDescriptions}
 
@@ -103,9 +108,9 @@ Reply JSON ONLY:
   "memoryContent": "optional",
   "memoryType": "fact"|"observation"|"plan"|"result"|"other",
   "message": "optional chat text",
-  "code": "optional script",
-  "scriptType": "node"|"python",
-  "fileName": "optional",
+  "code": "optional script source",
+  "scriptType": "node"|"python (REQUIRED for execute_script — use python for images/Pillow)",
+  "fileName": "script.py or script.js matching scriptType",
   "reason": "short why"
 }
 
