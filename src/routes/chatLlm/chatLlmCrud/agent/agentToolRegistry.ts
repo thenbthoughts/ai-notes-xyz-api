@@ -8,7 +8,7 @@ import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { AgentToolContext, AgentToolDefinition, AgentToolResult } from './agentToolTypes';
-import { searchAgentDomain, AgentDomainSearchSource } from './agentDomainAccess';
+import { searchAgentDomain, searchAllAgentDomains, AgentDomainSearchSource } from './agentDomainAccess';
 import axios from 'axios';
 import { agentTaskFilesDir, agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellWriteFile } from './agentShellWorkspace';
 import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
@@ -21,6 +21,9 @@ const updateTypeToLogAction = (updateType: string, payload?: Record<string, unkn
     }
     if (updateType === 'message') return 'message_posted';
     if (updateType === 'error') return 'agent_error';
+    if (updateType === 'plan') return 'plan';
+    if (updateType === 'verify') return 'verify';
+    if (updateType === 'synthesize') return 'synthesize';
     return updateType;
 };
 
@@ -250,13 +253,69 @@ export class AgentToolRegistry {
     }
 
     private registerBuiltInTools() {
-        // 1-4. Personal Domain Search Tools
+        // 1-5. Personal Domain Search Tools
         this.register(createDomainSearchTool('notes', 'search_notes', 'Search personal notes in database'));
         this.register(createDomainSearchTool('tasks', 'search_tasks', 'Search user task records'));
         this.register(createDomainSearchTool('lifeEvents', 'search_life_events', 'Search user life events'));
         this.register(createDomainSearchTool('infoVault', 'search_info_vault', 'Search info vault knowledge base'));
+        this.register(createDomainSearchTool('memo', 'search_memo', 'Search personal memo notes'));
 
-        // 5. Memory Write Tool
+        // Multi-domain search — preferred first step for broad personal questions
+        this.register({
+            name: 'search_all_domains',
+            description:
+                'Search notes, tasks, memos, life events, and info vault together. Prefer this first for broad personal questions (e.g. "how to improve my life").',
+            execute: async (ctx, args) => {
+                const query = typeof args.query === 'string' ? args.query : ctx.currentGoal.title;
+                const hits = await searchAllAgentDomains({
+                    userId: ctx.userId,
+                    query,
+                    limitPerSource: 6,
+                });
+
+                const bySource: Record<string, number> = {};
+                for (const h of hits) {
+                    bySource[h.source] = (bySource[h.source] || 0) + 1;
+                }
+
+                const hitText = hits.length
+                    ? hits.map((h) => `- [${h.source}] ${h.title}: ${h.summary}`).join('\n')
+                    : 'No results across domains.';
+
+                await ModelAgentMemory.create({
+                    agentInstanceId: ctx.agentInstanceId,
+                    userId: ctx.userId,
+                    threadId: ctx.threadId,
+                    key: `search_all_${ctx.tickNumber}`,
+                    content: `Query: ${query}\nCounts: ${JSON.stringify(bySource)}\n${hitText}`.slice(0, 8000),
+                    memoryType: 'observation',
+                    createdAtUtc: new Date(),
+                    updatedAtUtc: new Date(),
+                });
+
+                await writeUpdate({
+                    agentInstanceId: ctx.agentInstanceId,
+                    userId: ctx.userId,
+                    threadId: ctx.threadId,
+                    updateType: 'domain_search',
+                    message: `Searched all domains: ${hits.length} hit(s)`,
+                    goalId: ctx.currentGoal._id,
+                    tickNumber: ctx.tickNumber,
+                    payload: { source: 'all', hitsCount: hits.length, query, bySource },
+                });
+
+                return {
+                    success: true,
+                    action: 'search_all_domains',
+                    resultSummary: `Multi-domain search found ${hits.length} items (${Object.entries(bySource)
+                        .map(([k, v]) => `${k}:${v}`)
+                        .join(', ') || 'none'})`,
+                    payload: { hitsCount: hits.length, bySource, results: hits },
+                };
+            },
+        });
+
+        // Memory Write Tool
         this.register({
             name: 'write_memory',
             description: 'Save key-value memory observation or fact into persistent agent memory',
@@ -636,7 +695,7 @@ export class AgentToolRegistry {
             },
         });
 
-        // 10. Noop Tool
+        // Noop Tool
         this.register({
             name: 'noop',
             description: 'Pass control to next tick',

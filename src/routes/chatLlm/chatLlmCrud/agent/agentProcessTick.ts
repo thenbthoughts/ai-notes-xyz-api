@@ -3,89 +3,97 @@ import axios from 'axios';
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { ModelAgentInstance } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
 import { ModelAgentGoal } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentGoal.schema';
+import { IAgentGoal } from '../../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentGoal.types';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
 import { ModelAgentLog } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
 import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
-import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import { agentTaskFilesDir, getAgentShellConfig } from './agentShellWorkspace';
 import syncThreadUploadsToAgentWorkspace from './agentSyncUploads';
-import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
+import writeAgentLog from './agentWriteLog';
 import { defaultAgentToolRegistry, writeUpdate } from './agentToolRegistry';
+import {
+    formatMemorySummary,
+    planAgentStep,
+    synthesizeAgentAnswer,
+    verifyAgentStep,
+} from './agentPlanVerify';
 
-interface AgentTickDecision {
-    action: string;
-    query?: string;
-    memoryKey?: string;
-    memoryContent?: string;
-    memoryType?: 'fact' | 'observation' | 'plan' | 'result' | 'other';
-    goalResult?: string;
-    message?: string;
-    reason?: string;
-    fileName?: string;
-    sheetName?: string;
-    columns?: unknown;
-    rows?: unknown;
-}
-
-const extractJsonObject = (raw: string): Record<string, unknown> | null => {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return parsed as Record<string, unknown>;
-        }
-    } catch {
-        /* try regex */
-    }
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (match) {
-        try {
-            const parsed = JSON.parse(match[0]);
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                return parsed as Record<string, unknown>;
-            }
-        } catch {
-            return null;
-        }
-    }
-    return null;
-};
-
-const parseDecision = (raw: string): AgentTickDecision => {
-    const json = extractJsonObject(raw);
-    if (!json) {
-        return { action: 'noop', reason: 'Failed to parse JSON response' };
-    }
-
-    const action = typeof json.action === 'string' ? json.action.trim() : 'noop';
-    return {
-        action,
-        query: typeof json.query === 'string' ? json.query : undefined,
-        memoryKey: typeof json.memoryKey === 'string' ? json.memoryKey : undefined,
-        memoryContent: typeof json.memoryContent === 'string' ? json.memoryContent : undefined,
-        memoryType:
-            json.memoryType === 'fact' ||
-            json.memoryType === 'observation' ||
-            json.memoryType === 'plan' ||
-            json.memoryType === 'result'
-                ? json.memoryType
-                : 'other',
-        goalResult: typeof json.goalResult === 'string' ? json.goalResult : undefined,
-        message: typeof json.message === 'string' ? json.message : undefined,
-        reason: typeof json.reason === 'string' ? json.reason : undefined,
-        fileName: typeof json.fileName === 'string' ? json.fileName : undefined,
-        sheetName: typeof json.sheetName === 'string' ? json.sheetName : undefined,
-        columns: json.columns,
-        rows: json.rows,
+/**
+ * Complete current goal with a synthesized final answer posted to chat.
+ */
+const completeGoalWithAnswer = async (params: {
+    agent: {
+        _id: mongoose.Types.ObjectId;
+        userId: mongoose.Types.ObjectId;
+        threadId: mongoose.Types.ObjectId;
     };
+    currentGoal: IAgentGoal;
+    tickNumber: number;
+    answer: string;
+    llmConfig: NonNullable<Awaited<ReturnType<typeof getLlmConfig>>>;
+}) => {
+    const { agent, currentGoal, tickNumber, answer, llmConfig } = params;
+
+    currentGoal.status = 'completed';
+    currentGoal.result = answer.slice(0, 8000);
+    currentGoal.completedAtUtc = new Date();
+    currentGoal.updatedAtUtc = new Date();
+    await currentGoal.save();
+
+    await ModelAgentMemory.create({
+        agentInstanceId: agent._id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+        key: `goal_${currentGoal.orderIndex}_result`,
+        content: currentGoal.result,
+        memoryType: 'result',
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+    });
+
+    await writeUpdate({
+        agentInstanceId: agent._id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+        updateType: 'synthesize',
+        message: `Synthesized final answer for: ${currentGoal.title}`,
+        goalId: currentGoal._id as mongoose.Types.ObjectId,
+        tickNumber,
+        payload: { answerLength: answer.length },
+    });
+
+    await writeUpdate({
+        agentInstanceId: agent._id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+        updateType: 'goal_completed',
+        message: `Completed goal: ${currentGoal.title}`,
+        goalId: currentGoal._id as mongoose.Types.ObjectId,
+        tickNumber,
+        payload: { result: currentGoal.result },
+    });
+
+    await ModelChatLlm.create({
+        type: 'text',
+        content: answer,
+        userId: agent.userId.toString(),
+        threadId: agent.threadId,
+        isAi: true,
+        tags: ['agent', 'final_answer'],
+        aiModelProvider: llmConfig.provider || '',
+        aiModelName: llmConfig.model || '',
+        createdAtUtc: new Date(),
+        updatedAtUtc: new Date(),
+    });
 };
 
 /**
  * Executes a single tick step for a running Agent instance.
+ * Flow: plan → (tool | synthesize) → verify → optional synthesize.
+ * Does NOT call Answer Machine.
  */
 export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId | string): Promise<void> => {
     const now = new Date();
@@ -245,7 +253,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
             level: l.level,
         }));
 
-        // 4. Runtime sync of user uploaded files/photos (R2/S3/GridFS -> Buffer -> ai-notes-xyz-shell-files/agent/chat_id/uploads/*)
+        // 4. Runtime sync of user uploaded files
         const logCtx = {
             agentInstanceId: agent._id as mongoose.Types.ObjectId,
             userId: agent.userId,
@@ -260,9 +268,15 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
             logCtx,
         });
 
-        // 5. Dynamic Folder & File Structure of ai-notes-xyz-shell-files/agent/chat_id
+        // 5. Dynamic shell listing
         const agentShellDir = agentTaskFilesDir(String(agent.threadId));
-        let shellWorkspaceListing: { relativePath: string; absolutePath: string; isDir: boolean; size: number }[] = [];
+        let shellWorkspaceListing: {
+            relativePath: string;
+            pathInAgentFolder?: string;
+            absolutePath: string;
+            isDir: boolean;
+            size: number;
+        }[] = [];
         let containerWorkingDir = '/app/data/ai-notes-xyz-shell-files';
         let agentFolderAbsolutePath = `/app/data/${agentShellDir}`;
 
@@ -289,29 +303,37 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                                 .map((item) => {
                                     if (!item || typeof item !== 'object') return null;
                                     const o = item as Record<string, unknown>;
-                                    const rel = typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
+                                    const rel =
+                                        typeof o.relativePath === 'string' ? o.relativePath.replace(/\\/g, '/') : '';
                                     if (!rel) return null;
 
-                                    // Filter out node_modules, .git, and package-lock.json from prompt context
                                     if (/\b(node_modules|\.git)\b/i.test(rel) || /package-lock\.json$/i.test(rel)) {
                                         return null;
                                     }
 
-                                    const abs = typeof o.absolutePath === 'string' && o.absolutePath.trim()
-                                        ? o.absolutePath.replace(/\\/g, '/')
-                                        : `/app/data/${rel}`;
+                                    const abs =
+                                        typeof o.absolutePath === 'string' && o.absolutePath.trim()
+                                            ? o.absolutePath.replace(/\\/g, '/')
+                                            : `/app/data/${rel}`;
 
                                     if (abs.includes('/agent/')) {
                                         const idx = abs.indexOf('/agent/');
                                         containerWorkingDir = abs.slice(0, idx);
-                                        agentFolderAbsolutePath = abs.slice(0, idx + `/agent/${agent.threadId}`.length);
+                                        agentFolderAbsolutePath = abs.slice(
+                                            0,
+                                            idx + `/agent/${agent.threadId}`.length
+                                        );
                                     } else if (abs.includes('/ai-notes-xyz-shell-files/')) {
                                         const idx = abs.indexOf('/ai-notes-xyz-shell-files/');
-                                        containerWorkingDir = abs.slice(0, idx + '/ai-notes-xyz-shell-files'.length);
+                                        containerWorkingDir = abs.slice(
+                                            0,
+                                            idx + '/ai-notes-xyz-shell-files'.length
+                                        );
                                     }
 
                                     const folderIdx = rel.indexOf(`${agentShellDir}/`);
-                                    const pathInAgentFolder = folderIdx !== -1 ? rel.slice(folderIdx + agentShellDir.length + 1) : rel;
+                                    const pathInAgentFolder =
+                                        folderIdx !== -1 ? rel.slice(folderIdx + agentShellDir.length + 1) : rel;
 
                                     return {
                                         relativePath: rel,
@@ -334,147 +356,159 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
             agentInstanceId: agent._id,
         })
             .sort({ createdAtUtc: -1 })
-            .limit(20);
+            .limit(25);
 
         const recentUpdates = await ModelAgentUpdate.find({
             agentInstanceId: agent._id,
         })
             .sort({ createdAtUtc: -1 })
-            .limit(10);
+            .limit(12);
 
         const llmConfig = await getLlmConfig({ threadId: agent.threadId });
         if (!llmConfig) {
             throw new Error('No LLM config available for agent tick');
         }
 
-        const systemPrompt = `You are an autonomous AI Agent powered by a modular Tool Registry.
-The user is NOT available to answer clarifying questions.
-
-Available Tools:
-${defaultAgentToolRegistry.getToolDescriptions()}
-
-Current goal must be completed. Return JSON ONLY with your chosen action and arguments:
-{
-  "action": "<tool_name>",
-  "query": "search query or calculation expression",
-  "memoryKey": "short memory key",
-  "memoryContent": "content to store",
-  "memoryType": "fact"|"observation"|"plan"|"result"|"other",
-  "goalResult": "final result text when completing/failing goal",
-  "message": "short message to post when posting message or creating excel",
-  "fileName": "export.xlsx when create_excel",
-  "sheetName": "Sheet1 when create_excel",
-  "columns": ["ColA", "ColB"],
-  "rows": [{"ColA": "val1", "ColB": "val2"}],
-  "code": "const fs = require('fs'); ... (REQUIRED valid executable code when action is execute_script)",
-  "reason": "explanation of tool choice"
-}
-
-Rules:
-- Runtime Preference Hierarchy: (1) Node.js first (node), (2) Python 3 second (python3 / python), (3) system CLI utilities.
-- You are allowed to initialize Node packages using 'npm init -y' and install any needed packages (e.g. sharp, jimp, exceljs, canvas) or python packages (e.g. pillow, opencv-python, pandas) via shell commands or child processes.
-- When calling execute_script, you MUST provide valid, complete, runnable code in the "code" field.
-- When referencing workspace files in code, use either their exact \`absolutePath\` (e.g. '/app/data/ai-notes-xyz-shell-files/agent/...') OR \`pathInAgentFolder\` (e.g. 'uploads/file.jpg'). Do NOT prepend 'ai-notes-xyz-shell-files/agent/...' to local relative paths inside the script.
-- If a command fails or python is not found, the agent system automatically falls back to python3 and invokes LLM self-healing to generate an alternate solution.
-- Search domain data before completing goals requiring personal context.
-- Use write_memory to store facts and findings.
-- Complete goal via complete_goal when done.
-- Keep actions focused and progress toward completing the goal.`;
-
-        const recentNoopCount = recentUpdates.filter((u) =>
-            typeof u.message === 'string' && /\bnoop\b/i.test(u.message)
+        const memorySummary = formatMemorySummary(
+            memories.map((m) => ({ key: m.key, memoryType: m.memoryType, content: m.content }))
+        );
+        const recentToolSummary = recentUpdates
+            .map((u) => `- [${u.updateType}] ${u.message}`)
+            .join('\n')
+            .slice(0, 4000);
+        const recentNoopCount = recentUpdates.filter(
+            (u) => typeof u.message === 'string' && /\bnoop\b/i.test(u.message)
         ).length;
 
-        const userPrompt = JSON.stringify(
-            {
-                currentGoal: {
-                    title: currentGoal.title,
-                    description: currentGoal.description,
-                    status: currentGoal.status,
-                },
-                past10ChatMessages: past10Messages,
-                pastGoalResults,
-                last50AgentLogs: last50Logs,
-                shellWorkspace: {
-                    workingDirectoryPath: containerWorkingDir,
-                    agentFolderAbsolutePath: agentFolderAbsolutePath || `${containerWorkingDir}/agent/${agent.threadId}`,
-                    agentFolderRelativePath: agentShellDir,
-                    fileCount: shellWorkspaceListing.length,
-                    filesAndFolders: shellWorkspaceListing,
-                },
-                memory: memories.map((m) => ({
-                    key: m.key,
-                    type: m.memoryType,
-                    content: m.content.slice(0, 1500),
-                })),
-                recentUpdates: recentUpdates.map((u) => ({
-                    type: u.updateType,
-                    message: u.message,
-                })),
-                tickNumber,
-                recentNoopCount,
-                instruction: recentNoopCount >= 2
-                    ? 'Too many noops. Call complete_goal now with best deliverable.'
-                    : 'Progress toward completing current goal using registered tools.',
-            },
-            null,
-            2
-        );
+        // Force synthesize on late ticks with some evidence, or too many noops
+        const forceSynthesize =
+            recentNoopCount >= 2 || (tickNumber >= 8 && memories.length > 0) || tickNumber >= 12;
 
-        const messages: Message[] = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-        ];
+        // ——— PLAN ———
+        let plan = forceSynthesize
+            ? {
+                  kind: 'synthesize' as const,
+                  reason:
+                      tickNumber >= 12
+                          ? 'Max ticks reached; synthesizing best answer'
+                          : recentNoopCount >= 2
+                            ? 'Too many noops; synthesizing'
+                            : 'Enough ticks with evidence; synthesizing',
+              }
+            : await planAgentStep({
+                  logCtx,
+                  llmConfig,
+                  toolDescriptions: defaultAgentToolRegistry.getToolDescriptions(),
+                  goalTitle: currentGoal.title,
+                  goalDescription: currentGoal.description || currentGoal.title,
+                  memorySummary,
+                  recentToolSummary: [
+                      recentToolSummary,
+                      `recentLogs: ${JSON.stringify(last50Logs.slice(-15)).slice(0, 2000)}`,
+                      `pastGoals: ${JSON.stringify(pastGoalResults).slice(0, 1500)}`,
+                      `shellFiles: ${shellWorkspaceListing.length}`,
+                      `workspace: ${agentFolderAbsolutePath || `${containerWorkingDir}/agent/${agent.threadId}`}`,
+                  ].join('\n'),
+                  tickNumber,
+                  recentNoopCount,
+              });
 
-        const llmResult = await fetchLlmUnifiedLogged({
-            logCtx,
-            purpose: 'agent_tick_decision',
-            params: {
-                provider: llmConfig.provider,
-                apiKey: llmConfig.apiKey,
-                apiEndpoint: llmConfig.apiEndpoint,
-                model: llmConfig.model,
-                messages,
-                temperature: 0.3,
-                maxTokens: 4000,
-                responseFormat: 'json_object',
-                headersExtra: llmConfig.customHeaders,
-            },
-        });
-
-        const decision = parseDecision(llmResult.content || '');
+        // First tick with no memory: bias toward multi-domain search for personal questions
+        if (
+            plan.kind === 'synthesize' &&
+            memories.length === 0 &&
+            tickNumber <= 2 &&
+            !forceSynthesize
+        ) {
+            plan = {
+                kind: 'action',
+                action: 'search_all_domains',
+                query: currentGoal.description || currentGoal.title,
+                reason: 'No evidence yet — search personal domains first',
+            };
+        }
 
         await writeUpdate({
             agentInstanceId: agent._id as mongoose.Types.ObjectId,
             userId: agent.userId,
             threadId: agent.threadId,
-            updateType: 'tick',
-            message: `Tick ${tickNumber}: ${decision.action}${decision.reason ? ` — ${decision.reason}` : ''}`,
+            updateType: 'plan',
+            message:
+                plan.kind === 'synthesize'
+                    ? `Plan: synthesize — ${plan.reason}`
+                    : `Plan: ${plan.action}${plan.reason ? ` — ${plan.reason}` : ''}`,
             goalId: currentGoal._id as mongoose.Types.ObjectId,
             tickNumber,
-            payload: { action: decision.action, reason: decision.reason || '' },
+            payload: { plan },
         });
 
-        const tool = defaultAgentToolRegistry.getTool(decision.action);
-        if (tool) {
-            await tool.execute(
-                {
-                    agentInstanceId: agent._id as mongoose.Types.ObjectId,
+        const runSynthesize = async (reason: string) => {
+            const freshMemories = await ModelAgentMemory.find({ agentInstanceId: agent._id })
+                .sort({ createdAtUtc: -1 })
+                .limit(30);
+            const answer = await synthesizeAgentAnswer({
+                logCtx,
+                llmConfig,
+                goalTitle: currentGoal.title,
+                goalDescription: currentGoal.description || currentGoal.title,
+                memorySummary: formatMemorySummary(
+                    freshMemories.map((m) => ({
+                        key: m.key,
+                        memoryType: m.memoryType,
+                        content: m.content,
+                    }))
+                ),
+                pastChatSummary: past10Messages
+                    .map((m) => `${m.role}: ${m.content}`)
+                    .join('\n')
+                    .slice(0, 3000),
+            });
+
+            await completeGoalWithAnswer({
+                agent: {
+                    _id: agent._id as mongoose.Types.ObjectId,
                     userId: agent.userId,
                     threadId: agent.threadId,
-                    currentGoal,
-                    memories,
-                    recentUpdates,
-                    tickNumber,
-                    llmConfig,
-                    logCtx,
                 },
-                decision as unknown as Record<string, unknown>
-            );
+                currentGoal,
+                tickNumber,
+                answer,
+                llmConfig,
+            });
+
+            await writeAgentLog({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                action: 'synthesize',
+                message: reason,
+                tickNumber,
+                payload: { answerLength: answer.length },
+            });
+        };
+
+        if (plan.kind === 'synthesize') {
+            await runSynthesize(plan.reason);
         } else {
-            const fallbackTool = defaultAgentToolRegistry.getTool('noop');
-            if (fallbackTool) {
-                await fallbackTool.execute(
+            const toolArgs: Record<string, unknown> = {
+                action: plan.action,
+                query: plan.query,
+                memoryKey: plan.memoryKey,
+                memoryContent: plan.memoryContent,
+                memoryType: plan.memoryType,
+                message: plan.message,
+                code: plan.code,
+                scriptType: plan.scriptType,
+                fileName: plan.fileName,
+                reason: plan.reason,
+            };
+
+            const tool = defaultAgentToolRegistry.getTool(plan.action);
+            let toolResultSummary = '';
+            let toolSuccess = true;
+
+            if (tool) {
+                const result = await tool.execute(
                     {
                         agentInstanceId: agent._id as mongoose.Types.ObjectId,
                         userId: agent.userId,
@@ -486,8 +520,78 @@ Rules:
                         llmConfig,
                         logCtx,
                     },
-                    { reason: `Unrecognized action: ${decision.action}` }
+                    toolArgs
                 );
+                toolResultSummary = result.resultSummary || '';
+                toolSuccess = result.success;
+            } else {
+                const fallbackTool = defaultAgentToolRegistry.getTool('noop');
+                if (fallbackTool) {
+                    await fallbackTool.execute(
+                        {
+                            agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                            userId: agent.userId,
+                            threadId: agent.threadId,
+                            currentGoal,
+                            memories,
+                            recentUpdates,
+                            tickNumber,
+                            llmConfig,
+                            logCtx,
+                        },
+                        { reason: `Unrecognized action: ${plan.action}` }
+                    );
+                }
+                toolResultSummary = `Unrecognized action: ${plan.action}`;
+                toolSuccess = false;
+            }
+
+            // ——— VERIFY ———
+            const freshForVerify = await ModelAgentMemory.find({ agentInstanceId: agent._id })
+                .sort({ createdAtUtc: -1 })
+                .limit(25);
+            const verify = await verifyAgentStep({
+                logCtx,
+                llmConfig,
+                goalTitle: currentGoal.title,
+                goalDescription: currentGoal.description || currentGoal.title,
+                lastAction: plan.action,
+                lastResultSummary: toolResultSummary,
+                memorySummary: formatMemorySummary(
+                    freshForVerify.map((m) => ({
+                        key: m.key,
+                        memoryType: m.memoryType,
+                        content: m.content,
+                    }))
+                ),
+            });
+
+            await writeUpdate({
+                agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                updateType: 'verify',
+                message: `Verify: ${verify.verdict}${verify.reason ? ` — ${verify.reason}` : ''}`,
+                goalId: currentGoal._id as mongoose.Types.ObjectId,
+                tickNumber,
+                payload: { ...verify, toolSuccess },
+            });
+
+            if (verify.verdict === 'retry' && verify.retryHint) {
+                await ModelAgentMemory.create({
+                    agentInstanceId: agent._id,
+                    userId: agent.userId,
+                    threadId: agent.threadId,
+                    key: `retry_hint_${tickNumber}`,
+                    content: verify.retryHint,
+                    memoryType: 'plan',
+                    createdAtUtc: new Date(),
+                    updatedAtUtc: new Date(),
+                });
+            }
+
+            if (verify.verdict === 'ready_to_synthesize' || (forceSynthesize && freshForVerify.length > 0)) {
+                await runSynthesize(verify.reason || 'Verifier approved synthesis');
             }
         }
 

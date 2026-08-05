@@ -161,7 +161,7 @@ const agentInitiateFunc = async ({
                     {
                         role: 'system',
                         content:
-                            'Extract a list of concrete goals from the user message for an autonomous agent. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . Keep 1-8 goals. Titles short. If the user wants an Excel/spreadsheet/downloadable file, use ONE goal that includes generating and delivering that file (do not split into separate create-list / create-excel / provide-download goals).',
+                            'Extract a list of concrete goals from the user message for an autonomous personal agent. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . Keep 1-6 goals. Titles short. For broad personal questions (e.g. "how to improve my life"), prefer ONE goal that says to search notes/tasks/memos/life events/info vault and then write a grounded final answer. Do not invent personal facts; the agent must search domain data.',
                     },
                     { role: 'user', content: userText },
                 ];

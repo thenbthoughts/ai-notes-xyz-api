@@ -4,20 +4,55 @@ import { ModelNotes } from '../../../../schema/schemaNotes/SchemaNotes.schema';
 import { ModelTask } from '../../../../schema/schemaTask/SchemaTask.schema';
 import { ModelLifeEvents } from '../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
 import { ModelInfoVault } from '../../../../schema/schemaInfoVault/SchemaInfoVault.schema';
+import { ModelMemoNote } from '../../../../schema/schemaMemo/SchemaMemoNote.schema';
+
+const STOPWORDS = new Set([
+    'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'where', 'why', 'how',
+    'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were',
+    'be', 'been', 'been', 'am', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will',
+    'to', 'of', 'in', 'on', 'at', 'for', 'from', 'with', 'about', 'into', 'over', 'after',
+    'my', 'me', 'i', 'you', 'your', 'our', 'we', 'us', 'please', 'help', 'need', 'want',
+]);
 
 const escapeRegex = (value: string): string =>
     value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const buildTextFilter = (query: string) => {
-    const q = query.trim();
-    if (!q) {
-        return {};
-    }
-    const rx = new RegExp(escapeRegex(q), 'i');
-    return rx;
+/** Extract searchable keywords from a natural-language prompt. */
+export const extractSearchKeywords = (query: string): string[] => {
+    const tokens = query
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+    const unique = Array.from(new Set(tokens));
+    return unique.slice(0, 12);
 };
 
-export type AgentDomainSearchSource = 'notes' | 'tasks' | 'lifeEvents' | 'infoVault';
+const buildOrRegexFilters = (fields: string[], query: string): Record<string, unknown>[] => {
+    const q = query.trim();
+    if (!q) return [];
+
+    const keywords = extractSearchKeywords(q);
+    const patterns: RegExp[] = [];
+
+    // Full phrase first (highest precision)
+    patterns.push(new RegExp(escapeRegex(q), 'i'));
+
+    // Individual keywords for broad prompts like "how to improve my life"
+    for (const kw of keywords) {
+        patterns.push(new RegExp(escapeRegex(kw), 'i'));
+    }
+
+    const filters: Record<string, unknown>[] = [];
+    for (const rx of patterns.slice(0, 8)) {
+        for (const field of fields) {
+            filters.push({ [field]: rx });
+        }
+    }
+    return filters;
+};
+
+export type AgentDomainSearchSource = 'notes' | 'tasks' | 'lifeEvents' | 'infoVault' | 'memo';
 
 export interface AgentDomainHit {
     source: AgentDomainSearchSource;
@@ -25,6 +60,8 @@ export interface AgentDomainHit {
     title: string;
     summary: string;
 }
+
+const ALL_SOURCES: AgentDomainSearchSource[] = ['notes', 'tasks', 'lifeEvents', 'infoVault', 'memo'];
 
 export const searchAgentDomain = async ({
     userId,
@@ -37,20 +74,13 @@ export const searchAgentDomain = async ({
     query: string;
     limit?: number;
 }): Promise<AgentDomainHit[]> => {
-    const rx = buildTextFilter(query);
     const uid = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+    const q = (query || '').trim();
 
     if (source === 'notes') {
         const filter: Record<string, unknown> = { userId: uid };
-        if (rx instanceof RegExp) {
-            filter.$or = [
-                { title: rx },
-                { description: rx },
-                { aiSummary: rx },
-                { tags: rx },
-                { aiTags: rx },
-            ];
-        }
+        const or = buildOrRegexFilters(['title', 'description', 'aiSummary', 'tags', 'aiTags'], q);
+        if (or.length) filter.$or = or;
         const docs = await ModelNotes.find(filter)
             .sort({ updatedAtUtc: -1 })
             .limit(limit)
@@ -66,14 +96,8 @@ export const searchAgentDomain = async ({
 
     if (source === 'tasks') {
         const filter: Record<string, unknown> = { userId: uid };
-        if (rx instanceof RegExp) {
-            filter.$or = [
-                { title: rx },
-                { description: rx },
-                { labels: rx },
-                { labelsAi: rx },
-            ];
-        }
+        const or = buildOrRegexFilters(['title', 'description', 'labels', 'labelsAi'], q);
+        if (or.length) filter.$or = or;
         const docs = await ModelTask.find(filter)
             .sort({ updatedAtUtc: -1 })
             .limit(limit)
@@ -83,18 +107,14 @@ export const searchAgentDomain = async ({
             source,
             id: String(d._id),
             title: d.title || 'Untitled task',
-            summary: `${d.isCompleted ? '[done] ' : ''}${(d.description || '').slice(0, 500)}`,
+            summary: `${d.isCompleted ? '[done] ' : '[open] '}${(d.description || '').slice(0, 500)}`,
         }));
     }
 
     if (source === 'lifeEvents') {
         const filter: Record<string, unknown> = { userId: uid };
-        if (rx instanceof RegExp) {
-            filter.$or = [
-                { title: rx },
-                { description: rx },
-            ];
-        }
+        const or = buildOrRegexFilters(['title', 'description'], q);
+        if (or.length) filter.$or = or;
         const docs = await ModelLifeEvents.find(filter)
             .sort({ updatedAtUtc: -1 })
             .limit(limit)
@@ -108,19 +128,31 @@ export const searchAgentDomain = async ({
         }));
     }
 
+    if (source === 'memo') {
+        const filter: Record<string, unknown> = {
+            userId: uid,
+            trashed: { $ne: true },
+            archived: { $ne: true },
+        };
+        const or = buildOrRegexFilters(['title', 'body'], q);
+        if (or.length) filter.$or = or;
+        const docs = await ModelMemoNote.find(filter)
+            .sort({ updatedAtUtc: -1 })
+            .limit(limit)
+            .select('_id title body pinned')
+            .lean();
+        return docs.map((d) => ({
+            source,
+            id: String(d._id),
+            title: d.title || 'Untitled memo',
+            summary: `${d.pinned ? '[pinned] ' : ''}${(d.body || '').slice(0, 500)}`,
+        }));
+    }
+
     // infoVault
     const filter: Record<string, unknown> = { userId: uid, isArchived: { $ne: true } };
-    if (rx instanceof RegExp) {
-        filter.$or = [
-            { name: rx },
-            { nickname: rx },
-            { company: rx },
-            { notes: rx },
-            { tags: rx },
-            { aiSummary: rx },
-            { aiTags: rx },
-        ];
-    }
+    const or = buildOrRegexFilters(['name', 'nickname', 'company', 'notes', 'tags', 'aiSummary', 'aiTags'], q);
+    if (or.length) filter.$or = or;
     const docs = await ModelInfoVault.find(filter)
         .sort({ updatedAtUtc: -1 })
         .limit(limit)
@@ -132,4 +164,57 @@ export const searchAgentDomain = async ({
         title: d.name || d.nickname || 'Untitled info vault',
         summary: (d.aiSummary || d.notes || d.company || '').slice(0, 500),
     }));
+};
+
+/**
+ * Search notes, tasks, life events, info vault, and memos in parallel.
+ * Broad prompts (few keywords) also pull recent docs so life-advice queries
+ * still get personal context.
+ */
+export const searchAllAgentDomains = async ({
+    userId,
+    query,
+    limitPerSource = 6,
+}: {
+    userId: mongoose.Types.ObjectId | string;
+    query: string;
+    limitPerSource?: number;
+}): Promise<AgentDomainHit[]> => {
+    const keywords = extractSearchKeywords(query);
+    const isBroad = keywords.length <= 2;
+
+    const results = await Promise.all(
+        ALL_SOURCES.map((source) =>
+            searchAgentDomain({
+                userId,
+                source,
+                query: isBroad && keywords.length === 0 ? '' : query,
+                limit: limitPerSource,
+            })
+        )
+    );
+
+    let hits = results.flat();
+
+    // If keyword search was too narrow, top up with recent docs per empty domain
+    if (hits.length < 4 && query.trim()) {
+        const present = new Set(hits.map((h) => h.source));
+        const topUps = await Promise.all(
+            ALL_SOURCES.filter((s) => !present.has(s)).map((source) =>
+                searchAgentDomain({ userId, source, query: '', limit: Math.min(4, limitPerSource) })
+            )
+        );
+        hits = [...hits, ...topUps.flat()];
+    }
+
+    // Dedupe by source+id
+    const seen = new Set<string>();
+    const deduped: AgentDomainHit[] = [];
+    for (const h of hits) {
+        const key = `${h.source}:${h.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(h);
+    }
+    return deduped.slice(0, limitPerSource * ALL_SOURCES.length);
 };

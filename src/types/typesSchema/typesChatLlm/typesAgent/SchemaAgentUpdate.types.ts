@@ -12,7 +12,10 @@ export type AgentUpdateType =
     | 'tick'
     | 'excel_created'
     | 'script_executed'
-    | 'tool_result';
+    | 'tool_result'
+    | 'plan'
+    | 'verify'
+    | 'synthesize';
 
 export interface IAgentUpdate extends Document {
     _id: mongoose.Types.ObjectId;
