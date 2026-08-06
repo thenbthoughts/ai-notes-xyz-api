@@ -20,6 +20,11 @@ import {
     synthesizeAgentAnswer,
     verifyAgentStep,
 } from './agentPlanVerify';
+import {
+    formatActiveSkillsBlock,
+    listEnabledSkillsForUser,
+    resolveSkillsToLoad,
+} from './agentSkillsLib';
 
 /**
  * Complete current goal with a synthesized final answer posted to chat.
@@ -384,6 +389,13 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
         const forceSynthesize =
             recentNoopCount >= 2 || (tickNumber >= 8 && memories.length > 0) || tickNumber >= 12;
 
+        const skillBodies = await listEnabledSkillsForUser(agent.userId);
+        const skillsCatalog = skillBodies.map((s) => ({ name: s.name, description: s.description }));
+        let activeSkillsBlock = '';
+        let activeSkillNames: string[] = Array.isArray(agent.activeSkillNames)
+            ? [...agent.activeSkillNames]
+            : [];
+
         // ——— PLAN ———
         let plan = forceSynthesize
             ? {
@@ -394,6 +406,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                           : recentNoopCount >= 2
                             ? 'Too many noops; synthesizing'
                             : 'Enough ticks with evidence; synthesizing',
+                  skillsToLoad: activeSkillNames,
               }
             : await planAgentStep({
                   logCtx,
@@ -411,7 +424,45 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                   ].join('\n'),
                   tickNumber,
                   recentNoopCount,
+                  skillsCatalog,
+                  activeSkillsBlock: formatActiveSkillsBlock(
+                      resolveSkillsToLoad(skillBodies, activeSkillNames)
+                  ),
               });
+
+        // Resolve skills from this plan turn
+        const prevSkillNames = [...activeSkillNames];
+        const loadedSkills = resolveSkillsToLoad(skillBodies, plan.skillsToLoad);
+        if (loadedSkills.length > 0) {
+            activeSkillNames = Array.from(
+                new Set([...activeSkillNames, ...loadedSkills.map((s) => s.name)])
+            ).slice(0, 6);
+            activeSkillsBlock = formatActiveSkillsBlock(
+                resolveSkillsToLoad(skillBodies, activeSkillNames)
+            );
+            const skillsChanged =
+                activeSkillNames.length !== prevSkillNames.length ||
+                activeSkillNames.some((n) => !prevSkillNames.includes(n));
+            if (skillsChanged) {
+                await ModelAgentInstance.findByIdAndUpdate(agent._id, {
+                    $set: { activeSkillNames, updatedAtUtc: new Date() },
+                });
+                await writeUpdate({
+                    agentInstanceId: agent._id as mongoose.Types.ObjectId,
+                    userId: agent.userId,
+                    threadId: agent.threadId,
+                    updateType: 'skills_loaded',
+                    message: `Skills loaded: ${activeSkillNames.join(', ')}`,
+                    goalId: currentGoal._id as mongoose.Types.ObjectId,
+                    tickNumber,
+                    payload: { skills: activeSkillNames },
+                });
+            }
+        } else if (activeSkillNames.length > 0) {
+            activeSkillsBlock = formatActiveSkillsBlock(
+                resolveSkillsToLoad(skillBodies, activeSkillNames)
+            );
+        }
 
         // First tick with no memory: bias toward multi-domain search for personal questions
         if (
@@ -425,6 +476,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                 action: 'search_all_domains',
                 query: currentGoal.description || currentGoal.title,
                 reason: 'No evidence yet — search personal domains first',
+                skillsToLoad: plan.skillsToLoad || ['personal-research'],
             };
         }
 
@@ -439,7 +491,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                     : `Plan: ${plan.action}${plan.reason ? ` — ${plan.reason}` : ''}`,
             goalId: currentGoal._id as mongoose.Types.ObjectId,
             tickNumber,
-            payload: { plan },
+            payload: { plan, activeSkillNames },
         });
 
         const runSynthesize = async (reason: string) => {
@@ -462,6 +514,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                     .map((m) => `${m.role}: ${m.content}`)
                     .join('\n')
                     .slice(0, 3000),
+                activeSkillsBlock,
             });
 
             await completeGoalWithAnswer({
@@ -564,6 +617,7 @@ export const agentProcessTick = async (agentInstanceId: mongoose.Types.ObjectId 
                         content: m.content,
                     }))
                 ),
+                activeSkillsBlock,
             });
 
             await writeUpdate({

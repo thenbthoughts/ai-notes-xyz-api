@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import { ModelAgentLog } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
+import { ModelAgentInstance } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
 import type {
     AgentLogAction,
     AgentLogLevel,
@@ -184,7 +185,6 @@ export const fetchLlmUnifiedLogged = async ({
                 content: String(result.content || '').slice(0, 50_000),
                 error: result.error || '',
                 usageStats: result.usageStats || {},
-                // Full provider response for deep debug (size-capped via JSON stringify below if needed)
                 providerRaw: (() => {
                     try {
                         const s = JSON.stringify(result.raw);
@@ -196,6 +196,34 @@ export const fetchLlmUnifiedLogged = async ({
                 })(),
             },
         });
+
+        if (result.success && result.usageStats && logCtx.agentInstanceId) {
+            const u = result.usageStats;
+            const prompt = Number(u.promptTokens) || 0;
+            const completion = Number(u.completionTokens) || 0;
+            try {
+                await ModelAgentInstance.updateOne(
+                    { _id: logCtx.agentInstanceId },
+                    {
+                        $inc: {
+                            promptTokens: prompt,
+                            completionTokens: completion,
+                            reasoningTokens: Number(u.reasoningTokens) || 0,
+                            totalTokens: Number(u.totalTokens) || 0,
+                            costInUsd: Number(u.costInUsd) || 0,
+                        },
+                        $max: {
+                            maxPromptTokensPerQuery: prompt,
+                            maxCompletionTokensPerQuery: completion,
+                        },
+                        $set: { updatedAtUtc: new Date() },
+                    }
+                );
+            } catch (incErr) {
+                console.error('agent token increment failed:', incErr);
+            }
+        }
+
         return result;
     } catch (err) {
         const durationMs = Date.now() - startedAt;

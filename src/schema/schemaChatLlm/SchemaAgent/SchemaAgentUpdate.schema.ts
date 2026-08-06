@@ -39,6 +39,7 @@ const agentUpdateSchema = new Schema<IAgentUpdate>({
             'plan',
             'verify',
             'synthesize',
+            'skills_loaded',
         ],
         default: 'status',
         index: true,

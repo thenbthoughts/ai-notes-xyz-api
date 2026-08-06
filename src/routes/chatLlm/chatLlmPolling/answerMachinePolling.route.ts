@@ -80,7 +80,43 @@ export interface AgentPollingResponse {
         raw: unknown;
     }>;
     memoryCount: number;
+    memories: Array<{
+        id: string;
+        key: string;
+        memoryType: string;
+        content: string;
+        createdAtUtc: string;
+    }>;
+    tokenUsage: {
+        prompt: number;
+        completion: number;
+        reasoning: number;
+        total: number;
+        costInUsd: number;
+        maxPromptPerQuery: number;
+        maxCompletionPerQuery: number;
+    };
+    memoryStats: {
+        total: number;
+        byType: Record<string, number>;
+    };
+    activeSkillNames: string[];
 }
+
+const emptyAgentTokenUsage = () => ({
+    prompt: 0,
+    completion: 0,
+    reasoning: 0,
+    total: 0,
+    costInUsd: 0,
+    maxPromptPerQuery: 0,
+    maxCompletionPerQuery: 0,
+});
+
+const emptyAgentMemoryStats = () => ({
+    total: 0,
+    byType: {} as Record<string, number>,
+});
 
 router.post(
     '/answerMachineStatus',
@@ -364,6 +400,10 @@ router.post(
                     updates: [],
                     logs: [],
                     memoryCount: 0,
+                    memories: [],
+                    tokenUsage: emptyAgentTokenUsage(),
+                    memoryStats: emptyAgentMemoryStats(),
+                    activeSkillNames: [],
                 };
                 return res.status(200).json(empty);
             }
@@ -383,6 +423,10 @@ router.post(
                     updates: [],
                     logs: [],
                     memoryCount: 0,
+                    memories: [],
+                    tokenUsage: emptyAgentTokenUsage(),
+                    memoryStats: emptyAgentMemoryStats(),
+                    activeSkillNames: [],
                 };
                 return res.status(200).json(empty);
             }
@@ -418,9 +462,23 @@ router.post(
                 .limit(sinceLogId ? 150 : 80)
                 .lean();
 
-            const memoryCount = await ModelAgentMemory.countDocuments({
-                agentInstanceId: latestAgent._id,
-            });
+            const [memoryDocs, memoryCount, memoryByTypeAgg] = await Promise.all([
+                ModelAgentMemory.find({ agentInstanceId: latestAgent._id })
+                    .sort({ createdAtUtc: -1 })
+                    .limit(50)
+                    .select('key content memoryType createdAtUtc')
+                    .lean(),
+                ModelAgentMemory.countDocuments({ agentInstanceId: latestAgent._id }),
+                ModelAgentMemory.aggregate([
+                    { $match: { agentInstanceId: latestAgent._id } },
+                    { $group: { _id: '$memoryType', count: { $sum: 1 } } },
+                ]),
+            ]);
+            const byType: Record<string, number> = {};
+            for (const row of memoryByTypeAgg) {
+                const key = typeof row._id === 'string' && row._id ? row._id : 'other';
+                byType[key] = row.count || 0;
+            }
 
             let mappedStatus: 'pending' | 'success' | 'failed' = 'pending';
             if (latestAgent.status === 'success') {
@@ -474,6 +532,34 @@ router.post(
                         raw: l.raw ?? null,
                     })),
                 memoryCount,
+                memories: memoryDocs
+                    .slice()
+                    .reverse()
+                    .map((m) => ({
+                        id: String(m._id),
+                        key: m.key || '',
+                        memoryType: m.memoryType || 'other',
+                        content: (m.content || '').slice(0, 4000),
+                        createdAtUtc: m.createdAtUtc
+                            ? new Date(m.createdAtUtc).toISOString()
+                            : '',
+                    })),
+                tokenUsage: {
+                    prompt: latestAgent.promptTokens || 0,
+                    completion: latestAgent.completionTokens || 0,
+                    reasoning: latestAgent.reasoningTokens || 0,
+                    total: latestAgent.totalTokens || 0,
+                    costInUsd: latestAgent.costInUsd || 0,
+                    maxPromptPerQuery: latestAgent.maxPromptTokensPerQuery || 0,
+                    maxCompletionPerQuery: latestAgent.maxCompletionTokensPerQuery || 0,
+                },
+                memoryStats: {
+                    total: memoryCount,
+                    byType,
+                },
+                activeSkillNames: Array.isArray(latestAgent.activeSkillNames)
+                    ? latestAgent.activeSkillNames
+                    : [],
             };
 
             return res.status(200).json(response);
@@ -597,6 +683,8 @@ router.post(
                         currentGoalTitle: inProgressGoal?.title || 'Processing...',
                         lastTickAtUtc: agent.lastTickAtUtc || agent.updatedAtUtc,
                         createdAtUtc: agent.createdAtUtc,
+                        totalTokens: agent.totalTokens || 0,
+                        costInUsd: agent.costInUsd || 0,
                     };
                 })
             );

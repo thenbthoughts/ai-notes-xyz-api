@@ -1,11 +1,13 @@
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
 import writeAgentLog, { fetchLlmUnifiedLogged, AgentLogContext } from './agentWriteLog';
+import { AGENT_SHELL_ENV_BLURB } from './agentShellEnvironmentContext';
+import type { AgentSkillCatalogItem } from './agentSkillsLib';
 
 type LlmConfig = NonNullable<Awaited<ReturnType<typeof getLlmConfig>>>;
 
 export type AgentPlanDecision =
-    | { kind: 'synthesize'; reason: string }
+    | { kind: 'synthesize'; reason: string; skillsToLoad: string[] }
     | {
           kind: 'action';
           action: string;
@@ -18,6 +20,7 @@ export type AgentPlanDecision =
           scriptType?: string;
           fileName?: string;
           reason?: string;
+          skillsToLoad: string[];
       };
 
 export type AgentVerifyVerdict = {
@@ -51,6 +54,15 @@ const extractJsonObject = (raw: string): Record<string, unknown> | null => {
     return null;
 };
 
+const parseSkillsToLoad = (json: Record<string, unknown> | null): string[] => {
+    if (!json || !Array.isArray(json.skillsToLoad)) return [];
+    return json.skillsToLoad
+        .filter((x): x is string => typeof x === 'string')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+};
+
 /**
  * Plan the next agent step (tool action vs synthesize final answer).
  * Agent-native — does not call Answer Machine.
@@ -65,6 +77,8 @@ export const planAgentStep = async (params: {
     recentToolSummary: string;
     tickNumber: number;
     recentNoopCount: number;
+    skillsCatalog: AgentSkillCatalogItem[];
+    activeSkillsBlock?: string;
 }): Promise<AgentPlanDecision> => {
     const {
         logCtx,
@@ -76,32 +90,48 @@ export const planAgentStep = async (params: {
         recentToolSummary,
         tickNumber,
         recentNoopCount,
+        skillsCatalog,
+        activeSkillsBlock,
     } = params;
+
+    const catalogText = skillsCatalog.length
+        ? skillsCatalog.map((s) => `- ${s.name}: ${s.description}`).join('\n')
+        : '(no skills installed)';
 
     const systemPrompt = `You are the PLANNER for an autonomous personal-data agent.
 The user is NOT available for clarifying questions.
 
+${AGENT_SHELL_ENV_BLURB}
+
 Your job each tick:
-1) Decide if you already have enough personal evidence in MEMORY / prior tool results to write a strong FINAL ANSWER → readyToSynthesize=true
-2) Otherwise choose ONE next tool action that gathers more personal context.
+1) Optionally load up to 3 skills via skillsToLoad (by name from the catalog) when their descriptions match the goal.
+2) Decide if you already have enough evidence in MEMORY / prior tool results → readyToSynthesize=true
+3) Otherwise choose ONE next tool action.
 
 Prefer this workflow for life/advice questions (e.g. "how to improve my life"):
+- Load skill "personal-research" when relevant
 - First call search_all_domains with a focused query (or the user question)
 - Optionally deepen with search_notes / search_tasks / search_memo / search_life_events / search_info_vault
 - Store important findings with write_memory
 - When enough evidence exists, set readyToSynthesize=true (do NOT invent personal facts)
 
 For file/script goals (resize/compress images, generate files):
+- Load "shell-environment" and/or "image-media" when relevant
 - Use execute_script with scriptType "python" for image work (Pillow) and fileName ending in .py
 - Use execute_script with scriptType "node" for JS; fileName ending in .js
 - Never run a .py file with node
 
+Available skills (name + when to use):
+${catalogText}
+
 Available tools:
 ${toolDescriptions}
 
+${activeSkillsBlock ? `${activeSkillsBlock}\n` : ''}
 Reply JSON ONLY:
 {
   "readyToSynthesize": boolean,
+  "skillsToLoad": ["skill-name"],
   "action": "<tool_name when readyToSynthesize is false>",
   "query": "search query",
   "memoryKey": "optional",
@@ -158,12 +188,15 @@ Rules:
     });
 
     const json = extractJsonObject(llmResult.content || '');
+    const skillsToLoad = parseSkillsToLoad(json);
+
     if (!json) {
         return {
             kind: 'action',
             action: 'search_all_domains',
             query: goalTitle || goalDescription,
             reason: 'Planner JSON parse failed; defaulting to multi-domain search',
+            skillsToLoad,
         };
     }
 
@@ -171,7 +204,7 @@ Rules:
     const reason = typeof json.reason === 'string' ? json.reason : '';
 
     if (ready) {
-        return { kind: 'synthesize', reason: reason || 'Enough evidence to answer' };
+        return { kind: 'synthesize', reason: reason || 'Enough evidence to answer', skillsToLoad };
     }
 
     const action = typeof json.action === 'string' && json.action.trim() ? json.action.trim() : 'search_all_domains';
@@ -193,6 +226,7 @@ Rules:
         scriptType: typeof json.scriptType === 'string' ? json.scriptType : undefined,
         fileName: typeof json.fileName === 'string' ? json.fileName : undefined,
         reason,
+        skillsToLoad,
     };
 };
 
@@ -207,8 +241,18 @@ export const verifyAgentStep = async (params: {
     lastAction: string;
     lastResultSummary: string;
     memorySummary: string;
+    activeSkillsBlock?: string;
 }): Promise<AgentVerifyVerdict> => {
-    const { logCtx, llmConfig, goalTitle, goalDescription, lastAction, lastResultSummary, memorySummary } = params;
+    const {
+        logCtx,
+        llmConfig,
+        goalTitle,
+        goalDescription,
+        lastAction,
+        lastResultSummary,
+        memorySummary,
+        activeSkillsBlock,
+    } = params;
 
     const messages: Message[] = [
         {
@@ -219,7 +263,8 @@ export const verifyAgentStep = async (params: {
                 '- ready_to_synthesize: memory + last result are enough for a grounded final answer.\n' +
                 '- continue: more search/tools still needed.\n' +
                 '- retry: last action failed or was useless; set retryHint.\n' +
-                'For personal advice goals, require evidence from notes/tasks/memos/life events/info vault before ready_to_synthesize.',
+                'For personal advice goals, require evidence from notes/tasks/memos/life events/info vault before ready_to_synthesize.\n' +
+                (activeSkillsBlock ? `\n${activeSkillsBlock}` : ''),
         },
         {
             role: 'user',
@@ -274,8 +319,17 @@ export const synthesizeAgentAnswer = async (params: {
     goalDescription: string;
     memorySummary: string;
     pastChatSummary: string;
+    activeSkillsBlock?: string;
 }): Promise<string> => {
-    const { logCtx, llmConfig, goalTitle, goalDescription, memorySummary, pastChatSummary } = params;
+    const {
+        logCtx,
+        llmConfig,
+        goalTitle,
+        goalDescription,
+        memorySummary,
+        pastChatSummary,
+        activeSkillsBlock,
+    } = params;
 
     const messages: Message[] = [
         {
@@ -285,7 +339,8 @@ export const synthesizeAgentAnswer = async (params: {
                 'Ground every claim in the provided MEMORY / domain search evidence.\n' +
                 'If evidence is thin, say what is known vs unknown — do not invent personal history.\n' +
                 'Be practical, specific, and structured (short sections / bullets).\n' +
-                'Return plain text only (no JSON). Aim for a complete useful answer the user can act on.',
+                'Return plain text only (no JSON). Aim for a complete useful answer the user can act on.\n' +
+                (activeSkillsBlock ? `\n${activeSkillsBlock}` : ''),
         },
         {
             role: 'user',

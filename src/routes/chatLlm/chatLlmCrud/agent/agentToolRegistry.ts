@@ -24,6 +24,7 @@ const updateTypeToLogAction = (updateType: string, payload?: Record<string, unkn
     if (updateType === 'plan') return 'plan';
     if (updateType === 'verify') return 'verify';
     if (updateType === 'synthesize') return 'synthesize';
+    if (updateType === 'skills_loaded') return 'skills_loaded';
     return updateType;
 };
 
