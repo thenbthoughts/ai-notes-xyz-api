@@ -15,6 +15,14 @@ export interface IAgentInstance extends Document {
     tickLockUntilUtc: Date | null;
     cancellationRequestedUtc: Date | null;
     summary: string;
+    promptTokens: number;
+    completionTokens: number;
+    reasoningTokens: number;
+    totalTokens: number;
+    costInUsd: number;
+    maxPromptTokensPerQuery: number;
+    maxCompletionTokensPerQuery: number;
+    activeSkillNames: string[];
     createdAtUtc: Date;
     updatedAtUtc: Date;
 }
