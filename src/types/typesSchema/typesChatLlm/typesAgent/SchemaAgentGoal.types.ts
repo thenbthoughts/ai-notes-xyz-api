@@ -7,6 +7,8 @@ export interface IAgentGoal extends Document {
     agentInstanceId: mongoose.Types.ObjectId;
     userId: mongoose.Types.ObjectId;
     threadId: mongoose.Types.ObjectId;
+    /** Null for top-level goals; set for sub-goals under a parent goal. */
+    parentGoalId: mongoose.Types.ObjectId | null;
     orderIndex: number;
     title: string;
     description: string;

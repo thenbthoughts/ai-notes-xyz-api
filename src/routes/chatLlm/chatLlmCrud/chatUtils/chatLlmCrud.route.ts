@@ -1,0 +1,152 @@
+import mongoose, { PipelineStage } from 'mongoose';
+import { Router, Request, Response } from 'express';
+
+import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
+import middlewareUserAuth from '../../../../middleware/middlewareUserAuth';
+import { deleteFileByPath } from '../../../upload/uploadFileS3ForFeatures';
+import { attachAgentFinalsToChatDocs } from '../agent/agentWork/agentFinalPersist';
+
+// Router
+const router = Router();
+
+// Get Note API
+router.post('/notesGet', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+        // variable -> threadId
+        let threadId = null as mongoose.Types.ObjectId | null;
+        const arg_threadId = req.body.threadId;
+        if (typeof req.body?.threadId === 'string') {
+            threadId = req.body?.threadId ? mongoose.Types.ObjectId.createFromHexString(arg_threadId) : null;
+        }
+        if (threadId === null) {
+            return res.status(400).json({ message: 'Thread ID cannot be null' });
+        }
+
+        // Pagination parameters
+        const minLimitPerRequest = 10;
+        let limit = 50; // Default limit
+        let skip = 0; // Default skip (0 means most recent messages)
+
+        if (typeof req.body?.limit === 'number' && req.body.limit > 0) {
+            limit = Math.max(req.body.limit, minLimitPerRequest);
+        }
+
+        if (typeof req.body?.skip === 'number' && req.body.skip >= 0) {
+            skip = req.body.skip;
+        }
+
+        let tempStage = {} as PipelineStage;
+        const stateDocument = [] as PipelineStage[];
+        const stateCount = [] as PipelineStage[];
+
+        // stateDocument -> match
+        tempStage = {
+            $match: {
+                userId: res.locals.auth_userId,
+                threadId: threadId,
+            }
+        }
+        stateDocument.push(tempStage);
+        stateCount.push(tempStage);
+
+        // stateDocument -> sort (most recent first for pagination)
+        tempStage = {
+            $sort: {
+                createdAtUtc: -1,
+            }
+        }
+        stateDocument.push(tempStage);
+        stateCount.push(tempStage);
+
+        // stateDocument -> skip (for pagination)
+        if (skip > 0) {
+            tempStage = {
+                $skip: skip,
+            };
+            stateDocument.push(tempStage);
+        }
+
+        // stateDocument -> limit
+        tempStage = {
+            $limit: limit,
+        };
+        stateDocument.push(tempStage);
+
+        // stateCount -> count total messages
+        stateCount.push({
+            $count: 'count'
+        });
+
+        // pipeline
+        const resultNotes = await ModelChatLlm.aggregate(stateDocument);
+        const resultCount = await ModelChatLlm.aggregate(stateCount);
+
+        let totalCount = 0;
+        if (resultCount.length === 1 && resultCount[0].count) {
+            totalCount = resultCount[0].count;
+        }
+
+        // Reverse the results to maintain chronological order (oldest first)
+        resultNotes.reverse();
+
+        const docsWithAgentFinals = await attachAgentFinalsToChatDocs(
+            resultNotes as Record<string, unknown>[],
+        );
+
+        return res.json({
+            message: 'Notes retrieved successfully',
+            count: docsWithAgentFinals.length,
+            totalCount: totalCount,
+            docs: docsWithAgentFinals,
+            hasMore: (skip + limit) < totalCount,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Delete Note API
+router.post('/notesDelete', middlewareUserAuth, async (req: Request, res: Response) => {
+    try {
+         // variable -> _id
+         let _id = null as mongoose.Types.ObjectId | null;
+         const arg__id = req.body._id;
+         if (typeof req.body?._id === 'string') {
+             _id = req.body?._id ? mongoose.Types.ObjectId.createFromHexString(arg__id) : null;
+         }
+         if (_id === null) {
+             return res.status(400).json({ message: 'Thread ID cannot be null' });
+         }
+
+        const note = await ModelChatLlm.findOneAndDelete({
+            _id: _id,
+            userId: res.locals.auth_userId,
+        });
+        if (!note) {
+            return res.status(404).json({ message: 'Note not found or unauthorized' });
+        }
+
+        // delete file from s3
+        if (note?.fileUrl) {
+            console.log('note.fileUrl: ', note.fileUrl);
+            const fileUrlParts = note.fileUrl.split('/');
+            console.log('fileUrlParts: ', fileUrlParts);
+            const fileName = fileUrlParts[fileUrlParts.length - 1];
+            if (fileName) {
+                await deleteFileByPath({
+                    userId: res.locals.auth_userId,
+                    parentEntityId: note?.threadId?.toString() || '',
+                    fileName: fileName,
+                });
+            }
+        }
+
+        return res.json({ message: 'Note deleted successfully' });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+export default router;

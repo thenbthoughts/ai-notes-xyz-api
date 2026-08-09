@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 
-import agentCronTick from '../routes/chatLlm/chatLlmCrud/agent/agentCron';
+import agentCronTick from '../routes/chatLlm/chatLlmCrud/agent/agentCron/agentCron';
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';

@@ -14,9 +14,11 @@ export type AgentUpdateType =
     | 'script_executed'
     | 'tool_result'
     | 'plan'
+    | 'plan_probe'
     | 'verify'
     | 'synthesize'
-    | 'skills_loaded';
+    | 'skills_loaded'
+    | 'workspace_list';
 
 export interface IAgentUpdate extends Document {
     _id: mongoose.Types.ObjectId;

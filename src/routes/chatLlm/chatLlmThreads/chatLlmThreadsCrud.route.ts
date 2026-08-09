@@ -12,6 +12,8 @@ import { systemPromptForChatLlmThread } from './constantsChatLlmThread/constants
 import { reindexDocument } from '../../../utils/search/reindexGlobalSearch';
 import { deleteFilesByParentEntityId } from '../../upload/uploadFileS3ForFeatures';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
+import cleanupThreadOnDelete from './utils/cleanupThreadOnDelete';
+import type { tsUserApiKey } from '../../../utils/llm/llmCommonFunc';
 
 // Router
 const router = Router();
@@ -191,6 +193,17 @@ router.post('/threadsDeleteById', middlewareUserAuth, async (req: Request, res: 
             userId: res.locals.auth_userId,
             threadId: threadId,
         });
+
+        // delete agent records + chat-shell runs + shell workspace folders
+        try {
+            await cleanupThreadOnDelete({
+                threadId,
+                userId: res.locals.auth_userId,
+                apiKey: res.locals.apiKey as tsUserApiKey,
+            });
+        } catch (cleanupErr) {
+            console.error('[threadsDeleteById] agent/shell cleanup failed:', cleanupErr);
+        }
 
         const deletedThread = await ModelChatLlmThread.findOneAndDelete({
             _id: threadId,

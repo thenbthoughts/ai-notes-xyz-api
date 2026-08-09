@@ -1,0 +1,109 @@
+{
+  "slug": "test-1-create-a-pdf-with-datetime",
+  "ok": true,
+  "checks": [
+    {
+      "name": "agent_status_success",
+      "ok": true,
+      "detail": "status=success"
+    },
+    {
+      "name": "agent_not_running",
+      "ok": true,
+      "detail": "statusIsRunning=false"
+    },
+    {
+      "name": "agent_brain_done",
+      "ok": true,
+      "detail": "brainStep=done"
+    },
+    {
+      "name": "no_open_goals",
+      "ok": true,
+      "detail": "none open"
+    },
+    {
+      "name": "single_final_success_message",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "no_stuck_streaming_placeholder",
+      "ok": true,
+      "detail": "stuck=0"
+    },
+    {
+      "name": "deliverable_pdf",
+      "ok": true,
+      "detail": "india_time_report.pdf (1600b)"
+    }
+  ],
+  "ctx": {
+    "userId": "672e4c845965b89f611a7ace",
+    "threadId": "6a789f41c6c5bca82e422d18",
+    "threadTitle": "Auto - Create PDF with datetime - 2026-08-09 15:39:45",
+    "agentInstanceId": "6a789f42c6c5bca82e422d64",
+    "agentDir": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18",
+    "shellListing": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/create_artifact.py",
+        "pathInAgentFolder": "create_artifact.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/create_artifact.py",
+        "isDir": false,
+        "size": 1803
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/generate_india_time_pdf.py",
+        "pathInAgentFolder": "generate_india_time_pdf.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/generate_india_time_pdf.py",
+        "isDir": false,
+        "size": 1426
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report.pdf",
+        "pathInAgentFolder": "india_time_report.pdf",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report.pdf",
+        "isDir": false,
+        "size": 1600
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report_new.pdf",
+        "pathInAgentFolder": "india_time_report_new.pdf",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report_new.pdf",
+        "isDir": false,
+        "size": 1777
+      }
+    ],
+    "deliverables": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report.pdf",
+        "pathInAgentFolder": "india_time_report.pdf",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report.pdf",
+        "size": 1600
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report_new.pdf",
+        "pathInAgentFolder": "india_time_report_new.pdf",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report_new.pdf",
+        "size": 1777
+      }
+    ],
+    "finalMessages": [
+      {
+        "content": "The PDF containing the current date and time in the Asia/Kolkata timezone has been successfully generated, and its metadata has been retrieved.\n\n**File Metadata:**\n- **Absolute Path:** `/app/data/ai-notes-xyz-shell-files/agent/6a789f41c6c5bca82e422d18/india_time_report_new.pdf`\n- **File Size:** 1777 bytes\n\nThe generation was performed using a Python script utilizing the `zoneinfo` library for accurate timezone handling and `reportlab` for PDF creation.",
+        "tags": [
+          "agent",
+          "finalize",
+          "agent-run:6a789f42c6c5bca82e422d64",
+          "agent_success"
+        ]
+      }
+    ],
+    "agentStatus": "success",
+    "statusIsRunning": false,
+    "brainStep": "done"
+  },
+  "threadId": "6a789f41c6c5bca82e422d18",
+  "agentInstanceId": "6a789f42c6c5bca82e422d64",
+  "threadTitle": "Auto - Create PDF with datetime - 2026-08-09 15:39:45"
+}

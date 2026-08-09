@@ -27,6 +27,13 @@ const agentInstanceSchema = new Schema<IAgentInstance>({
         default: 'pending',
         index: true,
     },
+    /** Think → Plan → Use Tool → Observe → Final Answer → done */
+    brainStep: {
+        type: String,
+        enum: ['think', 'plan', 'use_tool', 'observe', 'final_answer', 'done', null],
+        default: 'think',
+        index: true,
+    },
     statusIsRunning: {
         type: Boolean,
         default: false,

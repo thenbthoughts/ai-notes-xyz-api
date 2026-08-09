@@ -4,7 +4,7 @@ import { ModelChatLlmThread } from '../../../schema/schemaChatLlm/SchemaChatLlmT
 import middlewareUserAuth from '../../../middleware/middlewareUserAuth';
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 import { fetchLlmUnified, Message } from '../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { getLlmConfig } from '../chatLlmCrud/chatLlmGetLlmConfig';
+import { getLlmConfig } from '../chatLlmCrud/chatUtils/chatLlmGetLlmConfig';
 
 const router = Router();
 

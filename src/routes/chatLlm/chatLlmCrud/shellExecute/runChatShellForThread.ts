@@ -10,7 +10,7 @@ import { ModelChatShellRunTodo } from '../../../../schema/schemaChatLlm/SchemaSh
 import { ModelChatShellGeneratedFile } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellGeneratedFile.schema';
 import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
-import { getLlmConfig } from '../chatLlmGetLlmConfig';
+import { getLlmConfig } from '../chatUtils/chatLlmGetLlmConfig';
 import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
 import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';

@@ -9,20 +9,21 @@ import { ModelAgentUpdate } from '../../../schema/schemaChatLlm/SchemaAgent/Sche
 import { ModelAgentMemory } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentLog } from '../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
 import cancelPendingAgentTickTasks from '../../../utils/llmPendingTask/page/agent/cancelPendingAgentTickTasks';
-import writeAgentLog from '../chatLlmCrud/agent/agentWriteLog';
-import { detectSourcesSeenInMemory } from '../chatLlmCrud/agent/agentPlanVerify';
-import { ensureAgentTerminalChatMessage } from '../chatLlmCrud/agent/ensureAgentTerminalChatMessage';
+import writeAgentLog from '../chatLlmCrud/agent/agentUtils/agentWriteLog';
+import { detectSourcesSeenInMemory } from '../chatLlmCrud/agent/agentWork/agentPlanVerify';
+import { ensureAgentTerminalChatMessage } from '../chatLlmCrud/agent/agentUtils/ensureAgentTerminalChatMessage';
 import {
     budgetLimitsFromAgentDoc,
     computeAgentBudgetStatus,
     formatAgentBudgetContext,
-} from '../chatLlmCrud/agent/agentBudget';
+} from '../chatLlmCrud/agent/agentStats/agentBudget';
 
 const router = Router();
 
 export interface AgentPollingResponse {
     isProcessing: boolean;
     status: 'pending' | 'success' | 'failed' | 'not_started';
+    brainStep: 'think' | 'plan' | 'use_tool' | 'observe' | 'final_answer' | 'done' | null;
     agentInstanceId: string | null;
     tickCount: number;
     goals: Array<{
@@ -32,6 +33,7 @@ export interface AgentPollingResponse {
         status: string;
         result: string;
         orderIndex: number;
+        parentGoalId: string | null;
     }>;
     updates: Array<{
         id: string;
@@ -96,7 +98,7 @@ export interface AgentPollingResponse {
     };
     activeSkillNames: string[];
     researchState: {
-        phase: 'idle' | 'plan' | 'tool' | 'verify' | 'synthesize' | 'done' | 'error';
+        phase: 'idle' | 'think' | 'plan' | 'use_tool' | 'observe' | 'final_answer' | 'done' | 'error';
         sourcesSeen: string[];
         evidenceGaps: string[];
         suggestedNextAction: string | null;
@@ -135,31 +137,43 @@ const emptyResearchState = (): AgentPollingResponse['researchState'] => ({
 
 const buildResearchState = (params: {
     agentStatus: string;
+    brainStep?: string | null;
     updates: Array<{ updateType: string; payload?: Record<string, unknown> | null }>;
     memories: Array<{ key: string; content: string }>;
 }): AgentPollingResponse['researchState'] => {
-    const { agentStatus, updates, memories } = params;
+    const { agentStatus, brainStep, updates, memories } = params;
     const sourcesSeen = detectSourcesSeenInMemory(memories);
 
     let phase: AgentPollingResponse['researchState']['phase'] = 'idle';
-    if (agentStatus === 'success') phase = 'done';
+    if (agentStatus === 'success' || brainStep === 'done') phase = 'done';
     else if (agentStatus === 'failed') phase = 'error';
-    else {
+    else if (
+        brainStep === 'think' ||
+        brainStep === 'plan' ||
+        brainStep === 'use_tool' ||
+        brainStep === 'observe' ||
+        brainStep === 'final_answer'
+    ) {
+        phase = brainStep;
+    } else {
         const latestPhaseUpdate = updates.find((u) =>
-            ['synthesize', 'verify', 'plan', 'domain_search', 'tick', 'goal_completed'].includes(
+            ['synthesize', 'verify', 'plan', 'domain_search', 'tick', 'goal_completed', 'tool_result'].includes(
                 u.updateType
             )
         );
         if (latestPhaseUpdate?.updateType === 'synthesize' || latestPhaseUpdate?.updateType === 'goal_completed') {
-            phase = 'synthesize';
+            phase = 'final_answer';
         } else if (latestPhaseUpdate?.updateType === 'verify') {
-            phase = 'verify';
-        } else if (latestPhaseUpdate?.updateType === 'domain_search') {
-            phase = 'tool';
+            phase = 'observe';
+        } else if (
+            latestPhaseUpdate?.updateType === 'domain_search' ||
+            latestPhaseUpdate?.updateType === 'tool_result'
+        ) {
+            phase = 'use_tool';
         } else if (latestPhaseUpdate?.updateType === 'plan') {
             phase = 'plan';
         } else if (agentStatus === 'pending') {
-            phase = 'plan';
+            phase = 'think';
         }
     }
 
@@ -239,6 +253,7 @@ router.post(
                 const empty: AgentPollingResponse = {
                     isProcessing: false,
                     status: 'not_started',
+                    brainStep: null,
                     agentInstanceId: null,
                     tickCount: 0,
                     goals: [],
@@ -263,6 +278,7 @@ router.post(
                 const empty: AgentPollingResponse = {
                     isProcessing: false,
                     status: 'not_started',
+                    brainStep: null,
                     agentInstanceId: null,
                     tickCount: 0,
                     goals: [],
@@ -339,6 +355,7 @@ router.post(
             const response: AgentPollingResponse = {
                 isProcessing,
                 status: mappedStatus,
+                brainStep: latestAgent.brainStep ?? null,
                 agentInstanceId: String(latestAgent._id),
                 tickCount: latestAgent.tickCount || 0,
                 goals: goals.map((g) => ({
@@ -348,6 +365,7 @@ router.post(
                     status: g.status,
                     result: g.result || '',
                     orderIndex: g.orderIndex,
+                    parentGoalId: g.parentGoalId ? String(g.parentGoalId) : null,
                 })),
                 updates: updates
                     .slice()
@@ -438,6 +456,7 @@ router.post(
                     : [],
                 researchState: buildResearchState({
                     agentStatus: latestAgent.status,
+                    brainStep: latestAgent.brainStep,
                     updates: updates.map((u) => ({
                         updateType: u.updateType,
                         payload: (u.payload as Record<string, unknown>) || {},
