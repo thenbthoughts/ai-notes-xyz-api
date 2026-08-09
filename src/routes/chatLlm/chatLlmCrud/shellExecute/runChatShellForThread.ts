@@ -10,7 +10,7 @@ import { ModelChatShellRunTodo } from '../../../../schema/schemaChatLlm/SchemaSh
 import { ModelChatShellGeneratedFile } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellGeneratedFile.schema';
 import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
-import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { getLlmConfig } from '../chatUtils/chatLlmGetLlmConfig';
 import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
 import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';
@@ -1005,23 +1005,19 @@ async function shellStep1LoadThreadAndKeys(params: {
     }
 
     const keys = getApiKeyByObject(userKeyDoc);
-    const isAnswerMachine = thread.answerEngine === 'answerMachine4';
-    const isShellValid = isAnswerMachine ? keys.apiKeyOpencodeWithShellValid : keys.shellEngineValid;
-    const shellUrl = isAnswerMachine ? keys.opencodeWithCustomShellUrl : keys.shellEngineUrl;
-    const shellToken = isAnswerMachine ? keys.opencodeWithCustomShellToken : keys.shellEngineToken;
+    const isShellValid = keys.shellEngineValid;
+    const shellUrl = keys.shellEngineUrl;
+    const shellToken = keys.shellEngineToken;
 
     if (!isShellValid || !shellUrl || !shellToken) {
         logStep(1, 'shell engine not configured on keys', {
-            isAnswerMachine,
             isShellValid,
             hasUrl: Boolean(shellUrl),
             hasToken: Boolean(shellToken),
         });
         return {
             ok: false,
-            error: isAnswerMachine
-                ? 'Shell execute is enabled but OpenCode with Shell is not configured in API Keys.'
-                : 'Shell execute is enabled but Shell service is not configured in API Keys.',
+            error: 'Shell execute is enabled but Shell service is not configured in API Keys.',
         };
     }
 

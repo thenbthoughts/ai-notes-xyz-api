@@ -1,0 +1,108 @@
+{
+  "slug": "test-4-generate-a-excel-with-100-password",
+  "ok": true,
+  "checks": [
+    {
+      "name": "agent_status_success",
+      "ok": true,
+      "detail": "status=success"
+    },
+    {
+      "name": "agent_not_running",
+      "ok": true,
+      "detail": "statusIsRunning=false"
+    },
+    {
+      "name": "agent_exit_step",
+      "ok": true,
+      "detail": "statusNextStep=exit"
+    },
+    {
+      "name": "no_open_goals",
+      "ok": true,
+      "detail": "none open"
+    },
+    {
+      "name": "single_final_success_message",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "no_stuck_streaming_placeholder",
+      "ok": true,
+      "detail": "stuck=0"
+    },
+    {
+      "name": "deliverable_xlsx",
+      "ok": true,
+      "detail": "passwords.xlsx (7612b)"
+    },
+    {
+      "name": "xlsx_nontrivial_size",
+      "ok": true,
+      "detail": "7612b"
+    }
+  ],
+  "ctx": {
+    "userId": "672e4c845965b89f611a7ace",
+    "threadId": "6a789a92d15500ae8b13a453",
+    "threadTitle": "Auto - Generate Excel with 100 passwords - 2026-08-09 15:19:46",
+    "agentInstanceId": "6a789a92d15500ae8b13a497",
+    "agentDir": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453",
+    "shellListing": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/create_artifact.py",
+        "pathInAgentFolder": "create_artifact.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/create_artifact.py",
+        "isDir": false,
+        "size": 1470
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/fix_passwords.py",
+        "pathInAgentFolder": "fix_passwords.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/fix_passwords.py",
+        "isDir": false,
+        "size": 2376
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/generate_passwords.py",
+        "pathInAgentFolder": "generate_passwords.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/generate_passwords.py",
+        "isDir": false,
+        "size": 1978
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/passwords.xlsx",
+        "pathInAgentFolder": "passwords.xlsx",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/passwords.xlsx",
+        "isDir": false,
+        "size": 7612
+      }
+    ],
+    "deliverables": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/passwords.xlsx",
+        "pathInAgentFolder": "passwords.xlsx",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/passwords.xlsx",
+        "size": 7612
+      }
+    ],
+    "finalMessages": [
+      {
+        "content": "The Excel spreadsheet `passwords.xlsx` has been successfully generated. It contains 100 unique, randomly generated passwords.\n\n**File Details:**\n- **Filename:** `passwords.xlsx`\n- **Absolute Path:** `/app/data/ai-notes-xyz-shell-files/agent/6a789a92d15500ae8b13a453/passwords.xlsx`\n- **File Size:** ~7643 bytes",
+        "tags": [
+          "agent",
+          "final_answer",
+          "agent-run:6a789a92d15500ae8b13a497",
+          "agent_success"
+        ]
+      }
+    ],
+    "agentStatus": "success",
+    "statusIsRunning": false,
+    "statusNextStep": "exit"
+  },
+  "threadId": "6a789a92d15500ae8b13a453",
+  "agentInstanceId": "6a789a92d15500ae8b13a497",
+  "threadTitle": "Auto - Generate Excel with 100 passwords - 2026-08-09 15:19:46"
+}

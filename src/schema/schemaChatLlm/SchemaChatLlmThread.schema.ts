@@ -83,35 +83,29 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     // answer engine
     answerEngine: {
         type: String,
-        enum: ['conciseAnswer', 'answerMachine4', 'agent'],
+        enum: ['conciseAnswer', 'agent'],
         default: 'conciseAnswer',
     },
 
-    // answerEngine -> answerMachine
-    answerMachineMinNumberOfIterations: {
+    // answerEngine -> agent budgets
+    agentMinBudgetTokens: {
         type: Number,
         default: 1,
     },
-    answerMachineMaxNumberOfIterations: {
+    agentMaxBudgetTokens: {
+        type: Number,
+        default: 1_000_000,
+    },
+    agentMinNumberOfIterations: {
         type: Number,
         default: 1,
     },
-    answerMachineUsedOpencode: {
-        type: Boolean,
-        default: false,
-    },
-    answerMachineUsedWebSearch: {
-        type: Boolean,
-        default: false,
-    },
-    answerMachineMaxReasoningStepsPerIteration: {
+    agentMaxNumberOfIterations: {
         type: Number,
-        default: 8,
-        min: 1,
-        max: 50,
+        default: 100,
     },
 
-    /** When true, run shell prep before the next AI reply (concise stream or Answer Machine) */
+    /** When true, run shell prep before the next AI reply (concise stream or Agent) */
     executeShell: {
         type: Boolean,
         default: false,

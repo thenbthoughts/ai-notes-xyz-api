@@ -27,6 +27,13 @@ const agentInstanceSchema = new Schema<IAgentInstance>({
         default: 'pending',
         index: true,
     },
+    /** Think → Plan → Use Tool → Observe → Final Answer → done */
+    brainStep: {
+        type: String,
+        enum: ['think', 'plan', 'use_tool', 'observe', 'final_answer', 'done', null],
+        default: 'think',
+        index: true,
+    },
     statusIsRunning: {
         type: Boolean,
         default: false,
@@ -45,6 +52,10 @@ const agentInstanceSchema = new Schema<IAgentInstance>({
     costInUsd: { type: Number, default: 0 },
     maxPromptTokensPerQuery: { type: Number, default: 0 },
     maxCompletionTokensPerQuery: { type: Number, default: 0 },
+    minBudgetTokens: { type: Number, default: 1 },
+    maxBudgetTokens: { type: Number, default: 1_000_000 },
+    minNumberOfIterations: { type: Number, default: 1 },
+    maxNumberOfIterations: { type: Number, default: 100 },
     activeSkillNames: { type: [String], default: [] },
     createdAtUtc: { type: Date, default: () => new Date() },
     updatedAtUtc: { type: Date, default: () => new Date() },

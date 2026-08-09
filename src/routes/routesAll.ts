@@ -17,17 +17,17 @@ import routeUserOpenaiCompatibleModel from './user/userOpenaiCompatibleModel.rou
 import routeUserMemory from './user/userMemory.route';
 
 // chat llm
-import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatLlmCrud.route';
-import routesChatLlmAddChat from './chatLlm/chatLlmCrud/chatLlmAdd.route';
-import routesChatLlmAiGeneratedNextQuestion from './chatLlm/chatLlmCrud/chatLlmAiGeneratedNextQuestion.route';
+import routesChatLlmCrud from './chatLlm/chatLlmCrud/chatUtils/chatLlmCrud.route';
+import routesChatLlmAddChat from './chatLlm/chatLlmCrud/chatUtils/chatLlmAdd.route';
+import routesChatLlmAiGeneratedNextQuestion from './chatLlm/chatLlmCrud/concise/chatLlmAiGeneratedNextQuestion.route';
 import routesChatLlmAiCall from './chatLlm/chatLlmAiCall/chatLlmAiCall.route';
 import routesChatLlmThreadsCrud from './chatLlm/chatLlmThreads/chatLlmThreadsCrud.route';
 import routesChatLlmThreadsContextCrud from './chatLlm/chatLlmThreads/chatLlmThreadsContextCrud.route';
-import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/chatLlmAddAutoNextMessage.route';
+import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/concise/chatLlmAddAutoNextMessage.route';
 import routesChatLlmPolling from './chatLlm/chatLlmPolling/answerMachinePolling.route';
-import routesChatLlmTts from './chatLlm/chatLlmCrud/chatLlmTts.route';
-import routesShellFilesExplorer from './chatLlm/chatLlmCrud/shellExecute/shellFilesExplorer.route';
-import routesAgentSkills from './chatLlm/chatLlmCrud/agentSkills.route';
+import routesChatLlmTts from './chatLlm/chatLlmCrud/chatUtils/chatLlmTts.route';
+import routesShellFilesExplorer from './chatLlm/chatLlmCrud/agent/agentUtils/agentShell/shellFilesExplorer.route';
+import routesAgentSkills from './chatLlm/chatLlmCrud/agentSkills/agentSkills.route';
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';

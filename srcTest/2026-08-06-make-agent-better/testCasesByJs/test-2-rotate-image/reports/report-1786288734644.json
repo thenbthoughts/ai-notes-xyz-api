@@ -1,0 +1,102 @@
+{
+  "slug": "test-2-rotate-image",
+  "ok": true,
+  "checks": [
+    {
+      "name": "agent_status_success",
+      "ok": true,
+      "detail": "status=success"
+    },
+    {
+      "name": "agent_not_running",
+      "ok": true,
+      "detail": "statusIsRunning=false"
+    },
+    {
+      "name": "agent_exit_step",
+      "ok": true,
+      "detail": "statusNextStep=exit"
+    },
+    {
+      "name": "no_open_goals",
+      "ok": true,
+      "detail": "none open"
+    },
+    {
+      "name": "single_final_success_message",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "no_stuck_streaming_placeholder",
+      "ok": true,
+      "detail": "stuck=0"
+    },
+    {
+      "name": "rotated_output_file",
+      "ok": true,
+      "detail": "rotated.png (1102938b)"
+    }
+  ],
+  "ctx": {
+    "userId": "672e4c845965b89f611a7ace",
+    "threadId": "6a789a0ce28935f666040431",
+    "threadTitle": "Auto - Rotate image - 2026-08-09 15:17:32",
+    "agentInstanceId": "6a789a0ce28935f66604048b",
+    "agentDir": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431",
+    "shellListing": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotate_image.py",
+        "pathInAgentFolder": "rotate_image.py",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotate_image.py",
+        "isDir": false,
+        "size": 772
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotated.png",
+        "pathInAgentFolder": "rotated.png",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotated.png",
+        "isDir": false,
+        "size": 1102938
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/uploads/img-test-2-rotate-image.png",
+        "pathInAgentFolder": "uploads/img-test-2-rotate-image.png",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/uploads/img-test-2-rotate-image.png",
+        "isDir": false,
+        "size": 1653377
+      }
+    ],
+    "deliverables": [
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotated.png",
+        "pathInAgentFolder": "rotated.png",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotated.png",
+        "size": 1102938
+      },
+      {
+        "relativePath": "ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/uploads/img-test-2-rotate-image.png",
+        "pathInAgentFolder": "uploads/img-test-2-rotate-image.png",
+        "absolutePath": "/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/uploads/img-test-2-rotate-image.png",
+        "size": 1653377
+      }
+    ],
+    "finalMessages": [
+      {
+        "content": "The metadata for the newly created 'rotated.png' image is as follows:\n\n- **Absolute Path:** `/app/data/ai-notes-xyz-shell-files/agent/6a789a0ce28935f666040431/rotated.png`\n- **File Size:** 1,102,938 bytes",
+        "tags": [
+          "agent",
+          "final_answer",
+          "agent-run:6a789a0ce28935f66604048b",
+          "agent_success"
+        ]
+      }
+    ],
+    "agentStatus": "success",
+    "statusIsRunning": false,
+    "statusNextStep": "exit"
+  },
+  "threadId": "6a789a0ce28935f666040431",
+  "agentInstanceId": "6a789a0ce28935f66604048b",
+  "threadTitle": "Auto - Rotate image - 2026-08-09 15:17:32"
+}

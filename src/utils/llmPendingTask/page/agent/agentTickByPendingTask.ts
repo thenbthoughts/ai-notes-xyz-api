@@ -43,10 +43,10 @@ const agentTickByPendingTask = async ({
         await agentProcessTick(agentInstanceId);
 
         const agentAfter = await ModelAgentInstance.findById(agentInstanceId)
-            .select('_id userId status')
+            .select('_id userId status brainStep')
             .lean();
 
-        if (agentAfter?.status === 'pending') {
+        if (agentAfter?.status === 'pending' && agentAfter?.brainStep !== 'done') {
             // force: current cron row is still "pending" until processFunc marks success,
             // so the normal dedupe would skip and the agent loop would stall after tick 1.
             await enqueueAgentTickPendingTask({

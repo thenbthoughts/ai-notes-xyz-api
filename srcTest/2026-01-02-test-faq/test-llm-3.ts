@@ -4,7 +4,7 @@ import envKeys from "../../src/config/envKeys";
 import { ModelLlmPendingTaskCron } from "../../src/schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema";
 import { llmPendingTaskTypes } from "../../src/utils/llmPendingTask/llmPendingTaskConstants";
 import llmPendingTaskProcessFunc from "../../src/utils/llmPendingTask/llmPendingTaskProcessFunc";
-import getNextMessageFromLast30Conversation from "../../src/routes/chatLlm/chatLlmCrud/utils/getNextMessageFromLast25Conversation";
+import getNextMessageFromLast30Conversation from "../../src/routes/chatLlm/chatLlmCrud/concise/getNextMessageFromLast25Conversation";
 import { ModelChatLlmThread } from "../../src/schema/schemaChatLlm/SchemaChatLlmThread.schema";
 import { ModelUserApiKey } from "../../src/schema/schemaUser/SchemaUserApiKey.schema";
 import { IChatLlmThread } from "../../src/types/typesSchema/typesChatLlm/SchemaChatLlmThread.types";
