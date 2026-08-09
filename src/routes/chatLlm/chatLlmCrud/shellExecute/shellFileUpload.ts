@@ -85,19 +85,3 @@ export function sanitizePathSegment(name: string): string {
     const cleaned = base.replace(/[^\w.\-()+@[\] ]+/g, '_').slice(0, 200);
     return cleaned || 'file';
 }
-
-/** Relative path segments must include `ai-notes-xyz-shell-files` per shell service rules. */
-export function buildAm4ShellRelativePath(params: {
-    userId: string;
-    threadId: string;
-    /** Real request id, or `"pending"` before the AM4 request document exists. */
-    requestId: string;
-    originalFileName: string;
-}): string {
-    const safeUser = sanitizePathSegment(params.userId);
-    const safeThread = sanitizePathSegment(params.threadId);
-    const safeReq = sanitizePathSegment(params.requestId);
-    const safeFile = sanitizePathSegment(params.originalFileName);
-    const stamp = Date.now();
-    return `ai-notes-xyz-shell-files/am4-uploads/${safeUser}/${safeThread}/${safeReq}/${stamp}-${safeFile}`;
-}

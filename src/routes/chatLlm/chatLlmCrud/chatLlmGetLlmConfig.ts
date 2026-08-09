@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import { ModelOpenaiCompatibleModel } from "../../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema";
-import { ModelUserApiKey } from "../../../../schema/schemaUser/SchemaUserApiKey.schema";
-import { ModelChatLlmThread } from "../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
-import { getApiKeyByObject } from "../../../../utils/llm/llmCommonFunc";
+import { ModelOpenaiCompatibleModel } from "../../../schema/schemaUser/SchemaOpenaiCompatibleModel.schema";
+import { ModelUserApiKey } from "../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelChatLlmThread } from "../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { getApiKeyByObject } from "../../../utils/llm/llmCommonFunc";
 
 export interface LlmConfig {
     provider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';

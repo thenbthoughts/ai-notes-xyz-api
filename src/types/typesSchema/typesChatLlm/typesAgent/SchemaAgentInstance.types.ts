@@ -22,6 +22,11 @@ export interface IAgentInstance extends Document {
     costInUsd: number;
     maxPromptTokensPerQuery: number;
     maxCompletionTokensPerQuery: number;
+    /** Snapshot of thread budgets at agent start */
+    minBudgetTokens: number;
+    maxBudgetTokens: number;
+    minNumberOfIterations: number;
+    maxNumberOfIterations: number;
     activeSkillNames: string[];
     createdAtUtc: Date;
     updatedAtUtc: Date;

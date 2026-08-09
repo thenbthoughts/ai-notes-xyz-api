@@ -2,7 +2,7 @@ import path from 'path';
 import axios from 'axios';
 
 import type { tsUserApiKey } from '../../../../utils/llm/llmCommonFunc';
-import { uploadBufferToShellEngine, readBufferFromShellEngine } from '../answerMachineV4/am4ShellFileUpload';
+import { uploadBufferToShellEngine, readBufferFromShellEngine } from '../shellExecute/shellFileUpload';
 import { writeAgentLogFromContext, type AgentLogContext } from './agentWriteLog';
 
 export type AgentShellConfig = {

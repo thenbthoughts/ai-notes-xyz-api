@@ -1,12 +1,13 @@
 import mongoose from 'mongoose';
 import path from 'path';
 import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
+import { ModelChatLlmThread } from '../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
 import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { getLlmConfig } from '../chatLlmGetLlmConfig';
 import { AgentToolContext, AgentToolDefinition, AgentToolResult } from './agentToolTypes';
 import { searchAgentDomain, searchAllAgentDomains, AgentDomainSearchSource } from './agentDomainAccess';
 import axios from 'axios';
@@ -240,6 +241,11 @@ const createDomainSearchTool = (source: AgentDomainSearchSource, toolName: strin
             ? hits.map((h) => `- [${h.source}] ${h.title}: ${h.summary}`).join('\n')
             : 'No results.';
 
+        const topSnippets = hits
+            .slice(0, 3)
+            .map((h) => `${h.title}: ${(h.summary || '').slice(0, 120)}`)
+            .join(' | ');
+
         await ModelAgentMemory.create({
             agentInstanceId: ctx.agentInstanceId,
             userId: ctx.userId,
@@ -250,6 +256,24 @@ const createDomainSearchTool = (source: AgentDomainSearchSource, toolName: strin
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
         });
+
+        for (const h of hits.slice(0, 8)) {
+            await ModelAgentMemory.create({
+                agentInstanceId: ctx.agentInstanceId,
+                userId: ctx.userId,
+                threadId: ctx.threadId,
+                key: `citation_${h.source}_${h.id}`.slice(0, 120),
+                content: JSON.stringify({
+                    source: h.source,
+                    id: h.id,
+                    title: h.title,
+                    summary: (h.summary || '').slice(0, 400),
+                }),
+                memoryType: 'observation',
+                createdAtUtc: new Date(),
+                updatedAtUtc: new Date(),
+            });
+        }
 
         await writeUpdate({
             agentInstanceId: ctx.agentInstanceId,
@@ -265,7 +289,9 @@ const createDomainSearchTool = (source: AgentDomainSearchSource, toolName: strin
         return {
             success: true,
             action: toolName,
-            resultSummary: `Searched ${source} found ${hits.length} items`,
+            resultSummary: `Searched ${source} found ${hits.length} items${
+                topSnippets ? ` — ${topSnippets}` : ''
+            }`.slice(0, 1500),
             payload: { source, hitsCount: hits.length, results: hits },
         };
     },
@@ -330,6 +356,11 @@ export class AgentToolRegistry {
                     ? hits.map((h) => `- [${h.source}] ${h.title}: ${h.summary}`).join('\n')
                     : 'No results across domains.';
 
+                const topSnippets = hits
+                    .slice(0, 3)
+                    .map((h) => `[${h.source}] ${h.title}: ${(h.summary || '').slice(0, 100)}`)
+                    .join(' | ');
+
                 await ModelAgentMemory.create({
                     agentInstanceId: ctx.agentInstanceId,
                     userId: ctx.userId,
@@ -340,6 +371,24 @@ export class AgentToolRegistry {
                     createdAtUtc: new Date(),
                     updatedAtUtc: new Date(),
                 });
+
+                for (const h of hits.slice(0, 16)) {
+                    await ModelAgentMemory.create({
+                        agentInstanceId: ctx.agentInstanceId,
+                        userId: ctx.userId,
+                        threadId: ctx.threadId,
+                        key: `citation_${h.source}_${h.id}`.slice(0, 120),
+                        content: JSON.stringify({
+                            source: h.source,
+                            id: h.id,
+                            title: h.title,
+                            summary: (h.summary || '').slice(0, 400),
+                        }),
+                        memoryType: 'observation',
+                        createdAtUtc: new Date(),
+                        updatedAtUtc: new Date(),
+                    });
+                }
 
                 await writeUpdate({
                     agentInstanceId: ctx.agentInstanceId,
@@ -357,7 +406,7 @@ export class AgentToolRegistry {
                     action: 'search_all_domains',
                     resultSummary: `Multi-domain search found ${hits.length} items (${Object.entries(bySource)
                         .map(([k, v]) => `${k}:${v}`)
-                        .join(', ') || 'none'})`,
+                        .join(', ') || 'none'})${topSnippets ? ` — ${topSnippets}` : ''}`.slice(0, 1500),
                     payload: { hitsCount: hits.length, bySource, results: hits },
                 };
             },
@@ -411,6 +460,30 @@ export class AgentToolRegistry {
             description:
                 'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace. For Python set scriptType="python" and fileName ending in .py. For image work (resize/compress) prefer Python + Pillow.',
             execute: async (ctx, args) => {
+                const thread = await ModelChatLlmThread.findById(ctx.threadId)
+                    .select('executeShell')
+                    .lean();
+                if (!thread?.executeShell) {
+                    await writeUpdate({
+                        agentInstanceId: ctx.agentInstanceId,
+                        userId: ctx.userId,
+                        threadId: ctx.threadId,
+                        updateType: 'error',
+                        message:
+                            'Shell execution blocked — enable “Allow shell / code execution” in thread settings.',
+                        goalId: ctx.currentGoal._id,
+                        tickNumber: ctx.tickNumber,
+                        payload: { consentRequired: true },
+                    });
+                    return {
+                        success: false,
+                        action: 'execute_script',
+                        resultSummary:
+                            'Blocked: shell/code execution is not enabled for this thread. Ask the user to enable it in Thread Settings.',
+                        error: 'shell_consent_required',
+                    };
+                }
+
                 let rawCode =
                     typeof args.code === 'string' && args.code.trim()
                         ? args.code.trim()

@@ -7,7 +7,7 @@ import middlewareUserAuth from '../../../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
 import { getAgentShellConfig } from '../agent/agentShellWorkspace';
-import { readBufferFromShellEngine } from '../answerMachineV4/am4ShellFileUpload';
+import { readBufferFromShellEngine } from '../shellExecute/shellFileUpload';
 
 const router = Router();
 

@@ -8,7 +8,7 @@ import { getApiKeyByObject, type tsUserApiKey } from '../../../../utils/llm/llmC
 import { constructFeatureUploadObjectKey } from '../../../../utils/upload/constructFeatureUploadObjectKey';
 import { putFile, type StorageType } from '../../../../utils/upload/uploadFunc';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { getLlmConfig } from '../chatLlmGetLlmConfig';
 import {
     agentTaskFilePath,
     agentTaskFilesDir,

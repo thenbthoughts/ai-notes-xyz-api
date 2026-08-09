@@ -242,12 +242,12 @@ router.post(
 
                 // answer type
                 answerEngine,
-                answerMachineUsedOpencode,
-                answerMachineUsedWebSearch,
-                
-                // answer machine settings
-                answerMachineMinNumberOfIterations,
-                answerMachineMaxNumberOfIterations,
+
+                // agent budgets
+                agentMinBudgetTokens,
+                agentMaxBudgetTokens,
+                agentMinNumberOfIterations,
+                agentMaxNumberOfIterations,
 
                 executeShell,
                 shellExecuteMinAttempts,
@@ -274,13 +274,12 @@ router.post(
 
                 // answer type
                 answerEngine: 'conciseAnswer',
-                answerMachineErrorReason: '',
-                answerMachineUsedOpencode: false,
-                answerMachineUsedWebSearch: false,
-                
-                // answer machine settings
-                answerMachineMinNumberOfIterations: 1,
-                answerMachineMaxNumberOfIterations: 1,
+
+                // agent budgets
+                agentMinBudgetTokens: 1,
+                agentMaxBudgetTokens: 1_000_000,
+                agentMinNumberOfIterations: 1,
+                agentMaxNumberOfIterations: 100,
 
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
@@ -329,66 +328,88 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4' || answerEngine === 'agent') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'agent') {
                     addData.answerEngine = answerEngine;
                 }
-            };
-            if (typeof answerMachineUsedOpencode === 'boolean') {
-                addData.answerMachineUsedOpencode = answerMachineUsedOpencode;
-            };
-            if (typeof answerMachineUsedWebSearch === 'boolean') {
-                addData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
 
             if (typeof executeShell === 'boolean') {
                 addData.executeShell = executeShell;
             };
             
-            // Handle min and max iterations together to ensure min <= max
+            // Agent budgets: tokens (1–1M) and iterations (1–100), min <= max
+            let minBudgetTokens: number | undefined = undefined;
+            let maxBudgetTokens: number | undefined = undefined;
             let minIterations: number | undefined = undefined;
             let maxIterations: number | undefined = undefined;
-            
-            if (typeof answerMachineMinNumberOfIterations === 'number') {
-                // Validate: must be between 1 and 100
-                if (answerMachineMinNumberOfIterations >= 1 && answerMachineMinNumberOfIterations <= 100) {
-                    minIterations = answerMachineMinNumberOfIterations;
+
+            if (typeof agentMinBudgetTokens === 'number') {
+                if (agentMinBudgetTokens >= 1 && agentMinBudgetTokens <= 1_000_000) {
+                    minBudgetTokens = Math.round(agentMinBudgetTokens);
                 }
-            };
-            
-            if (typeof answerMachineMaxNumberOfIterations === 'number') {
-                // Validate: must be between 1 and 100
-                if (answerMachineMaxNumberOfIterations >= 1 && answerMachineMaxNumberOfIterations <= 100) {
-                    maxIterations = answerMachineMaxNumberOfIterations;
+            }
+            if (typeof agentMaxBudgetTokens === 'number') {
+                if (agentMaxBudgetTokens >= 1 && agentMaxBudgetTokens <= 1_000_000) {
+                    maxBudgetTokens = Math.round(agentMaxBudgetTokens);
                 }
-            };
+            }
+            if (minBudgetTokens !== undefined && maxBudgetTokens !== undefined) {
+                if (minBudgetTokens <= maxBudgetTokens) {
+                    addData.agentMinBudgetTokens = minBudgetTokens;
+                    addData.agentMaxBudgetTokens = maxBudgetTokens;
+                } else {
+                    addData.agentMinBudgetTokens = maxBudgetTokens;
+                    addData.agentMaxBudgetTokens = maxBudgetTokens;
+                }
+            } else if (minBudgetTokens !== undefined) {
+                if (minBudgetTokens <= addData.agentMaxBudgetTokens) {
+                    addData.agentMinBudgetTokens = minBudgetTokens;
+                } else {
+                    addData.agentMinBudgetTokens = minBudgetTokens;
+                    addData.agentMaxBudgetTokens = minBudgetTokens;
+                }
+            } else if (maxBudgetTokens !== undefined) {
+                if (addData.agentMinBudgetTokens <= maxBudgetTokens) {
+                    addData.agentMaxBudgetTokens = maxBudgetTokens;
+                } else {
+                    addData.agentMinBudgetTokens = maxBudgetTokens;
+                    addData.agentMaxBudgetTokens = maxBudgetTokens;
+                }
+            }
             
-            // If both are provided, ensure min <= max
+            if (typeof agentMinNumberOfIterations === 'number') {
+                if (agentMinNumberOfIterations >= 1 && agentMinNumberOfIterations <= 100) {
+                    minIterations = Math.round(agentMinNumberOfIterations);
+                }
+            }
+            
+            if (typeof agentMaxNumberOfIterations === 'number') {
+                if (agentMaxNumberOfIterations >= 1 && agentMaxNumberOfIterations <= 100) {
+                    maxIterations = Math.round(agentMaxNumberOfIterations);
+                }
+            }
+            
             if (minIterations !== undefined && maxIterations !== undefined) {
                 if (minIterations <= maxIterations) {
-                    addData.answerMachineMinNumberOfIterations = minIterations;
-                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                    addData.agentMinNumberOfIterations = minIterations;
+                    addData.agentMaxNumberOfIterations = maxIterations;
                 } else {
-                    // If min > max, set both to max
-                    addData.answerMachineMinNumberOfIterations = maxIterations;
-                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                    addData.agentMinNumberOfIterations = maxIterations;
+                    addData.agentMaxNumberOfIterations = maxIterations;
                 }
             } else if (minIterations !== undefined) {
-                // Only min provided - ensure it doesn't exceed default max
-                if (minIterations <= addData.answerMachineMaxNumberOfIterations) {
-                    addData.answerMachineMinNumberOfIterations = minIterations;
+                if (minIterations <= addData.agentMaxNumberOfIterations) {
+                    addData.agentMinNumberOfIterations = minIterations;
                 } else {
-                    // Set both to min if min > default max
-                    addData.answerMachineMinNumberOfIterations = minIterations;
-                    addData.answerMachineMaxNumberOfIterations = minIterations;
+                    addData.agentMinNumberOfIterations = minIterations;
+                    addData.agentMaxNumberOfIterations = minIterations;
                 }
             } else if (maxIterations !== undefined) {
-                // Only max provided - ensure it's >= default min
-                if (addData.answerMachineMinNumberOfIterations <= maxIterations) {
-                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                if (addData.agentMinNumberOfIterations <= maxIterations) {
+                    addData.agentMaxNumberOfIterations = maxIterations;
                 } else {
-                    // Set both to max if default min > max
-                    addData.answerMachineMinNumberOfIterations = maxIterations;
-                    addData.answerMachineMaxNumberOfIterations = maxIterations;
+                    addData.agentMinNumberOfIterations = maxIterations;
+                    addData.agentMaxNumberOfIterations = maxIterations;
                 }
             };
 
@@ -511,13 +532,11 @@ router.post(
                 // answer type
                 answerEngine,
 
-                // answer engine -> answer machine
-                answerMachineUsedOpencode,
-                answerMachineUsedWebSearch,
-                
-                // answer machine settings
-                answerMachineMinNumberOfIterations,
-                answerMachineMaxNumberOfIterations,
+                // agent budgets
+                agentMinBudgetTokens,
+                agentMaxBudgetTokens,
+                agentMinNumberOfIterations,
+                agentMaxNumberOfIterations,
 
                 executeShell,
 
@@ -595,76 +614,98 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'answerMachine4' || answerEngine === 'agent') {
+                if (answerEngine === 'conciseAnswer' || answerEngine === 'agent') {
                     updateData.answerEngine = answerEngine;
                 }
-            };
-            if (typeof answerMachineUsedOpencode === 'boolean') {
-                updateData.answerMachineUsedOpencode = answerMachineUsedOpencode;
-            };
-            if (typeof answerMachineUsedWebSearch === 'boolean') {
-                updateData.answerMachineUsedWebSearch = answerMachineUsedWebSearch;
             };
 
             if (typeof executeShell === 'boolean') {
                 updateData.executeShell = executeShell;
             };
             
-            // Handle min and max iterations together to ensure min <= max
+            // Agent budgets: tokens (1–1M) and iterations (1–100)
+            let minBudgetTokens: number | undefined = undefined;
+            let maxBudgetTokens: number | undefined = undefined;
             let minIterations: number | undefined = undefined;
             let maxIterations: number | undefined = undefined;
+
+            if (typeof agentMinBudgetTokens === 'number') {
+                if (agentMinBudgetTokens >= 1 && agentMinBudgetTokens <= 1_000_000) {
+                    minBudgetTokens = Math.round(agentMinBudgetTokens);
+                }
+            }
+            if (typeof agentMaxBudgetTokens === 'number') {
+                if (agentMaxBudgetTokens >= 1 && agentMaxBudgetTokens <= 1_000_000) {
+                    maxBudgetTokens = Math.round(agentMaxBudgetTokens);
+                }
+            }
+            if (minBudgetTokens !== undefined || maxBudgetTokens !== undefined) {
+                const existingThreadForBudget = await ModelChatLlmThread.findOne({
+                    _id: threadId,
+                    userId: res.locals.auth_userId,
+                });
+                const existingMinT = Math.min(
+                    1_000_000,
+                    Math.max(1, Math.round(Number(existingThreadForBudget?.agentMinBudgetTokens) || 1))
+                );
+                const existingMaxT = Math.min(
+                    1_000_000,
+                    Math.max(1, Math.round(Number(existingThreadForBudget?.agentMaxBudgetTokens) || 1_000_000))
+                );
+                const effMinT = minBudgetTokens !== undefined ? minBudgetTokens : existingMinT;
+                const effMaxT = maxBudgetTokens !== undefined ? maxBudgetTokens : existingMaxT;
+                if (effMinT <= effMaxT) {
+                    updateData.agentMinBudgetTokens = effMinT;
+                    updateData.agentMaxBudgetTokens = effMaxT;
+                } else {
+                    updateData.agentMinBudgetTokens = effMaxT;
+                    updateData.agentMaxBudgetTokens = effMaxT;
+                }
+            }
             
-            if (typeof answerMachineMinNumberOfIterations === 'number') {
-                // Validate: must be between 1 and 100
-                if (answerMachineMinNumberOfIterations >= 1 && answerMachineMinNumberOfIterations <= 100) {
-                    minIterations = answerMachineMinNumberOfIterations;
+            if (typeof agentMinNumberOfIterations === 'number') {
+                if (agentMinNumberOfIterations >= 1 && agentMinNumberOfIterations <= 100) {
+                    minIterations = Math.round(agentMinNumberOfIterations);
                 }
             };
             
-            if (typeof answerMachineMaxNumberOfIterations === 'number') {
-                // Validate: must be between 1 and 100
-                if (answerMachineMaxNumberOfIterations >= 1 && answerMachineMaxNumberOfIterations <= 100) {
-                    maxIterations = answerMachineMaxNumberOfIterations;
+            if (typeof agentMaxNumberOfIterations === 'number') {
+                if (agentMaxNumberOfIterations >= 1 && agentMaxNumberOfIterations <= 100) {
+                    maxIterations = Math.round(agentMaxNumberOfIterations);
                 }
             };
             
-            // If both are provided, ensure min <= max
             if (minIterations !== undefined && maxIterations !== undefined) {
                 if (minIterations <= maxIterations) {
-                    updateData.answerMachineMinNumberOfIterations = minIterations;
-                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                    updateData.agentMinNumberOfIterations = minIterations;
+                    updateData.agentMaxNumberOfIterations = maxIterations;
                 } else {
-                    // If min > max, swap them or set min to max
-                    updateData.answerMachineMinNumberOfIterations = maxIterations;
-                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                    updateData.agentMinNumberOfIterations = maxIterations;
+                    updateData.agentMaxNumberOfIterations = maxIterations;
                 }
             } else if (minIterations !== undefined) {
-                // Only min provided - check against existing max
                 const existingThread = await ModelChatLlmThread.findOne({
                     _id: threadId,
                     userId: res.locals.auth_userId,
                 });
-                const existingMax = existingThread?.answerMachineMaxNumberOfIterations || 1;
+                const existingMax = existingThread?.agentMaxNumberOfIterations || 100;
                 if (minIterations <= existingMax) {
-                    updateData.answerMachineMinNumberOfIterations = minIterations;
+                    updateData.agentMinNumberOfIterations = minIterations;
                 } else {
-                    // Set both to min if min > existing max
-                    updateData.answerMachineMinNumberOfIterations = minIterations;
-                    updateData.answerMachineMaxNumberOfIterations = minIterations;
+                    updateData.agentMinNumberOfIterations = minIterations;
+                    updateData.agentMaxNumberOfIterations = minIterations;
                 }
             } else if (maxIterations !== undefined) {
-                // Only max provided - check against existing min
                 const existingThread = await ModelChatLlmThread.findOne({
                     _id: threadId,
                     userId: res.locals.auth_userId,
                 });
-                const existingMin = existingThread?.answerMachineMinNumberOfIterations || 1;
+                const existingMin = existingThread?.agentMinNumberOfIterations || 1;
                 if (existingMin <= maxIterations) {
-                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                    updateData.agentMaxNumberOfIterations = maxIterations;
                 } else {
-                    // Set both to max if existing min > max
-                    updateData.answerMachineMinNumberOfIterations = maxIterations;
-                    updateData.answerMachineMaxNumberOfIterations = maxIterations;
+                    updateData.agentMinNumberOfIterations = maxIterations;
+                    updateData.agentMaxNumberOfIterations = maxIterations;
                 }
             };
 

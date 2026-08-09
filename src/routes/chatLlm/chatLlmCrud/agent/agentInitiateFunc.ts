@@ -7,10 +7,12 @@ import { ModelAgentGoal } from '../../../../schema/schemaChatLlm/SchemaAgent/Sch
 import { ModelAgentUpdate } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
 import { ModelAgentMemory } from '../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
-import { getLlmConfig } from '../answerMachineShared/answerMachineGetLlmConfig';
+import { getLlmConfig } from '../chatLlmGetLlmConfig';
 import enqueueAgentTickPendingTask from '../../../../utils/llmPendingTask/page/agent/enqueueAgentTickPendingTask';
 import cancelPendingAgentTickTasks from '../../../../utils/llmPendingTask/page/agent/cancelPendingAgentTickTasks';
 import writeAgentLog, { fetchLlmUnifiedLogged } from './agentWriteLog';
+import { ensureAgentTerminalChatMessage } from './ensureAgentTerminalChatMessage';
+import { normalizeAgentBudgetLimits } from './agentBudget';
 
 const parseGoalsFromText = (text: string): Array<{ title: string; description: string }> => {
     const lines = text
@@ -115,6 +117,17 @@ const agentInitiateFunc = async ({
                     message: 'Previous agent stopped because a new agent was started on this thread.',
                     level: 'warn',
                 });
+                try {
+                    await ensureAgentTerminalChatMessage({
+                        agentInstanceId: prevId,
+                        userId: thread.userId as mongoose.Types.ObjectId,
+                        threadId: prevThreadId,
+                        outcome: 'failed',
+                        reason: 'Previous agent stopped because a new agent was started on this thread.',
+                    });
+                } catch (e) {
+                    console.error('ensureAgentTerminalChatMessage on supersede failed:', e);
+                }
             }
         }
 
@@ -130,6 +143,13 @@ const agentInitiateFunc = async ({
             return { success: false, errorReason: 'Thread ID missing on message', agentInstanceId: null };
         }
 
+        const budgets = normalizeAgentBudgetLimits({
+            minBudgetTokens: thread.agentMinBudgetTokens,
+            maxBudgetTokens: thread.agentMaxBudgetTokens,
+            minNumberOfIterations: thread.agentMinNumberOfIterations,
+            maxNumberOfIterations: thread.agentMaxNumberOfIterations,
+        });
+
         // Create instance early so goal-refine LLM (and later ticks) can write agentLog rows.
         const agentInstance = await ModelAgentInstance.create({
             threadId: message.threadId,
@@ -143,6 +163,10 @@ const agentInitiateFunc = async ({
             tickLockUntilUtc: null,
             cancellationRequestedUtc: null,
             summary: '',
+            minBudgetTokens: budgets.minBudgetTokens,
+            maxBudgetTokens: budgets.maxBudgetTokens,
+            minNumberOfIterations: budgets.minNumberOfIterations,
+            maxNumberOfIterations: budgets.maxNumberOfIterations,
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
         });

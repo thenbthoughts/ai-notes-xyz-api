@@ -43,16 +43,13 @@ export interface IChatLlmThread extends Document {
     isMemoryEnabled: boolean;
 
     // answer type
-    answerEngine: 'conciseAnswer' | 'answerMachine4' | 'agent';
+    answerEngine: 'conciseAnswer' | 'agent';
 
-    // answerEngine -> answerMachine
-    answerMachineMinNumberOfIterations: number;
-    answerMachineMaxNumberOfIterations: number;
-    answerMachineUsedOpencode: boolean;
-    answerMachineUsedWebSearch: boolean;
-
-    /** Cap sequential reasoning steps per AM3 iteration (Answer Machine 3 only). */
-    answerMachineMaxReasoningStepsPerIteration?: number;
+    // answerEngine -> agent budgets (tokens + loop iterations)
+    agentMinBudgetTokens: number;
+    agentMaxBudgetTokens: number;
+    agentMinNumberOfIterations: number;
+    agentMaxNumberOfIterations: number;
 
     /** Persisted on thread; older documents may omit this field */
     executeShell?: boolean;

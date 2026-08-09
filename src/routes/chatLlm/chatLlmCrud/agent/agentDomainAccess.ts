@@ -59,7 +59,45 @@ export interface AgentDomainHit {
     id: string;
     title: string;
     summary: string;
+    score?: number;
 }
+
+/** Score a hit for relevance: title matches outweigh body; recency is a tie-breaker. */
+export const scoreAgentDomainHit = (
+    hit: AgentDomainHit,
+    query: string,
+    indexInResult: number
+): number => {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+        return Math.max(0, 50 - indexInResult);
+    }
+    const keywords = extractSearchKeywords(q);
+    const title = (hit.title || '').toLowerCase();
+    const body = (hit.summary || '').toLowerCase();
+    let score = 0;
+
+    if (title.includes(q)) score += 100;
+    else if (q.length >= 6 && title.includes(q.slice(0, Math.min(q.length, 40)))) score += 60;
+
+    for (const kw of keywords) {
+        if (title.includes(kw)) score += 25;
+        if (body.includes(kw)) score += 8;
+    }
+
+    // Prefer earlier (more recent) Mongo results slightly when scores tie
+    score += Math.max(0, 10 - indexInResult);
+    return score;
+};
+
+const rankDomainHits = (hits: AgentDomainHit[], query: string, limit: number): AgentDomainHit[] => {
+    const scored = hits.map((h, i) => ({
+        ...h,
+        score: scoreAgentDomainHit(h, query, i),
+    }));
+    scored.sort((a, b) => (b.score || 0) - (a.score || 0));
+    return scored.slice(0, limit);
+};
 
 const ALL_SOURCES: AgentDomainSearchSource[] = ['notes', 'tasks', 'lifeEvents', 'infoVault', 'memo'];
 
@@ -76,6 +114,10 @@ export const searchAgentDomain = async ({
 }): Promise<AgentDomainHit[]> => {
     const uid = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
     const q = (query || '').trim();
+    // Fetch extra candidates so ranking can promote title matches over pure recency
+    const fetchLimit = Math.min(Math.max(limit * 3, limit), 40);
+
+    let mapped: AgentDomainHit[] = [];
 
     if (source === 'notes') {
         const filter: Record<string, unknown> = { userId: uid };
@@ -83,52 +125,46 @@ export const searchAgentDomain = async ({
         if (or.length) filter.$or = or;
         const docs = await ModelNotes.find(filter)
             .sort({ updatedAtUtc: -1 })
-            .limit(limit)
+            .limit(fetchLimit)
             .select('_id title description aiSummary')
             .lean();
-        return docs.map((d) => ({
+        mapped = docs.map((d) => ({
             source,
             id: String(d._id),
             title: d.title || 'Untitled note',
             summary: (d.aiSummary || d.description || '').slice(0, 500),
         }));
-    }
-
-    if (source === 'tasks') {
+    } else if (source === 'tasks') {
         const filter: Record<string, unknown> = { userId: uid };
         const or = buildOrRegexFilters(['title', 'description', 'labels', 'labelsAi'], q);
         if (or.length) filter.$or = or;
         const docs = await ModelTask.find(filter)
             .sort({ updatedAtUtc: -1 })
-            .limit(limit)
+            .limit(fetchLimit)
             .select('_id title description isCompleted')
             .lean();
-        return docs.map((d) => ({
+        mapped = docs.map((d) => ({
             source,
             id: String(d._id),
             title: d.title || 'Untitled task',
             summary: `${d.isCompleted ? '[done] ' : '[open] '}${(d.description || '').slice(0, 500)}`,
         }));
-    }
-
-    if (source === 'lifeEvents') {
+    } else if (source === 'lifeEvents') {
         const filter: Record<string, unknown> = { userId: uid };
         const or = buildOrRegexFilters(['title', 'description'], q);
         if (or.length) filter.$or = or;
         const docs = await ModelLifeEvents.find(filter)
             .sort({ updatedAtUtc: -1 })
-            .limit(limit)
+            .limit(fetchLimit)
             .select('_id title description eventImpact')
             .lean();
-        return docs.map((d) => ({
+        mapped = docs.map((d) => ({
             source,
             id: String(d._id),
             title: d.title || 'Untitled life event',
             summary: `[${d.eventImpact || 'n/a'}] ${(d.description || '').slice(0, 500)}`,
         }));
-    }
-
-    if (source === 'memo') {
+    } else if (source === 'memo') {
         const filter: Record<string, unknown> = {
             userId: uid,
             trashed: { $ne: true },
@@ -138,32 +174,36 @@ export const searchAgentDomain = async ({
         if (or.length) filter.$or = or;
         const docs = await ModelMemoNote.find(filter)
             .sort({ updatedAtUtc: -1 })
-            .limit(limit)
+            .limit(fetchLimit)
             .select('_id title body pinned')
             .lean();
-        return docs.map((d) => ({
+        mapped = docs.map((d) => ({
             source,
             id: String(d._id),
             title: d.title || 'Untitled memo',
             summary: `${d.pinned ? '[pinned] ' : ''}${(d.body || '').slice(0, 500)}`,
         }));
+    } else {
+        const filter: Record<string, unknown> = { userId: uid, isArchived: { $ne: true } };
+        const or = buildOrRegexFilters(
+            ['name', 'nickname', 'company', 'notes', 'tags', 'aiSummary', 'aiTags'],
+            q
+        );
+        if (or.length) filter.$or = or;
+        const docs = await ModelInfoVault.find(filter)
+            .sort({ updatedAtUtc: -1 })
+            .limit(fetchLimit)
+            .select('_id name nickname company notes aiSummary')
+            .lean();
+        mapped = docs.map((d) => ({
+            source,
+            id: String(d._id),
+            title: d.name || d.nickname || 'Untitled info vault',
+            summary: (d.aiSummary || d.notes || d.company || '').slice(0, 500),
+        }));
     }
 
-    // infoVault
-    const filter: Record<string, unknown> = { userId: uid, isArchived: { $ne: true } };
-    const or = buildOrRegexFilters(['name', 'nickname', 'company', 'notes', 'tags', 'aiSummary', 'aiTags'], q);
-    if (or.length) filter.$or = or;
-    const docs = await ModelInfoVault.find(filter)
-        .sort({ updatedAtUtc: -1 })
-        .limit(limit)
-        .select('_id name nickname company notes aiSummary')
-        .lean();
-    return docs.map((d) => ({
-        source,
-        id: String(d._id),
-        title: d.name || d.nickname || 'Untitled info vault',
-        summary: (d.aiSummary || d.notes || d.company || '').slice(0, 500),
-    }));
+    return rankDomainHits(mapped, q, limit);
 };
 
 /**
@@ -216,5 +256,5 @@ export const searchAllAgentDomains = async ({
         seen.add(key);
         deduped.push(h);
     }
-    return deduped.slice(0, limitPerSource * ALL_SOURCES.length);
+    return rankDomainHits(deduped, query, limitPerSource * ALL_SOURCES.length);
 };
