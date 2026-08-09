@@ -8,6 +8,7 @@ export interface IMemoNote extends Document {
   pinned: boolean;
   archived: boolean;
   trashed: boolean;
+  sortOrder: number;
   noteColor: string;
   createdAtUtc: Date;
   createdAtIpAddress: string;
