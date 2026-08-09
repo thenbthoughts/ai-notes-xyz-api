@@ -10,6 +10,8 @@ const memoNoteSchema = new Schema<IMemoNote>({
   pinned: { type: Boolean, default: false },
   archived: { type: Boolean, default: false },
   trashed: { type: Boolean, default: false },
+  /** Higher = earlier in grid (left/top). Defaults to 0; new notes use Date.now(). */
+  sortOrder: { type: Number, default: 0 },
   /** Keep-style palette key: '', coral, orange, yellow, green, teal, blue, purple, pink, brown, gray */
   noteColor: { type: String, default: '' },
   createdAtUtc: { type: Date, default: null },

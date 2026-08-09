@@ -45,6 +45,7 @@ type MemoDocPlain = {
   pinned?: boolean;
   archived?: boolean;
   trashed?: boolean;
+  sortOrder?: number;
   noteColor?: string;
   createdAtUtc?: Date;
   createdAtIpAddress?: string;
@@ -206,7 +207,7 @@ router.post('/memoList', middlewareUserAuth, async (req: Request, res: Response)
 
     const docs = await ModelMemoNote.aggregate([
       { $match: { userId } },
-      { $sort: { updatedAtUtc: -1 } },
+      { $sort: { sortOrder: -1, updatedAtUtc: -1 } },
       { $limit: limit },
       ...memoLabelResolutionStages,
     ]);
@@ -275,6 +276,7 @@ router.post('/memoAdd', middlewareUserAuth, async (req: Request, res: Response) 
       pinned,
       archived: false,
       trashed: false,
+      sortOrder: now.getTime(),
       noteColor: nc.value,
       createdAtUtc: now,
       createdAtIpAddress: req.ip || '',
@@ -323,6 +325,9 @@ router.post('/memoEdit', middlewareUserAuth, async (req: Request, res: Response)
     }
     if (typeof req.body?.pinned === 'boolean') {
       updateObj.pinned = req.body.pinned;
+    }
+    if (typeof req.body?.sortOrder === 'number' && Number.isFinite(req.body.sortOrder)) {
+      updateObj.sortOrder = req.body.sortOrder;
     }
     if (typeof req.body?.archived === 'boolean') {
       updateObj.archived = req.body.archived;
@@ -401,6 +406,134 @@ router.post('/memoEmptyBin', middlewareUserAuth, async (req: Request, res: Respo
     }
     await ModelMemoNote.deleteMany({ userId, trashed: true });
     return res.json({ message: 'Bin emptied successfully' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/** Normalize sortOrder for one pin group (active notes only). Higher = earlier in UI. */
+async function revalidateMemoSortOrderGroup(userId: string, pinned: boolean) {
+  const docs = await ModelMemoNote.find({
+    userId,
+    pinned,
+    archived: false,
+    trashed: false,
+  })
+    .sort({ sortOrder: -1, updatedAtUtc: -1 })
+    .select({ _id: 1, sortOrder: 1 })
+    .lean();
+
+  for (let index = 0; index < docs.length; index++) {
+    const desired = docs.length - index;
+    const doc = docs[index]!;
+    if (doc.sortOrder !== desired) {
+      await ModelMemoNote.updateOne({ _id: doc._id, userId }, { $set: { sortOrder: desired } });
+    }
+  }
+}
+
+/** Revalidate sort order for both pinned and unpinned active memos. */
+async function revalidateMemoSortOrderAll(userId: string) {
+  await revalidateMemoSortOrderGroup(userId, true);
+  await revalidateMemoSortOrderGroup(userId, false);
+}
+
+/**
+ * Move a memo within its pin group (up/down/left/right or jumpToPosition),
+ * then revalidate sort order for both pinned and not-pinned active memos.
+ * up/left = earlier; down/right = later. jumpToPosition is 1-based.
+ */
+router.post('/memoRevalidateSortOrderById', middlewareUserAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.auth_userId as string;
+    const _id = getMongodbObjectOrNull(req.body?._id);
+    if (!_id) {
+      return res.status(400).json({ message: 'Memo ID is invalid' });
+    }
+
+    const direction = req.body?.direction;
+    const jumpRaw = req.body?.jumpToPosition;
+    const hasJump = typeof jumpRaw === 'number' && Number.isFinite(jumpRaw);
+    const validDirection =
+      direction === 'left' || direction === 'right' || direction === 'up' || direction === 'down';
+
+    if (!hasJump && !validDirection) {
+      return res.status(400).json({ message: 'direction or jumpToPosition is required' });
+    }
+
+    const note = await ModelMemoNote.findOne({
+      _id,
+      userId,
+      archived: false,
+      trashed: false,
+    }).lean();
+    if (!note) {
+      return res.status(404).json({ message: 'Memo not found or unauthorized' });
+    }
+
+    const siblings = await ModelMemoNote.find({
+      userId,
+      pinned: note.pinned === true,
+      archived: false,
+      trashed: false,
+    })
+      .sort({ sortOrder: -1, updatedAtUtc: -1 })
+      .select({ _id: 1, sortOrder: 1, updatedAtUtc: 1 })
+      .lean();
+
+    const idx = siblings.findIndex((s) => String(s._id) === String(_id));
+    if (idx < 0) {
+      return res.status(404).json({ message: 'Memo not found in sort group' });
+    }
+
+    if (hasJump) {
+      const target = Math.max(0, Math.min(siblings.length - 1, Math.floor(jumpRaw) - 1));
+      if (target !== idx) {
+        const next = [...siblings];
+        const [moved] = next.splice(idx, 1);
+        if (moved) {
+          next.splice(target, 0, moved);
+          for (let i = 0; i < next.length; i++) {
+            const desired = next.length - i;
+            const doc = next[i]!;
+            if (doc.sortOrder !== desired) {
+              await ModelMemoNote.updateOne({ _id: doc._id, userId }, { $set: { sortOrder: desired } });
+            }
+          }
+        }
+      }
+      await revalidateMemoSortOrderAll(userId);
+      return res.json({ message: 'Memo jumped to position successfully' });
+    }
+
+    const neighborIdx = direction === 'left' || direction === 'up' ? idx - 1 : idx + 1;
+    if (neighborIdx < 0 || neighborIdx >= siblings.length) {
+      await revalidateMemoSortOrderAll(userId);
+      return res.json({ message: 'Memo already at edge; sort order revalidated' });
+    }
+
+    const a = siblings[idx]!;
+    const b = siblings[neighborIdx]!;
+    let orderA = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder) ? a.sortOrder : 0;
+    let orderB = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder) ? b.sortOrder : 0;
+    if (orderA === orderB) {
+      const base = Date.now();
+      if (direction === 'left' || direction === 'up') {
+        orderB = base + 1;
+        orderA = base;
+      } else {
+        orderA = base + 1;
+        orderB = base;
+      }
+    }
+
+    await ModelMemoNote.updateOne({ _id: a._id, userId }, { $set: { sortOrder: orderB } });
+    await ModelMemoNote.updateOne({ _id: b._id, userId }, { $set: { sortOrder: orderA } });
+
+    await revalidateMemoSortOrderAll(userId);
+
+    return res.json({ message: `Memo moved ${direction} successfully` });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Server error' });
