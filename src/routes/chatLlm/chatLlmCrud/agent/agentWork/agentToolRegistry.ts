@@ -9,11 +9,18 @@ import { getApiKeyByObject } from '../../../../../utils/llm/llmCommonFunc';
 import { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import { AgentToolContext, AgentToolDefinition, AgentToolResult } from './agentToolTypes';
+import { createImageToTextTool } from './agentToolImageToText';
 import { searchAgentDomain, searchAllAgentDomains, AgentDomainSearchSource } from '../agentUtils/agentDomainAccess';
 import axios from 'axios';
-import { agentTaskFilesDir, agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellWriteFile } from '../agentUtils/agentShell/agentShellWorkspace';
+import { agentTaskFilesDir, agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellStdoutShowsDeliverable, shellWriteFile } from '../agentUtils/agentShell/agentShellWorkspace';
+import {
+    AGENT_SHELL_CONTEXT_FILE_LIMIT,
+    formatAgentShellListingForContext,
+    normalizeAgentShellListing,
+} from '../agentUtils/agentShell/agentShellListing';
 import { assertAgentShellSafe } from '../agentUtils/agentShell/agentShellSafety';
 import writeAgentLog, { fetchLlmUnifiedLogged } from '../agentUtils/agentWriteLog';
+import { buildAgentContextPack, withContextChatMessages } from '../agentUtils/agentContextWindow';
 
 const updateTypeToLogAction = (updateType: string, payload?: Record<string, unknown>): string => {
     if (updateType === 'tick') {
@@ -129,17 +136,10 @@ const buildScriptExecCommand = (
     const abs = absolutePath.replace(/"/g, '');
     const file = scriptFileName.replace(/"/g, '');
     if (scriptType === 'python') {
-        // openpyxl is commonly preinstalled; ensure available, then run with python3.
-        // Fall back to a local .agent_venv if system pip is blocked (PEP 668).
+        // Run with system python3. Do not create .agent_venv in the workspace
+        // (hundreds of venv files hide real deliverables from listings).
         return (
-            `if [ -d "${dir}" ]; then cd "${dir}" && ` +
-            `if python3 -c "import openpyxl" >/dev/null 2>&1; then ` +
-            `python3 "./${file}" 2>&1; ` +
-            `else ` +
-            `( [ -x .agent_venv/bin/python ] || python3 -m venv .agent_venv ) && ` +
-            `.agent_venv/bin/pip -q install openpyxl && ` +
-            `.agent_venv/bin/python "./${file}" 2>&1; ` +
-            `fi; ` +
+            `if [ -d "${dir}" ]; then cd "${dir}" && python3 "./${file}" 2>&1; ` +
             `elif [ -f "${abs}" ]; then python3 "${abs}" 2>&1; ` +
             `else echo "Script not found: ${file} (dir=${dir})" >&2; exit 1; fi`
         );
@@ -164,41 +164,16 @@ const generateCodeViaLlm = async (
             : `print('Task: ${promptText.replace(/'/g, "\\'")}')`;
     }
 
-    const agentShellDir = agentTaskFilesDir(String(ctx.threadId));
-    let fileListText = '(no workspace files listed)';
-    try {
-        const apiKeyDoc = await ModelUserApiKey.findOne({ userId: ctx.userId });
-        if (apiKeyDoc) {
-            const apiKey = getApiKeyByObject(apiKeyDoc);
-            const shell = getAgentShellConfig(apiKey);
-            if (shell) {
-                const shellRes = await axios.get(
-                    `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`,
-                    {
-                        params: { relativeDir: agentShellDir, maxFiles: 100 },
-                        timeout: 5000,
-                        headers: { 'X-API-Token': shell.token },
-                        validateStatus: () => true,
-                    }
-                );
-                if (shellRes.status === 200 && shellRes.data && Array.isArray((shellRes.data as any).files)) {
-                    fileListText = (shellRes.data as any).files
-                        .map((f: any) => {
-                            const rel = String(f.relativePath || '').replace(/\\/g, '/');
-                            const abs = String(f.absolutePath || '').replace(/\\/g, '/');
-                            const folderIdx = rel.indexOf(`${agentShellDir}/`);
-                            const localRel = folderIdx !== -1 ? rel.slice(folderIdx + agentShellDir.length + 1) : rel;
-                            return `- absolutePath: "${abs || `/app/data/${rel}`}"\n  pathInAgentFolder: "${localRel}"\n  size: ${f.size || 0} bytes`;
-                        })
-                        .join('\n');
-                }
-            }
-        }
-    } catch {
-        /* ignore */
-    }
+    const contextPack = ctx.logCtx
+        ? await buildAgentContextPack({
+              logCtx: ctx.logCtx,
+              agentInstanceId: ctx.agentInstanceId,
+              userId: ctx.userId,
+              threadId: ctx.threadId,
+          })
+        : null;
 
-    const messages: Message[] = [
+    const messages: Message[] = withContextChatMessages(
         {
             role: 'system',
             content: `You are an expert ${scriptType === 'node' ? 'Node.js' : 'Python 3'} developer. Write executable, complete, production-ready ${scriptType === 'node' ? 'Node.js' : 'Python 3'} code to fulfill the task. Do NOT include markdown text, explanations, or backticks. Return raw executable code ONLY. Save output files using Node.js 'fs' or Python 'open' if needed.
@@ -209,27 +184,32 @@ ${
 - For pip installs use: import subprocess,sys; subprocess.check_call([sys.executable,'-m','pip','install','--break-system-packages','PKG'])
   or create/use a venv (.agent_venv) — never assume bare 'pip install' works (PEP 668).
 - For Excel .xlsx prefer openpyxl only (do NOT use pandas). openpyxl is often already installed — try \`import openpyxl\` before any pip install. Never substitute .csv when .xlsx was requested.
-- Prefer stdlib when possible. Do not call bare \`pip install\` / \`os.system('pip ...')\` — use \`sys.executable -m pip install --break-system-packages\` only if import fails.`
-        : ''
+- Prefer stdlib when possible (csv, json, html.parser, re, pathlib). Parse local HTML with html.parser — do not pip-install beautifulsoup4/lxml for that.
+- Do not call bare \`pip install\` / \`os.system('pip ...')\` — use \`sys.executable -m pip install --break-system-packages\` only if import fails.`
+        : `NODE RULES:
+- Write the named deliverable file the task asked for. Do not leave the product only in create_artifact.js.
+- Scripts must exit. Do not start a long-lived HTTP server unless the user asked for one.
+- Never listen on ports 2000 or 3000. If a demo server is required, bind 127.0.0.1 on 18080+ or port 0, print the port, then exit.`
 }`,
         },
+        contextPack?.chatWindow,
         {
             role: 'user',
             content: `Goal / Task: ${promptText}
 Goal Title: ${ctx.currentGoal.title}
 Goal Description: ${ctx.currentGoal.description}
 
-Available Workspace Directory: ${agentShellDir}
-Available Files in Workspace & Uploads:
-${fileListText}
+CONTEXT (recent actions + summaries; no workspace dump):
+${contextPack?.formatted || '(none — call list_workspace_files first if you need paths)'}
 
 CRITICAL FILE PATH RULES:
-- Use either the exact \`absolutePath\` (e.g. '/app/data/ai-notes-xyz-shell-files/agent/...') OR \`pathInAgentFolder\` (e.g. 'uploads/filename.jpg').
+- Do not assume a working directory or file listing. Use paths from recent list_workspace_files / tool results in CONTEXT.
+- Use either an exact absolutePath from those results OR a pathInAgentFolder (e.g. 'uploads/filename.jpg').
 - NEVER use full workspace prefix 'ai-notes-xyz-shell-files/agent/...' as a relative path when running inside the agent folder!
-- Do NOT use placeholder/imaginary filenames like 'input.jpg', 'image.png', or 'test.txt'. Use the real file paths from the listing above.
-- Save output files directly in the workspace directory or uploads/ folder.`,
-        },
-    ];
+- Do NOT invent placeholder filenames like 'input.jpg', 'image.png', or 'test.txt'.
+- Save output files in the workspace root or uploads/ folder.`,
+        }
+    );
 
     const res = await fetchLlmUnifiedLogged({
         logCtx: ctx.logCtx,
@@ -343,6 +323,9 @@ export class AgentToolRegistry {
         }
         if (['list_files', 'list_workspace', 'workspace_files', 'list_workspace_files'].includes(key)) {
             return this.toolsMap.get('list_workspace_files');
+        }
+        if (['image_to_text', 'ocr_image', 'ocr', 'vision_ocr', 'image_ocr'].includes(key)) {
+            return this.toolsMap.get('image_to_text');
         }
         return this.toolsMap.get(name);
     }
@@ -489,7 +472,7 @@ export class AgentToolRegistry {
         this.register({
             name: 'list_workspace_files',
             description:
-                'List files in the agent Shell workspace for this thread. Use when locating a created PDF/Excel/image or answering "where is the file?".',
+                'Search/list files in the agent Shell workspace for this thread. The planner is not given a working directory or file dump — call this to locate uploads or created files.',
             execute: async (ctx) => {
                 const agentShellDir = agentTaskFilesDir(String(ctx.threadId));
                 const apiKeyDoc = await ModelUserApiKey.findOne({ userId: ctx.userId });
@@ -516,37 +499,23 @@ export class AgentToolRegistry {
                     const shellRes = await axios.get(
                         `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`,
                         {
-                            params: { relativeDir: agentShellDir, maxFiles: 200 },
+                            params: { relativeDir: agentShellDir, maxFiles: 500 },
                             timeout: 15_000,
                             headers: { 'X-API-Token': shell.token },
                             validateStatus: () => true,
                         }
                     );
-                    const files =
-                        shellRes.status === 200 &&
-                        shellRes.data &&
-                        Array.isArray((shellRes.data as { files?: unknown }).files)
-                            ? (
-                                  (shellRes.data as {
-                                      files: Array<{
-                                          relativePath?: string;
-                                          absolutePath?: string;
-                                          size?: number;
-                                          name?: string;
-                                      }>;
-                                  }).files || []
-                              )
-                            : [];
-
-                    const lines = files.map((f) => {
-                        const abs = String(f.absolutePath || '').replace(/\\/g, '/');
-                        const rel = String(f.relativePath || f.name || '').replace(/\\/g, '/');
-                        const size = typeof f.size === 'number' ? f.size : 0;
-                        return `- absolutePath: "${abs || rel}"\n  pathInAgentFolder: "${rel}"\n  size: ${size} bytes`;
+                    const entries = normalizeAgentShellListing({
+                        rawFiles:
+                            shellRes.status === 200 &&
+                            shellRes.data &&
+                            Array.isArray((shellRes.data as { files?: unknown }).files)
+                                ? (shellRes.data as { files: unknown[] }).files
+                                : [],
+                        agentShellDir,
+                        limit: AGENT_SHELL_CONTEXT_FILE_LIMIT,
                     });
-                    const listing = lines.length
-                        ? lines.join('\n')
-                        : '(no files in agent workspace yet)';
+                    const listing = formatAgentShellListingForContext(entries, { maxChars: 7000 });
 
                     await ModelAgentMemory.create({
                         agentInstanceId: ctx.agentInstanceId,
@@ -564,17 +533,17 @@ export class AgentToolRegistry {
                         userId: ctx.userId,
                         threadId: ctx.threadId,
                         updateType: 'workspace_list',
-                        message: `Listed workspace files: ${files.length}`,
+                        message: `Listed workspace files: ${entries.length} (newest ${AGENT_SHELL_CONTEXT_FILE_LIMIT} max)`,
                         goalId: ctx.currentGoal._id,
                         tickNumber: ctx.tickNumber,
-                        payload: { filesCount: files.length, dir: agentShellDir },
+                        payload: { filesCount: entries.length, dir: agentShellDir },
                     });
 
                     return {
                         success: true,
                         action: 'list_workspace_files',
-                        resultSummary: `Workspace files (${files.length}): ${listing}`.slice(0, 2000),
-                        payload: { filesCount: files.length, files },
+                        resultSummary: `Workspace files (${entries.length}): ${listing}`.slice(0, 2000),
+                        payload: { filesCount: entries.length, files: entries },
                     };
                 } catch (e) {
                     return {
@@ -587,11 +556,13 @@ export class AgentToolRegistry {
             },
         });
 
+        this.register(createImageToTextTool());
+
         // 6. Execute Script Tool (Node.js preference / Python 3 secondary + Code Auto-Gen & Self-Healing)
         this.register({
             name: 'execute_script',
             description:
-                'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace. For Python set scriptType="python" and fileName ending in .py. For PDF use reportlab/fpdf2; for images use Pillow.',
+                'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace. Scripts must exit. Never listen on ports 2000 or 3000. For Python set scriptType="python" and fileName ending in .py. For PDF use reportlab/fpdf2; for images use Pillow.',
             execute: async (ctx, args) => {
                 const thread = await ModelChatLlmThread.findById(ctx.threadId)
                     .select('executeShell')
@@ -649,6 +620,61 @@ export class AgentToolRegistry {
                     rawCode = await generateCodeViaLlm(
                         ctx,
                         `${promptReason}\n\nIMPORTANT: Use openpyxl only (NO pandas). openpyxl is likely already installed. Write passwords.xlsx with openpyxl.Workbook. Do not pip install unless import openpyxl fails.`,
+                        'python'
+                    );
+                    scriptType = 'python';
+                }
+
+                // Puppeteer/Playwright are already global. Local npm install hits allow-scripts and false-fails.
+                if (/\bnpm\s+i(?:nstall)?\b[\s\S]{0,160}(puppeteer|playwright)/i.test(rawCode)) {
+                    rawCode = await generateCodeViaLlm(
+                        ctx,
+                        `${promptReason}\n\nIMPORTANT: Do NOT npm install puppeteer or playwright (already global; local install false-fails on allow-scripts). Use require('puppeteer') with executablePath process.env.CHROME_BIN || '/usr/bin/google-chrome-stable', or: google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=shot.png file:///absolute/page.html. Print OUT=<absolute path> and SIZE=<bytes>, then stop.`,
+                        'node'
+                    );
+                    scriptType = 'node';
+                }
+
+                // SQLite: Node `sqlite3` native addon fails in the shell. Use Python stdlib.
+                if (
+                    /\bsqlite|\.db\b/i.test(`${promptReason}\n${rawCode}`) &&
+                    (scriptType === 'node' ||
+                        /\bnpm\s+i(?:nstall)?\b[\s\S]{0,80}sqlite3|\brequire\(\s*['"]sqlite3['"]\s*\)|\bfrom ['"]sqlite3['"]/.test(
+                            rawCode
+                        ))
+                ) {
+                    rawCode = await generateCodeViaLlm(
+                        ctx,
+                        `${promptReason}\n\nIMPORTANT: Use python3 and the sqlite3 stdlib (import sqlite3). Do not npm-install sqlite3 or use Node. Write the .db and any result file, print OUT=<absolute path> and SIZE=<bytes> for each, then stop.`,
+                        'python'
+                    );
+                    scriptType = 'python';
+                }
+
+                // CSV/TSV/JSON/text: pandas is not installed and pip hits PEP 668. Regen to stdlib.
+                if (
+                    scriptType === 'python' &&
+                    /\bpandas\b/i.test(rawCode) &&
+                    !/\.(xlsx|xls)\b|\bexcel\b|openpyxl/i.test(`${promptReason}\n${rawCode}`)
+                ) {
+                    rawCode = await generateCodeViaLlm(
+                        ctx,
+                        `${promptReason}\n\nIMPORTANT: Do not use pandas or pip. Use Python stdlib only (csv, json, datetime, re, pathlib). Write the output file, print OUT=<absolute path> and SIZE=<bytes>, then stop.`,
+                        'python'
+                    );
+                    scriptType = 'python';
+                }
+
+                // Bare pip dies on PEP 668. Regen toward stdlib / --break-system-packages before running.
+                if (
+                    scriptType === 'python' &&
+                    /\bpip3?\s+install\b/.test(rawCode) &&
+                    !/--break-system-packages/.test(rawCode) &&
+                    !/\.agent_venv/.test(rawCode)
+                ) {
+                    rawCode = await generateCodeViaLlm(
+                        ctx,
+                        `${promptReason}\n\nIMPORTANT: System Python is externally managed (PEP 668). Prefer the stdlib (csv, json, html.parser, re, pathlib). Do not call bare pip install. If a package is truly required (Pillow, openpyxl), use subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--break-system-packages', pkg]). Never create .agent_venv in the workspace.`,
                         'python'
                     );
                     scriptType = 'python';
@@ -726,7 +752,11 @@ export class AgentToolRegistry {
                         });
                         return { stdout: execResult.stdout || '', err: '' };
                     } catch (err) {
-                        return { stdout: '', err: err instanceof Error ? err.message : String(err) };
+                        const msg = err instanceof Error ? err.message : String(err);
+                        if (shellStdoutShowsDeliverable(msg)) {
+                            return { stdout: msg, err: '' };
+                        }
+                        return { stdout: '', err: msg };
                     }
                 };
 
@@ -738,25 +768,41 @@ export class AgentToolRegistry {
                     const first = await runOnce(scriptType);
                     execStdout = first.stdout;
                     lastErr = first.err;
+                    if (lastErr && shellStdoutShowsDeliverable(lastErr)) {
+                        execStdout = lastErr;
+                        lastErr = '';
+                    }
                 }
 
-                // PEP 668 / pip: ensure venv exists then retry once with venv python + optional openpyxl install
+                // PEP 668: retry with --break-system-packages. Never create .agent_venv in the workspace.
                 if (
                     lastErr &&
                     usedType === 'python' &&
-                    /externally-managed-environment|pip.*install|No module named ['"]?(openpyxl|pandas)/i.test(
+                    /externally-managed-environment|pip.*install|No module named ['"]?(openpyxl|pandas|PIL|Pillow|bs4|beautifulsoup)/i.test(
                         lastErr
                     )
                 ) {
                     try {
+                        const pkgs: string[] = [];
+                        if (/No module named ['"]?openpyxl/i.test(lastErr) || /\bopenpyxl\b/i.test(rawCode)) {
+                            pkgs.push('openpyxl');
+                        }
+                        if (
+                            /No module named ['"]?(PIL|Pillow)/i.test(lastErr) ||
+                            /\bPIL\b|\bPillow\b/i.test(rawCode)
+                        ) {
+                            pkgs.push('Pillow');
+                        }
+                        const pip =
+                            pkgs.length > 0
+                                ? `python3 -m pip install -q --break-system-packages ${pkgs.join(' ')} && `
+                                : '';
                         const fix = await shellExecuteCommand({
                             shell,
                             command:
                                 `cd "${absDir.replace(/"/g, '')}" && ` +
-                                `( [ -x .agent_venv/bin/python ] || python3 -m venv .agent_venv ) && ` +
-                                `.agent_venv/bin/pip install -q --upgrade pip && ` +
-                                `.agent_venv/bin/pip install -q openpyxl && ` +
-                                `.agent_venv/bin/python "./${scriptFileName.replace(/"/g, '')}" 2>&1`,
+                                `${pip}` +
+                                `python3 "./${scriptFileName.replace(/"/g, '')}" 2>&1`,
                             timeoutMs: 180_000,
                             logCtx: ctx.logCtx,
                             executeFilePath: scriptRel,
@@ -888,6 +934,11 @@ export class AgentToolRegistry {
                             console.error('Script LLM repair failed:', repairError);
                         }
                     }
+                }
+
+                if (lastErr && shellStdoutShowsDeliverable(`${execStdout}\n${lastErr}`)) {
+                    execStdout = `${execStdout}\n${lastErr}`.trim();
+                    lastErr = '';
                 }
 
                 if (lastErr && !execStdout) {

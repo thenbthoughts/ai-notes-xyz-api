@@ -50,6 +50,9 @@ export interface IChatLlmThread extends Document {
     agentMaxBudgetTokens: number;
     agentMinNumberOfIterations: number;
     agentMaxNumberOfIterations: number;
+    agentContextActionLimit: number;
+    agentContextSummaryCount: number;
+    agentContextMessagesPerSummary: number;
 
     /** Persisted on thread; older documents may omit this field */
     executeShell?: boolean;

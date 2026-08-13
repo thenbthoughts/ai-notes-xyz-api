@@ -125,12 +125,12 @@ export const formatAgentBudgetContext = (status: AgentBudgetStatus): Record<stri
     maxExceeded: status.maxExceeded,
     nearMax: status.nearMax,
     instruction: status.maxExceeded
-        ? 'Budget max reached (tokens and/or iterations). Prefer mode=final_answer immediately with best available evidence.'
+        ? 'The token or iteration maximum has been reached. Use mode=final_answer immediately with the best evidence available.'
         : !status.minsMet
-          ? 'Minimum budget not met yet. Do NOT use mode=final_answer until both token and iteration mins are met, unless max is imminent.'
+          ? 'The minimum token and iteration budgets are not met yet. Do not use mode=final_answer until both minima are met, unless the maximum is about to be reached.'
           : status.nearMax
-            ? 'Near max budget. Prefer mode=final_answer soon; avoid expensive exploratory steps.'
-            : 'Budget OK. Continue Think→Plan→Use Tool→Observe; use mode=final_answer when evidence is enough and mins are met.',
+            ? 'The budget is nearly exhausted. Prefer mode=final_answer soon, and avoid expensive exploratory steps.'
+            : 'The budget is still healthy. Continue Think → Plan → Use Tool → Observe, and use mode=final_answer when the evidence is sufficient and both minima are met.',
 });
 
 export const budgetLimitsFromAgentDoc = (agent: {

@@ -13,7 +13,15 @@ import cancelPendingAgentTickTasks from '../../../../../utils/llmPendingTask/pag
 import writeAgentLog, { fetchLlmUnifiedLogged } from '../agentUtils/agentWriteLog';
 import { ensureAgentTerminalChatMessage } from '../agentUtils/ensureAgentTerminalChatMessage';
 import { normalizeAgentBudgetLimits } from '../agentStats/agentBudget';
+import {
+    contextWindowLimitsFromDoc,
+    formatContextChatTranscript,
+    loadContextChatWindow,
+    withContextChatMessages,
+} from '../agentUtils/agentContextWindow';
+import { copyPastAgentRecords } from '../agentUtils/copyPastAgentRecords';
 import { IAgentGoal } from '../../../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentGoal.types';
+import { dropMicroStepGoalSeeds } from '../agentPlan/agentGoalSeedFilter';
 
 const extractJsonObject = (raw: string): Record<string, unknown> | null => {
     const trimmed = raw.trim();
@@ -105,23 +113,16 @@ const agentInitiateFunc = async ({
             }
         }
 
-        const userText =
-            message.type === 'text' && typeof message.content === 'string' ? message.content.trim() : '';
-
-        // Seed as a single top-level goal; PLAN stage expands format/sub-goals.
-        let goals: Array<{ title: string; description: string }> = [
-            {
-                title: (userText.slice(0, 200) || 'Complete user request').trim(),
-                description: userText || 'Complete user request',
-            },
-        ];
-
         const threadObjectId = message.threadId
             ? new mongoose.Types.ObjectId(String(message.threadId))
             : null;
         if (!threadObjectId) {
             return { success: false, errorReason: 'Thread ID missing on message', agentInstanceId: null };
         }
+
+        const userText =
+            message.type === 'text' && typeof message.content === 'string' ? message.content.trim() : '';
+        const contextWindow = contextWindowLimitsFromDoc(thread);
 
         const budgets = normalizeAgentBudgetLimits({
             minBudgetTokens: thread.agentMinBudgetTokens,
@@ -148,8 +149,12 @@ const agentInitiateFunc = async ({
             maxBudgetTokens: budgets.maxBudgetTokens,
             minNumberOfIterations: budgets.minNumberOfIterations,
             maxNumberOfIterations: budgets.maxNumberOfIterations,
+            contextActionLimit: contextWindow.actionLimit,
+            contextSummaryCount: contextWindow.summaryCount,
+            contextMessagesPerSummary: contextWindow.messagesPerSummary,
             createdAtUtc: new Date(),
             updatedAtUtc: new Date(),
+            completedAtUtc: null,
         });
 
         const logCtx = {
@@ -159,17 +164,58 @@ const agentInitiateFunc = async ({
             tickNumber: 0,
         };
 
+        try {
+            await copyPastAgentRecords({
+                toInstanceId: agentInstance._id as mongoose.Types.ObjectId,
+                userId: thread.userId as mongoose.Types.ObjectId,
+                threadId: threadObjectId,
+                recordLimit: contextWindow.actionLimit,
+            });
+        } catch (e) {
+            console.error('copyPastAgentRecords failed:', e);
+        }
+
+        const chatWindow = await loadContextChatWindow({
+            threadId: threadObjectId,
+            actionLimit: contextWindow.actionLimit,
+            summaryCount: contextWindow.summaryCount,
+            messagesPerSummary: contextWindow.messagesPerSummary,
+            agentInstanceId: agentInstance._id as mongoose.Types.ObjectId,
+            userId: thread.userId as mongoose.Types.ObjectId,
+            logCtx,
+        });
+        const conversationTranscript = formatContextChatTranscript(chatWindow.messages, chatWindow);
+        const userRequestText = conversationTranscript || userText;
+        const latestUserTurn = [...chatWindow.messages]
+            .reverse()
+            .find((m) => m.role === 'user' && typeof m.content === 'string');
+        const seedText =
+            (latestUserTurn && typeof latestUserTurn.content === 'string'
+                ? latestUserTurn.content
+                : userText) || 'Complete user request';
+        let goals: Array<{ title: string; description: string }> = [
+            {
+                title: (seedText.slice(0, 200) || 'Complete user request').trim(),
+                description: userRequestText || seedText,
+            },
+        ];
+
         const llmConfig = await getLlmConfig({ threadId: threadObjectId });
-        if (llmConfig && userText) {
+        if (llmConfig && (userText || chatWindow.messages.length > 0)) {
             try {
-                const messages: Message[] = [
+                const messages: Message[] = withContextChatMessages(
                     {
                         role: 'system',
                         content:
-                            'Extract concrete goals for an autonomous agent from the user message. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . Create as many goals as the request truly needs — no fixed minimum or maximum. Prefer one goal when the request is a single deliverable; split into multiple goals only for clearly independent deliverables or distinct sequential outcomes the user asked for. Titles short. Description = full success criteria. Do not invent personal facts. Do not invent micro-steps (e.g. separate “fetch time” vs “create PDF”) unless the user asked for those as separate outcomes — fine-grained sequencing belongs in plan expansion subGoals.',
+                            'Extract concrete goals for an autonomous agent from the conversation. The messages above are the last N thread turns (N = Actions to pass). Older turns are compressed into MESSAGE SUMMARIES (max = Summaries to pass) and one GLOBAL MESSAGE SUMMARY. Treat the latest user turn as a follow-up when prior turns exist — do not redefine a word the user is clarifying. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . Create as many goals as the request truly needs — no fixed minimum or maximum. Prefer one goal when the request is a single deliverable; split into multiple goals only for clearly independent deliverables or distinct sequential outcomes the user asked for. Titles short. Description = full success criteria. Do not invent personal facts. Do not invent micro-steps (e.g. separate “fetch time” vs “create PDF”, or “create the file” vs “print path/size”) unless the user asked for those as separate outcomes — fine-grained sequencing belongs in plan expansion subGoals.',
                     },
-                    { role: 'user', content: userText },
-                ];
+                    chatWindow,
+                    {
+                        role: 'user',
+                        content:
+                            'Extract goals from the conversation above. If the latest user message is a clarification of an earlier request, keep the original task and apply the clarification.',
+                    }
+                );
                 const llmResult = await fetchLlmUnifiedLogged({
                     logCtx,
                     purpose: 'agent_goal_refine',
@@ -198,8 +244,9 @@ const agentInitiateFunc = async ({
                             return { title: title.slice(0, 200), description: description || title };
                         })
                         .filter((g): g is { title: string; description: string } => g !== null);
-                    if (refined.length > 0) {
-                        goals = refined;
+                    const filtered = dropMicroStepGoalSeeds(refined);
+                    if (filtered.length > 0) {
+                        goals = filtered;
                     }
                 }
             } catch (e) {
@@ -229,7 +276,7 @@ const agentInitiateFunc = async ({
             userId: thread.userId,
             threadId: message.threadId,
             key: 'user_request',
-            content: userText,
+            content: (userRequestText || userText).slice(0, 8000),
             memoryType: 'fact',
             createdAtUtc: now,
             updatedAtUtc: now,

@@ -1,6 +1,7 @@
 import { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import writeAgentLog, { fetchLlmUnifiedLogged, type AgentLogContext } from '../agentUtils/agentWriteLog';
+import { withContextChatMessages, type AgentChatWindow } from '../agentUtils/agentContextWindow';
 
 export type PlanProbeAction = {
     action: string;
@@ -70,6 +71,8 @@ export const decidePlanStep = async (params: {
     existingPlanContext: string;
     probeCount: number;
     maxProbes: number;
+    contextPack?: string;
+    chatMessages?: Message[] | AgentChatWindow;
 }): Promise<PlanStepDecision> => {
     const {
         logCtx,
@@ -78,6 +81,8 @@ export const decidePlanStep = async (params: {
         existingPlanContext,
         probeCount,
         maxProbes,
+        contextPack,
+        chatMessages,
     } = params;
 
     if (probeCount >= maxProbes) {
@@ -99,7 +104,7 @@ export const decidePlanStep = async (params: {
         };
     }
 
-    const messages: Message[] = [
+    const messages: Message[] = withContextChatMessages(
         {
             role: 'system',
             content: `You are the PLAN step of the Agent Brain.
@@ -133,6 +138,7 @@ Rules:
 - Do NOT choose execute_script or any shell command.
 - Max 1 probe this tick if probing at all.`,
         },
+        chatMessages,
         {
             role: 'user',
             content: JSON.stringify(
@@ -140,14 +146,15 @@ Rules:
                     userRequest: userRequest.slice(0, 4000),
                     goals: goalsSummary.slice(0, 2000),
                     existingPlanContext: existingPlanContext.slice(0, 6000) || null,
+                    context: contextPack || null,
                     probeCount,
                     maxProbes,
                 },
                 null,
                 2
             ),
-        },
-    ];
+        }
+    );
 
     try {
         const llmResult = await fetchLlmUnifiedLogged({

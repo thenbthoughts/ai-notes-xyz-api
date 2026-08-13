@@ -30,5 +30,7 @@ export interface IAgentUpdate extends Document {
     payload: Record<string, unknown>;
     goalId: mongoose.Types.ObjectId | null;
     tickNumber: number;
+    /** Copied from a previous instance for context. Do not count toward usage. */
+    past: boolean;
     createdAtUtc: Date;
 }

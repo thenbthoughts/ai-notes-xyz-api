@@ -1,4 +1,4 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose, { Query, Schema } from 'mongoose';
 
 import { IAgentInstance } from '../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentInstance.types';
 
@@ -56,10 +56,35 @@ const agentInstanceSchema = new Schema<IAgentInstance>({
     maxBudgetTokens: { type: Number, default: 1_000_000 },
     minNumberOfIterations: { type: Number, default: 1 },
     maxNumberOfIterations: { type: Number, default: 100 },
+    contextActionLimit: { type: Number, default: 100 },
+    contextSummaryCount: { type: Number, default: 10 },
+    contextMessagesPerSummary: { type: Number, default: 10 },
     activeSkillNames: { type: [String], default: [] },
     createdAtUtc: { type: Date, default: () => new Date() },
     updatedAtUtc: { type: Date, default: () => new Date() },
+    completedAtUtc: { type: Date, default: null, index: true },
 });
+
+const stampCompletedAtOnTerminalStatus = function stampCompletedAtOnTerminalStatus(
+    this: Query<unknown, IAgentInstance>
+) {
+    const update = this.getUpdate();
+    if (!update || typeof update !== 'object' || Array.isArray(update)) {
+        return;
+    }
+    const rec = update as Record<string, unknown>;
+    const set =
+        rec.$set && typeof rec.$set === 'object' && !Array.isArray(rec.$set)
+            ? (rec.$set as Record<string, unknown>)
+            : rec;
+    if ((set.status === 'success' || set.status === 'failed') && set.completedAtUtc == null) {
+        set.completedAtUtc = new Date();
+    }
+};
+
+agentInstanceSchema.pre('findOneAndUpdate', stampCompletedAtOnTerminalStatus);
+agentInstanceSchema.pre('updateOne', stampCompletedAtOnTerminalStatus);
+agentInstanceSchema.pre('updateMany', stampCompletedAtOnTerminalStatus);
 
 agentInstanceSchema.index({ status: 1, tickLockUntilUtc: 1, _id: -1 });
 

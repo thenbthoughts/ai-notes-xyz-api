@@ -47,10 +47,6 @@ const BLOCKED_PATTERNS: Array<{ re: RegExp; reason: string }> = [
         re: /\b(twilio|vonage|nexmo)\b[\s\S]{0,120}\.(messages|sms|create)\b/i,
         reason: 'sending SMS via provider APIs is blocked',
     },
-    {
-        re: /\b(gh\s+release\s+create|npm\s+publish|pypi\s+upload|twine\s+upload|docker\s+push)\b/i,
-        reason: 'publishing / pushing releases to remotes is blocked',
-    },
 ];
 
 /**

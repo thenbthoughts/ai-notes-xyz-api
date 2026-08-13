@@ -80,6 +80,103 @@ export async function readBufferFromShellEngine(params: {
     }
 }
 
+export async function zipDirFromShellEngine(params: {
+    baseUrl: string;
+    token: string;
+    relativeDir: string;
+    timeoutMs?: number;
+}): Promise<
+    | { ok: true; buffer: Buffer; status: number }
+    | { ok: false; error: string; status?: number }
+> {
+    const url = `${params.baseUrl.replace(/\/+$/, '')}/api/shell-engine/zip`;
+    try {
+        const res = await axios.get(url, {
+            params: { relativeDir: params.relativeDir },
+            responseType: 'arraybuffer',
+            timeout: params.timeoutMs ?? 120_000,
+            headers: { 'X-API-Token': params.token },
+            maxContentLength: 80 * 1024 * 1024,
+            maxBodyLength: 80 * 1024 * 1024,
+            validateStatus: () => true,
+        });
+        if (res.status === 200 && res.data) {
+            return { ok: true, buffer: Buffer.from(res.data as ArrayBuffer), status: res.status };
+        }
+        const msg = messageFromAxiosBody(res.data, res.status);
+        return { ok: false, error: msg, status: res.status };
+    } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+export async function unzipOnShellEngine(params: {
+    baseUrl: string;
+    token: string;
+    destRelativeDir: string;
+    buffer?: Buffer;
+    fileName?: string;
+    relativePath?: string;
+    timeoutMs?: number;
+}): Promise<{ ok: true; extracted: number } | { ok: false; error: string; status?: number }> {
+    const url = `${params.baseUrl.replace(/\/+$/, '')}/api/shell-engine/zip/extract`;
+    try {
+        const headers: Record<string, string> = { 'X-API-Token': params.token };
+        let body: FormData | Record<string, string>;
+        if (params.buffer) {
+            const form = new FormData();
+            form.append('destRelativeDir', params.destRelativeDir);
+            form.append(
+                'file',
+                new Blob([params.buffer], { type: 'application/zip' }),
+                params.fileName || 'upload.zip',
+            );
+            body = form;
+        } else {
+            headers['Content-Type'] = 'application/json';
+            body = {
+                destRelativeDir: params.destRelativeDir,
+                relativePath: params.relativePath || '',
+            };
+        }
+        const res = await axios.post(url, body, {
+            headers,
+            timeout: params.timeoutMs ?? 120_000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true,
+        });
+        if (res.status === 200 && res.data && typeof res.data === 'object') {
+            const extracted =
+                typeof (res.data as { extracted?: unknown }).extracted === 'number'
+                    ? (res.data as { extracted: number }).extracted
+                    : 0;
+            return { ok: true, extracted };
+        }
+        const msg = messageFromAxiosBody(res.data, res.status);
+        return { ok: false, error: msg, status: res.status };
+    } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+}
+
+function messageFromAxiosBody(data: unknown, status: number): string {
+    if (data && typeof data === 'object' && 'message' in data) {
+        return String((data as { message?: unknown }).message);
+    }
+    if (Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
+        try {
+            const parsed = JSON.parse(Buffer.from(data as ArrayBuffer).toString('utf8')) as {
+                message?: unknown;
+            };
+            if (parsed && typeof parsed.message === 'string') return parsed.message;
+        } catch {
+            /* ignore */
+        }
+    }
+    return `HTTP ${status}`;
+}
+
 export function sanitizePathSegment(name: string): string {
     const base = name.replace(/[/\\]/g, '_').replace(/\.\./g, '_').trim();
     const cleaned = base.replace(/[^\w.\-()+@[\] ]+/g, '_').slice(0, 200);

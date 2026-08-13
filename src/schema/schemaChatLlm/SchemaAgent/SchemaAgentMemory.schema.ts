@@ -28,6 +28,7 @@ const agentMemorySchema = new Schema<IAgentMemory>({
         enum: ['fact', 'observation', 'plan', 'result', 'other'],
         default: 'other',
     },
+    past: { type: Boolean, default: false, index: true },
     createdAtUtc: { type: Date, default: () => new Date() },
     updatedAtUtc: { type: Date, default: () => new Date() },
 });

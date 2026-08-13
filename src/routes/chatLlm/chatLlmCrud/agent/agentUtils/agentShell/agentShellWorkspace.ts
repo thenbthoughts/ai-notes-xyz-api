@@ -13,6 +13,12 @@ export type AgentShellConfig = {
 
 export type AgentShellLogCtx = AgentLogContext;
 
+/** Script printed OUT= and SIZE=<positive> — treat as success even if the shell HTTP status is not 200 (npm warn, allow-scripts). */
+export const shellStdoutShowsDeliverable = (text: string): boolean => {
+    const t = String(text || '');
+    return /OUT\s*=\S/.test(t) && /SIZE\s*[:=]\s*[1-9]\d*/.test(t);
+};
+
 /** Prefer dedicated Shell Engine; else OpenCode-with-Shell's shell URL (shell only, no OpenCode). */
 export const getAgentShellConfig = (apiKey: tsUserApiKey): AgentShellConfig | null => {
     if (apiKey.shellEngineValid && apiKey.shellEngineUrl?.trim() && apiKey.shellEngineToken) {
@@ -292,6 +298,33 @@ export const shellExecuteCommand = async (params: {
         const stdout = typeof body.stdout === 'string' ? body.stdout : '';
         const stderr = typeof body.stderr === 'string' ? body.stderr : '';
         if (res.status !== 200) {
+            const combined = `${stdout}\n${stderr}`;
+            if (shellStdoutShowsDeliverable(combined)) {
+                await writeAgentLogFromContext(params.logCtx, {
+                    action,
+                    title: isFileExec ? `Shell ▶ ${fileBase} ok` : `Shell ▶ execute ok`,
+                    message: `Command finished with HTTP ${res.status} but printed OUT/SIZE (${Date.now() - startedAt}ms)`,
+                    level: 'info',
+                    payload: {
+                        op: isFileExec ? 'execute_file' : 'execute',
+                        command: params.command.slice(0, 1000),
+                        executeFilePath: params.executeFilePath || '',
+                        durationMs: Date.now() - startedAt,
+                        httpStatus: res.status,
+                        phase: 'end',
+                        recoveredFromNon200: true,
+                    },
+                    raw: {
+                        command: params.command,
+                        executeFilePath: params.executeFilePath || '',
+                        httpStatus: res.status,
+                        stdout: stdout.slice(0, 50_000),
+                        stderr: stderr.slice(0, 20_000),
+                        responseBody: body,
+                    },
+                });
+                return { stdout: combined, stderr };
+            }
             const msg =
                 typeof body.message === 'string'
                     ? body.message
@@ -412,18 +445,56 @@ export const shellPing = async (
     }
 };
 
+const BLOCKED_SHELL_DELETE_ROOTS = new Set([
+    'ai-notes-xyz-shell-files',
+    'ai-notes-xyz',
+    'ai-notes-xyz/task',
+]);
+
+const assertDeletableShellRelativePath = (relativePath: string): void => {
+    const normalized = relativePath.split(/[/\\]/).join('/').replace(/\/+$/, '');
+    if (!normalized || normalized === '.' || normalized.includes('..')) {
+        throw new Error('Invalid path');
+    }
+    if (BLOCKED_SHELL_DELETE_ROOTS.has(normalized)) {
+        throw new Error('Cannot delete the workspace root');
+    }
+    if (
+        !normalized.startsWith('ai-notes-xyz-shell-files/') &&
+        !normalized.startsWith('ai-notes-xyz/task/')
+    ) {
+        throw new Error('Path is not inside the shell workspace');
+    }
+};
+
+const shellSingleQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+const extractShellErrorMessage = (data: unknown, fallback: string): string => {
+    if (data && typeof data === 'object') {
+        const o = data as Record<string, unknown>;
+        if (typeof o.message === 'string' && o.message.trim()) return o.message.trim();
+        if (typeof o.error === 'string' && o.error.trim()) return o.error.trim();
+        if (typeof o.stderr === 'string' && o.stderr.trim()) return o.stderr.trim();
+    }
+    return fallback;
+};
+
 /**
- * Delete a file or directory under ai-notes-xyz-shell-files (best-effort).
- * Tries Shell Engine file/delete, then falls back to `rm -rf`.
+ * Delete a file or directory under the shell workspace (best-effort).
+ * Tries Shell Engine file/delete, then falls back to `rm -rf` via run-shell/execute.
  */
 export const shellDeleteRelativePath = async (params: {
     shell: AgentShellConfig;
     relativePath: string;
     timeoutMs?: number;
 }): Promise<{ ok: boolean; error?: string }> => {
-    assertAgentTaskRelativePath(params.relativePath);
     const timeoutMs = Math.min(Math.max(params.timeoutMs ?? 30_000, 1), 120_000);
     const relativePath = params.relativePath.replace(/\\/g, '/').replace(/\/+$/, '');
+    try {
+        assertDeletableShellRelativePath(relativePath);
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
     const base = params.shell.baseUrl.replace(/\/+$/, '');
 
     try {
@@ -440,11 +511,18 @@ export const shellDeleteRelativePath = async (params: {
             return { ok: true };
         }
 
+        // FILE_STORAGE_PATH defaults to <cwd>/data on the shell host. rm must target that root;
+        // a bare relative path is a no-op when cwd is not the storage folder.
+        const deleteCommand = [
+            'ROOT="${FILE_STORAGE_PATH:-$(pwd)/data}"',
+            `rm -rf -- "$ROOT"/${shellSingleQuote(relativePath)}`,
+        ].join(' && ');
+
         const execRes = await axios.post(
-            `${base}/api/shell-engine/execute`,
-            { command: `rm -rf -- "${relativePath}" 2>&1` },
+            `${base}/api/shell-engine/run-shell/execute`,
+            { command: deleteCommand, timeoutMs },
             {
-                timeout: timeoutMs,
+                timeout: timeoutMs + 5_000,
                 headers: { 'X-API-Token': params.shell.token, 'Content-Type': 'application/json' },
                 validateStatus: () => true,
             }
@@ -454,9 +532,8 @@ export const shellDeleteRelativePath = async (params: {
         }
 
         const errMsg =
-            (shellRes.data && typeof shellRes.data === 'object' && 'message' in shellRes.data
-                ? String((shellRes.data as { message?: unknown }).message)
-                : '') ||
+            extractShellErrorMessage(execRes.data, '') ||
+            extractShellErrorMessage(shellRes.data, '') ||
             `Shell delete failed (HTTP ${shellRes.status}/${execRes.status})`;
         return { ok: false, error: errMsg };
     } catch (err) {

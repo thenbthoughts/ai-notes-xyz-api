@@ -7,6 +7,8 @@ import { IAgentGoalExpansion } from '../../../../../types/typesSchema/typesChatL
 import { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import writeAgentLog, { fetchLlmUnifiedLogged, type AgentLogContext } from '../agentUtils/agentWriteLog';
+import { loadContextChatWindow, withContextChatMessages } from '../agentUtils/agentContextWindow';
+import { dropMicroStepGoalSeeds, isPrintMetadataOnlyGoal } from './agentGoalSeedFilter';
 
 export type GoalExpansionSnapshot = {
     outputFormat: string;
@@ -121,6 +123,7 @@ const parseSubGoals = (
         const title = String(o.title || o.description || '').trim();
         const description = String(o.description || o.title || '').trim();
         if (!title) continue;
+        if (isPrintMetadataOnlyGoal(title, description)) continue;
         const key = normalizeTitleKey(title);
         if (!key || key === parentKey || seen.has(key)) continue;
         // Drop near-duplicates that only differ by filler words
@@ -134,7 +137,10 @@ const parseSubGoals = (
             description: (description || title).slice(0, 2000),
         });
     }
-    return out;
+    const filtered = dropMicroStepGoalSeeds(out);
+    // One leftover child is the whole task — run the parent as a one-shot.
+    if (filtered.length < 2) return [];
+    return filtered;
 };
 
 /**
@@ -167,7 +173,13 @@ export const expandAndPersistAgentGoal = async (params: {
     let subGoalSeeds: SubGoalSeed[] = [];
 
     if (llmConfig) {
-        const messages: Message[] = [
+        const chatWindow = await loadContextChatWindow({
+            threadId: goal.threadId as mongoose.Types.ObjectId,
+            agentInstanceId: logCtx.agentInstanceId,
+            userId: logCtx.userId,
+            logCtx,
+        });
+        const messages: Message[] = withContextChatMessages(
             {
                 role: 'system',
                 content: `You expand one agent goal into a structured plan. Do NOT hardcode categories; infer from the goal text.
@@ -179,19 +191,25 @@ Return JSON ONLY:
   "successCriteria": "when is this goal done?",
   "suggestedApproach": "how the agent should solve it (tools/skills in natural language)",
   "suggestedSkills": ["optional skill names from catalog if useful"],
-  "suggestedTools": ["optional tool names e.g. execute_script, search_all_domains, list_workspace_files"],
+  "suggestedTools": ["optional tool names e.g. execute_script, image_to_text, search_all_domains, list_workspace_files"],
   "requiresShell": boolean,
   "requiresPersonalData": boolean,
   "acceptanceChecks": ["verify checklist items before ready_to_synthesize"],
   "subGoals": [{"title":"...","description":"..."}]
 }
 Rules:
-- If the user wants a created file (PDF/Excel/image/script output), set requiresShell true and include acceptanceChecks that require a real workspace path. Put relevant skills in suggestedSkills (e.g. document-pdf, image-media, shell-environment).
+- If the user wants a created/edited workspace file, set requiresShell true and include acceptanceChecks for a real path. Suggest skills only when clearly useful (shell-environment, code-nodejs, image-media, document-pdf, data-transform, index-data-chat, personal-research).
+- If Done-when mentions workspace outputs or printing paths/sizes of created files, set outputFormat to workspace_file (not chat_update). Write the computed answer to a result file even when no output name is given (result.txt is fine). A number only in chat is not done.
+- If the user wants to index/search/reindex workspace docs (md/txt/pdf/ppt/xlsx/zip) under index-data-{chatId}, set requiresShell true and prefer index-data-chat in suggestedSkills.
+- If the user wants OCR / image-to-text / read text from an uploaded image, prefer suggestedTools: ["image_to_text"] (not Pillow / execute_script).
 - If the user needs grounded personal history/advice from their notes/tasks, set requiresPersonalData true and prefer personal-research in suggestedSkills.
-- Prefer subGoals: [] for simple one-shot requests (e.g. create one PDF). Only split when steps are clearly sequential and non-overlapping.
-- Return as many subGoals as needed for the work — no fixed count limit. Titles must be distinct. Never repeat the same deliverable as multiple siblings.
+- Prefer subGoals: [] for simple one-shot requests. Only split when steps are clearly sequential and non-overlapping.
+- Never create a separate "Report file metadata" subGoal — printing path/size belongs in the same script that creates the file.
+- Never split "read/inspect the inputs" from "write the output". One execute_script can read then write.
+- Never create a "locate/find the uploaded file" subGoal. Use list_workspace_files to search. Do not run \`find /\`.
 - ${allowSubGoals ? 'You MAY return subGoals.' : 'You MUST return subGoals: []. Do not split this goal further.'}`,
             },
+            chatWindow,
             {
                 role: 'user',
                 content: JSON.stringify(
@@ -204,8 +222,8 @@ Rules:
                     null,
                     2
                 ),
-            },
-        ];
+            }
+        );
 
         try {
             const llmResult = await fetchLlmUnifiedLogged({
@@ -342,10 +360,71 @@ export const formatExpansionForPrompt = (
 
 /** True when expansion says a workspace file deliverable is expected (LLM-set flags only). */
 export const expansionExpectsWorkspaceFile = (
-    expansion: GoalExpansionSnapshot | IAgentGoalExpansion | null | undefined
+    expansion: GoalExpansionSnapshot | IAgentGoalExpansion | null | undefined,
+    extraBlob?: string
 ): boolean => {
-    if (!expansion) return false;
-    return expansion.requiresShell === true;
+    if (!expansion && !extraBlob) return false;
+    const format = String((expansion as { outputFormat?: string } | null)?.outputFormat || '').toLowerCase();
+    const blob = [
+        format,
+        String((expansion as { successCriteria?: string } | null)?.successCriteria || ''),
+        String((expansion as { suggestedApproach?: string } | null)?.suggestedApproach || ''),
+        ...((((expansion as { expectations?: string[] } | null)?.expectations || []) as string[])),
+        ...((((expansion as { acceptanceChecks?: string[] } | null)?.acceptanceChecks || []) as string[])),
+        extraBlob || '',
+    ]
+        .join('\n')
+        .toLowerCase();
+    if (/\b(workspace_file|pdf_file|excel_file|image_file)\b/.test(format)) return true;
+    // Named output / in-place edit (input.b64, doc.txt) beats a wrong chat_update label.
+    const namedOut =
+        /\b(into|to|named)\s+['"`]?[\w.-]+\.[a-z0-9]{1,12}\b/i.test(blob) ||
+        /\b[\w.-]+\.[a-z0-9]{1,12}\b.{0,40}(created|exists in the workspace|is modified)/i.test(blob) ||
+        /\b(replace|append|edit|overwrite|in-place).{0,60}[\w.-]+\.[a-z0-9]{1,12}\b/i.test(blob);
+    if (
+        namedOut &&
+        /\b(create|created|write|written|save|saved|generate|generated|convert|produce|encode|encoded|replace|modified)\b/.test(
+            blob
+        )
+    ) {
+        return true;
+    }
+    // Implement a CLI/module/script *file* even if labeled chat_update.
+    // "Use a script to generate passwords" is a tool, not a workspace-file product.
+    const usesScriptAsTool = /\buse (a |the )?(script|python3?|node(?:\.js)?)\b/.test(blob);
+    if (
+        !usesScriptAsTool &&
+        /\b(create|write|implement|generate)\b/.test(blob) &&
+        /\b(cli|command-line|--input|--output|script|\.py|\.js|module|middleware)\b/.test(blob)
+    ) {
+        return true;
+    }
+    // Convert/export to a concrete format still needs a file, even if labeled chat_update.
+    if (
+        /\b(convert|render|export|transform)\b/.test(blob) &&
+        /\b(html|pdf|csv|tsv|json|xlsx|ics|png|file|\.html|\.pdf|\.csv|\.json)\b/.test(blob)
+    ) {
+        return true;
+    }
+    // "Workspace outputs" / print path+size of created files — chat-only is not done.
+    if (
+        /\b(workspace outputs|created files|print absolute paths?)\b/.test(blob) ||
+        (/\babsolute paths?\b/.test(blob) && /\b(file size|sizes? of)\b/.test(blob))
+    ) {
+        return true;
+    }
+    // Pure chat/text answers may use the shell to inspect, but do not require a new file.
+    if (format === 'chat_update' || format === 'text_answer') return false;
+    if (
+        /\b(create|created|write|written|save|saved|generate|generated|merge|convert|produce|encode|encoded)\b/.test(
+            blob
+        ) &&
+        (/\b(file|\.txt|\.csv|\.tsv|\.json|\.md|\.pdf|\.xlsx|\.png|\.zip|\.ics|\.html|\.js)\b/.test(blob) ||
+            /\b[\w.-]+\.[a-z0-9]{1,12}\b/.test(blob))
+    ) {
+        return true;
+    }
+    return Boolean(expansion && expansion.requiresShell === true);
 };
 
 /** Build a concise child-results pack for parent goal context. */
