@@ -4,7 +4,7 @@ import { BUILTIN_AGENT_SKILL_SEEDS } from '../agent/agentUtils/agentShell/agentS
 
 let seedPromise: Promise<void> | null = null;
 
-/** Idempotent seed of system builtin skills (userId null). */
+/** Idempotent seed of system builtin skills (userId null). Updates body/description when seeds change. */
 export const ensureBuiltinAgentSkills = async (): Promise<void> => {
     if (!seedPromise) {
         seedPromise = (async () => {
@@ -13,8 +13,25 @@ export const ensureBuiltinAgentSkills = async (): Promise<void> => {
                     isBuiltin: true,
                     userId: null,
                     name: seed.name,
-                }).select('_id');
-                if (existing) continue;
+                }).select('_id description body');
+                if (existing) {
+                    const needsUpdate =
+                        existing.description !== seed.description || existing.body !== seed.body;
+                    if (needsUpdate) {
+                        await ModelAgentSkill.updateOne(
+                            { _id: existing._id },
+                            {
+                                $set: {
+                                    description: seed.description,
+                                    body: seed.body,
+                                    enabled: true,
+                                    updatedAtUtc: new Date(),
+                                },
+                            }
+                        );
+                    }
+                    continue;
+                }
                 await ModelAgentSkill.create({
                     userId: null,
                     name: seed.name,

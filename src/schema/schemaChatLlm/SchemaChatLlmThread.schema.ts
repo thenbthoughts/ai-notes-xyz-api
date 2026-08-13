@@ -104,6 +104,18 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Number,
         default: 100,
     },
+    agentContextActionLimit: {
+        type: Number,
+        default: 100,
+    },
+    agentContextSummaryCount: {
+        type: Number,
+        default: 10,
+    },
+    agentContextMessagesPerSummary: {
+        type: Number,
+        default: 10,
+    },
 
     /** When true, run shell prep before the next AI reply (concise stream or Agent) */
     executeShell: {

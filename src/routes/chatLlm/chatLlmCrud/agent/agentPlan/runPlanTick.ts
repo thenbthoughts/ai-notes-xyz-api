@@ -11,6 +11,7 @@ import { writeUpdate } from '../agentWork/agentToolRegistry';
 import { decidePlanStep } from './decidePlanStep';
 import { appendPlanContextMemory, runPlanProbes } from './runPlanProbes';
 import { expandGoalsInPlanStage, loadPlanContextBundle } from './expandGoals';
+import { buildAgentContextPack } from '../agentUtils/agentContextWindow';
 
 const MAX_PLAN_PROBES = 8;
 
@@ -61,6 +62,13 @@ export const runPlanTick = async (
         .limit(20);
     const goalsSummary = tops.map((g, i) => `${i + 1}. ${g.title}: ${g.description || ''}`).join('\n');
 
+    const contextPack = await buildAgentContextPack({
+        logCtx,
+        agentInstanceId: id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+    });
+
     const decision = await decidePlanStep({
         logCtx,
         userRequest,
@@ -68,6 +76,8 @@ export const runPlanTick = async (
         existingPlanContext: planContext,
         probeCount,
         maxProbes: MAX_PLAN_PROBES,
+        contextPack: contextPack.formatted,
+        chatMessages: contextPack.chatWindow,
     });
 
     await writeUpdate({

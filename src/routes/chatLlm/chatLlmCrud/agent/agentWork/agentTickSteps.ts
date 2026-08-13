@@ -9,13 +9,18 @@ import { IAgentGoal } from '../../../../../types/typesSchema/typesChatLlm/typesA
 import { IAgentInstance } from '../../../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentInstance.types';
 import { ModelAgentMemory } from '../../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentMemory.schema';
 import { ModelAgentUpdate } from '../../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentUpdate.schema';
-import { ModelAgentLog } from '../../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentLog.schema';
 import { ModelUserApiKey } from '../../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../../../../utils/llm/llmCommonFunc';
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import { agentTaskFilesDir, getAgentShellConfig } from '../agentUtils/agentShell/agentShellWorkspace';
+import {
+    AGENT_SHELL_CONTEXT_FILE_LIMIT,
+    normalizeAgentShellListing,
+    type AgentShellListEntry,
+} from '../agentUtils/agentShell/agentShellListing';
 import syncThreadUploadsToAgentWorkspace from '../agentUtils/agentSyncUploads';
 import writeAgentLog, { type AgentLogContext } from '../agentUtils/agentWriteLog';
+import { buildAgentContextPack } from '../agentUtils/agentContextWindow';
 import { defaultAgentToolRegistry, writeUpdate } from './agentToolRegistry';
 import {
     applyArtifactGate,
@@ -24,10 +29,25 @@ import {
     formatMemorySummary,
     listWorkspaceDeliverables,
     filterNewDeliverables,
+    fileSizeChangedFromBaseline,
+    namedOutputFilesInGoalText,
+    namedOutputsEmptyOnDisk,
+    inferExpectedDeliverableExts,
+    goalRequiresCodeDeliverable,
+    goalRequiresDatabaseDeliverable,
+    hasDatabaseDeliverableEvidence,
+    toolEvidenceSupportsDeliverables,
+    toolTouchedWorkspaceFile,
+    mergeStdoutDeliverables,
+    looksLikeUnexecutedToolPlan,
+    looksLikeIncompleteProgress,
+    isChatOrTextGoal,
+    toolOutputLooksLikeChatAnswer,
     planAgentStep,
     synthesizeAgentAnswer,
     verifyAgentStep,
     type AgentPlanDecision,
+    type AgentVerifyVerdict,
 } from './agentPlanVerify';
 import {
     expansionExpectsWorkspaceFile,
@@ -63,6 +83,45 @@ type AgentCitation = {
 
 const toId = (id: mongoose.Types.ObjectId | string): mongoose.Types.ObjectId =>
     typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id;
+
+const namedFilesFromGoalContext = (params: {
+    title?: string;
+    description?: string;
+    outputFormat?: string;
+    suggestedApproach?: string;
+    expectations?: string[];
+    acceptanceChecks?: string[];
+}): string[] =>
+    namedOutputFilesInGoalText(
+        [
+            params.title || '',
+            params.description || '',
+            params.outputFormat || '',
+            params.suggestedApproach || '',
+            ...(params.expectations || []),
+            ...(params.acceptanceChecks || []),
+        ].join('\n')
+    );
+
+/** Full execute_script stdout from update payloads — not the 200-char log line. */
+const toolStdoutFromUpdates = (
+    updates: Array<{ updateType?: string; message?: string; payload?: unknown }>
+): string =>
+    updates
+        .filter(
+            (u) =>
+                u.updateType === 'tool_result' ||
+                u.updateType === 'script_executed' ||
+                u.updateType === 'error'
+        )
+        .map((u) => {
+            const p = (u.payload || {}) as Record<string, unknown>;
+            const full = typeof p.toolResultSummary === 'string' ? p.toolResultSummary : '';
+            return full.trim() || String(u.message || '');
+        })
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 8000);
 
 const loadAgent = async (agentRunId: mongoose.Types.ObjectId | string): Promise<IAgentInstance> => {
     const agent = await ModelAgentInstance.findById(toId(agentRunId));
@@ -523,10 +582,50 @@ export const agentTickPrepareGoal = async (
     });
 };
 
+type WorkspaceBaseline = { paths: Set<string>; sizesByName: Map<string, number> };
+
+const sizesMapFromRecord = (sizes: Record<string, number>): Map<string, number> => {
+    const m = new Map<string, number>();
+    for (const [k, v] of Object.entries(sizes || {})) {
+        const name = String(k || '')
+            .replace(/\\/g, '/')
+            .toLowerCase()
+            .split('/')
+            .pop();
+        if (name && typeof v === 'number') m.set(name, v);
+    }
+    return m;
+};
+
+const parseBaselineContent = (
+    content: string
+): { paths: string[]; sizes: Record<string, number> } => {
+    try {
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+            return { paths: parsed.map((p) => String(p)), sizes: {} };
+        }
+        if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { paths?: unknown }).paths)) {
+            const sizesRaw = (parsed as { sizes?: unknown }).sizes;
+            const sizes =
+                sizesRaw && typeof sizesRaw === 'object' && !Array.isArray(sizesRaw)
+                    ? (sizesRaw as Record<string, number>)
+                    : {};
+            return {
+                paths: ((parsed as { paths: unknown[] }).paths || []).map((p) => String(p)),
+                sizes,
+            };
+        }
+    } catch {
+        /* ignore */
+    }
+    return { paths: [], sizes: {} };
+};
+
 const loadOrInitWorkspaceBaseline = async (
     agent: IAgentInstance,
     listing: Array<{ relativePath: string; pathInAgentFolder?: string; isDir?: boolean; size?: number }>
-): Promise<Set<string>> => {
+): Promise<WorkspaceBaseline> => {
     const id = agent._id as mongoose.Types.ObjectId;
     const existing = await ModelAgentMemory.findOne({
         agentInstanceId: id,
@@ -540,43 +639,54 @@ const loadOrInitWorkspaceBaseline = async (
             const short = String(f.pathInAgentFolder || rel.split('/').pop() || '').replace(/\\/g, '/');
             return [rel, short].filter(Boolean);
         });
+    const listingSizes: Record<string, number> = {};
+    for (const f of listing || []) {
+        if (!f || f.isDir || !(f.size || 0)) continue;
+        const short = String(f.pathInAgentFolder || f.relativePath || '')
+            .replace(/\\/g, '/')
+            .split('/')
+            .pop();
+        if (short) listingSizes[short.toLowerCase()] = f.size || 0;
+    }
 
     if (existing?.content) {
-        try {
-            const parsed = JSON.parse(existing.content);
-            if (Array.isArray(parsed)) {
-                const base = new Set(parsed.map((p) => String(p).replace(/\\/g, '/').toLowerCase()));
-                // Empty baseline locked before fixture uploads synced — refresh with uploads/ only.
-                // Never absorb agent-created outputs into the baseline (that hides deliverables).
-                if (base.size === 0 && listingPaths.length > 0) {
-                    const uploadOnly = listingPaths.filter(
-                        (p) => /(^|\/)uploads\//i.test(p)
-                    );
-                    if (uploadOnly.length === 0) {
-                        return base;
-                    }
-                    const now = new Date();
-                    await ModelAgentMemory.findOneAndUpdate(
-                        { agentInstanceId: id, key: 'workspace_baseline_files' },
-                        {
-                            $set: {
-                                userId: agent.userId,
-                                threadId: agent.threadId,
-                                content: JSON.stringify(uploadOnly).slice(0, 12000),
-                                memoryType: 'fact',
-                                updatedAtUtc: now,
-                            },
-                            $setOnInsert: { createdAtUtc: now },
-                        },
-                        { upsert: true }
-                    );
-                    return new Set(uploadOnly.map((p) => p.toLowerCase()));
-                }
-                return base;
+        const parsed = parseBaselineContent(existing.content);
+        const base = new Set(parsed.paths.map((p) => String(p).replace(/\\/g, '/').toLowerCase()));
+        // Empty baseline locked before fixture uploads synced — refresh with uploads/ only.
+        // Never absorb agent-created outputs into the baseline (that hides deliverables).
+        if (base.size === 0 && listingPaths.length > 0) {
+            const uploadOnly = listingPaths.filter((p) => /(^|\/)uploads\//i.test(p));
+            if (uploadOnly.length === 0) {
+                return { paths: base, sizesByName: sizesMapFromRecord(parsed.sizes) };
             }
-        } catch {
-            /* fall through */
+            const now = new Date();
+            const uploadSizes: Record<string, number> = {};
+            for (const p of uploadOnly) {
+                const name = p.replace(/\\/g, '/').split('/').pop() || '';
+                if (name && listingSizes[name.toLowerCase()] != null) {
+                    uploadSizes[name.toLowerCase()] = listingSizes[name.toLowerCase()];
+                }
+            }
+            await ModelAgentMemory.findOneAndUpdate(
+                { agentInstanceId: id, key: 'workspace_baseline_files' },
+                {
+                    $set: {
+                        userId: agent.userId,
+                        threadId: agent.threadId,
+                        content: JSON.stringify({ paths: uploadOnly, sizes: uploadSizes }).slice(0, 12000),
+                        memoryType: 'fact',
+                        updatedAtUtc: now,
+                    },
+                    $setOnInsert: { createdAtUtc: now },
+                },
+                { upsert: true }
+            );
+            return {
+                paths: new Set(uploadOnly.map((p) => p.toLowerCase())),
+                sizesByName: sizesMapFromRecord(uploadSizes),
+            };
         }
+        return { paths: base, sizesByName: sizesMapFromRecord(parsed.sizes) };
     }
 
     const now = new Date();
@@ -586,7 +696,7 @@ const loadOrInitWorkspaceBaseline = async (
             $set: {
                 userId: agent.userId,
                 threadId: agent.threadId,
-                content: JSON.stringify(listingPaths).slice(0, 12000),
+                content: JSON.stringify({ paths: listingPaths, sizes: listingSizes }).slice(0, 12000),
                 memoryType: 'fact',
                 updatedAtUtc: now,
             },
@@ -594,18 +704,15 @@ const loadOrInitWorkspaceBaseline = async (
         },
         { upsert: true }
     );
-    return new Set(listingPaths.map((p) => p.toLowerCase()));
+    return {
+        paths: new Set(listingPaths.map((p) => p.toLowerCase())),
+        sizesByName: sizesMapFromRecord(listingSizes),
+    };
 };
 
 const loadShellListing = async (agent: IAgentInstance) => {
     const agentShellDir = agentTaskFilesDir(String(agent.threadId));
-    let shellWorkspaceListing: {
-        relativePath: string;
-        pathInAgentFolder?: string;
-        absolutePath: string;
-        isDir: boolean;
-        size: number;
-    }[] = [];
+    let shellWorkspaceListing: AgentShellListEntry[] = [];
     let containerWorkingDir = '/app/data/ai-notes-xyz-shell-files';
     let agentFolderAbsolutePath = `/app/data/${agentShellDir}`;
 
@@ -618,7 +725,8 @@ const loadShellListing = async (agent: IAgentInstance) => {
                 const shellRes = await axios.get(
                     `${shell.baseUrl.replace(/\/+$/, '')}/api/shell-engine/file/list`,
                     {
-                        params: { relativeDir: agentShellDir, maxFiles: 1000 },
+                        // Fetch extra so after ignore-filters we can still keep 100 newest.
+                        params: { relativeDir: agentShellDir, maxFiles: 500 },
                         timeout: 10_000,
                         headers: { 'X-API-Token': shell.token },
                         validateStatus: () => true,
@@ -626,56 +734,29 @@ const loadShellListing = async (agent: IAgentInstance) => {
                 );
                 if (shellRes.status === 200 && shellRes.data && typeof shellRes.data === 'object') {
                     const body = shellRes.data as Record<string, unknown>;
-                    const rawList = body.files;
-                    if (Array.isArray(rawList)) {
-                        shellWorkspaceListing = rawList
-                            .map((item) => {
-                                if (!item || typeof item !== 'object') return null;
-                                const o = item as Record<string, unknown>;
-                                const rel =
-                                    typeof o.relativePath === 'string'
-                                        ? o.relativePath.replace(/\\/g, '/')
-                                        : '';
-                                if (!rel) return null;
-                                if (
-                                    /\b(node_modules|\.git|venv|site-packages|__pycache__)\b/i.test(rel) ||
-                                    /package-lock\.json$/i.test(rel) ||
-                                    /\/venv[_/]/i.test(rel)
-                                ) {
-                                    return null;
-                                }
-                                const abs =
-                                    typeof o.absolutePath === 'string' && o.absolutePath.trim()
-                                        ? o.absolutePath.replace(/\\/g, '/')
-                                        : `/app/data/${rel}`;
-                                if (abs.includes('/agent/')) {
-                                    const idx = abs.indexOf('/agent/');
-                                    containerWorkingDir = abs.slice(0, idx);
-                                    agentFolderAbsolutePath = abs.slice(
-                                        0,
-                                        idx + `/agent/${agent.threadId}`.length
-                                    );
-                                } else if (abs.includes('/ai-notes-xyz-shell-files/')) {
-                                    const idx = abs.indexOf('/ai-notes-xyz-shell-files/');
-                                    containerWorkingDir = abs.slice(
-                                        0,
-                                        idx + '/ai-notes-xyz-shell-files'.length
-                                    );
-                                }
-                                const folderIdx = rel.indexOf(`${agentShellDir}/`);
-                                const pathInAgentFolder =
-                                    folderIdx !== -1
-                                        ? rel.slice(folderIdx + agentShellDir.length + 1)
-                                        : rel;
-                                return {
-                                    relativePath: rel,
-                                    pathInAgentFolder,
-                                    absolutePath: abs,
-                                    isDir: Boolean(o.isDir),
-                                    size: typeof o.size === 'number' ? o.size : 0,
-                                };
-                            })
-                            .filter((i): i is NonNullable<typeof i> => i !== null);
+                    shellWorkspaceListing = normalizeAgentShellListing({
+                        rawFiles: body.files,
+                        agentShellDir,
+                        limit: AGENT_SHELL_CONTEXT_FILE_LIMIT,
+                    });
+                    for (const entry of shellWorkspaceListing) {
+                        const abs = entry.absolutePath;
+                        if (abs.includes('/agent/')) {
+                            const idx = abs.indexOf('/agent/');
+                            containerWorkingDir = abs.slice(0, idx);
+                            agentFolderAbsolutePath = abs.slice(
+                                0,
+                                idx + `/agent/${agent.threadId}`.length
+                            );
+                            break;
+                        }
+                        if (abs.includes('/ai-notes-xyz-shell-files/')) {
+                            const idx = abs.indexOf('/ai-notes-xyz-shell-files/');
+                            containerWorkingDir = abs.slice(
+                                0,
+                                idx + '/ai-notes-xyz-shell-files'.length
+                            );
+                        }
                     }
                 }
             }
@@ -753,17 +834,6 @@ export const agentTickPlan = async (
         result: g.result || '(none)',
     }));
 
-    const recentLogDocs = await ModelAgentLog.find({ agentInstanceId: id })
-        .sort({ createdAtUtc: -1 })
-        .limit(50);
-    const last50Logs = recentLogDocs.reverse().map((l) => ({
-        tick: l.tickNumber,
-        action: l.action,
-        title: l.title,
-        message: l.message.slice(0, 400),
-        level: l.level,
-    }));
-
     const memories = await ModelAgentMemory.find({ agentInstanceId: id })
         .sort({ createdAtUtc: -1 })
         .limit(25);
@@ -777,9 +847,17 @@ export const agentTickPlan = async (
     const recentToolSummary = recentUpdates
         .map((u) => `- [${u.updateType}] ${u.message}`)
         .join('\n')
-        .slice(0, 4000);
+        .slice(0, 2500);
+    const toolStdoutSummary = toolStdoutFromUpdates(recentUpdates) || recentToolSummary;
     const recentNoopCount = recentUpdates.filter(
         (u) => typeof u.message === 'string' && /\bnoop\b/i.test(u.message)
+    ).length;
+    const recentScriptOkCount = recentUpdates.filter(
+        (u) =>
+            u.updateType === 'script_executed' ||
+            (u.updateType === 'tool_result' &&
+                typeof u.message === 'string' &&
+                /execute_script:\s*ok/i.test(u.message))
     ).length;
 
     const budget = computeAgentBudgetStatus({
@@ -788,6 +866,8 @@ export const agentTickPlan = async (
         limits: budgetLimitsFromAgentDoc(agent),
     });
     const budgetContext = formatAgentBudgetContext(budget);
+    // Infinite-loop breaker: same successful script re-run while claiming done —
+    // only force synthesize when the EXPECTED deliverable is already on disk.
     const forceSynthesize =
         budget.maxExceeded ||
         recentNoopCount >= 2 ||
@@ -812,8 +892,7 @@ export const agentTickPlan = async (
         .filter(Boolean)
         .join('\n');
 
-    const { shellWorkspaceListing, containerWorkingDir, agentFolderAbsolutePath } =
-        await loadShellListing(agent);
+    const { shellWorkspaceListing } = await loadShellListing(agent);
 
     const logCtx: AgentLogContext = {
         agentInstanceId: id,
@@ -823,15 +902,80 @@ export const agentTickPlan = async (
         tickNumber,
     };
 
+    const contextPack = await buildAgentContextPack({
+        logCtx,
+        agentInstanceId: id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+    });
+
     const goalExpansionDoc = await loadGoalExpansion(currentGoal._id as mongoose.Types.ObjectId);
     const goalExpansion = formatExpansionForPrompt(goalExpansionDoc);
-    const expectsFile = expansionExpectsWorkspaceFile(goalExpansionDoc);
+    const expectsFile = expansionExpectsWorkspaceFile(goalExpansionDoc, `${currentGoal.title}\n${currentGoal.description || ''}`);
     const requiresPersonalData = goalExpansionDoc?.requiresPersonalData === true;
-    const baseline = await loadOrInitWorkspaceBaseline(agent, shellWorkspaceListing);
-    const workspaceDeliverables = filterNewDeliverables(
-        listWorkspaceDeliverables(shellWorkspaceListing),
-        baseline
+    const codingHint = [
+        currentGoal.title || '',
+        currentGoal.description || '',
+        goalExpansionDoc?.suggestedApproach || '',
+        ...(goalExpansionDoc?.suggestedSkills || []),
+        ...(goalExpansionDoc?.acceptanceChecks || []),
+    ]
+        .join('\n')
+        .toLowerCase();
+    const prefersNodeArtifact =
+        /code-nodejs|\.js\b|\.mjs\b|\.ts\b|javascript|typescript|nodejs|node\.js/.test(codingHint);
+    const prefersDataTransform =
+        /data-transform|csv|tsv|wrap lines|dedupe|uppercase|commas to tabs/.test(codingHint);
+    const needsCodeDeliverable = goalRequiresCodeDeliverable(codingHint);
+    const needsDbDeliverable = goalRequiresDatabaseDeliverable(codingHint);
+    const codeOnDisk = listWorkspaceDeliverables(shellWorkspaceListing).some((d) =>
+        /\.(js|mjs|cjs|ts|py)$/i.test(d.pathInAgentFolder.split('/').pop() || '')
     );
+    const artifactDefaults = needsCodeDeliverable
+        ? prefersNodeArtifact
+            ? { scriptType: 'node' as const, fileName: 'app.js' }
+            : { scriptType: 'python' as const, fileName: 'app.py' }
+        : prefersNodeArtifact
+          ? { scriptType: 'node' as const, fileName: 'create_artifact.js' }
+          : { scriptType: 'python' as const, fileName: 'create_artifact.py' };
+    const extraSkills = [
+        ...(prefersNodeArtifact ? ['code-nodejs'] : []),
+        ...(prefersDataTransform ? ['data-transform'] : []),
+    ];
+    const expectedExts = inferExpectedDeliverableExts({
+        title: currentGoal.title,
+        description: currentGoal.description || '',
+        acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+        expectations: goalExpansionDoc?.expectations as string[] | undefined,
+        outputFormat: goalExpansionDoc?.outputFormat,
+        suggestedApproach: goalExpansionDoc?.suggestedApproach,
+    });
+    const keepNamed = namedFilesFromGoalContext({
+        title: currentGoal.title,
+        description: currentGoal.description || '',
+        outputFormat: goalExpansionDoc?.outputFormat,
+        suggestedApproach: goalExpansionDoc?.suggestedApproach,
+        expectations: goalExpansionDoc?.expectations as string[] | undefined,
+        acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+    });
+    const baseline = await loadOrInitWorkspaceBaseline(agent, shellWorkspaceListing);
+    const touchedExisting = toolTouchedWorkspaceFile({
+        lastToolSummary: toolStdoutSummary,
+        listing: shellWorkspaceListing,
+        baselineSizesByName: baseline.sizesByName,
+    });
+    const workspaceDeliverables = mergeStdoutDeliverables({
+        deliverables: filterNewDeliverables(
+            listWorkspaceDeliverables(shellWorkspaceListing, { expectedExts }),
+            baseline.paths,
+            keepNamed,
+            baseline.sizesByName
+        ),
+        toolSummary: toolStdoutSummary,
+        baselinePaths: baseline.paths,
+        expectedExts,
+    });
+    const dbOnDisk = hasDatabaseDeliverableEvidence(shellWorkspaceListing, workspaceDeliverables);
     const hasRepoCloneEvidence = shellWorkspaceListing.some(
         (f) => !f.isDir && /\/\.git\/HEAD$/i.test(String(f.relativePath || ''))
     ) && shellWorkspaceListing.some(
@@ -841,13 +985,32 @@ export const agentTickPlan = async (
                 String(f.pathInAgentFolder || f.relativePath || '').replace(/\\/g, '/')
             )
     );
-    // Only real shell-listed files count — bare names in the prompt must not finalize early.
-    // Git clones count when .git + README are present (README may have no extension).
+    const hasAnyNewDeliverable =
+        workspaceDeliverables.length > 0 ||
+        (hasRepoCloneEvidence &&
+            (expectedExts.length === 0 || expectedExts.some((e) => /^(md|txt)$/i.test(e))));
+    const emptyNamedOutputs = namedOutputsEmptyOnDisk(shellWorkspaceListing, keepNamed).filter(
+        (n) =>
+            !workspaceDeliverables.some(
+                (d) =>
+                    d.size > 0 &&
+                    (d.pathInAgentFolder.replace(/\\/g, '/').split('/').pop() || '').toLowerCase() ===
+                        n.toLowerCase()
+            )
+    );
     const hasFileDeliverable =
-        expectsFile && (workspaceDeliverables.length > 0 || hasRepoCloneEvidence);
+        emptyNamedOutputs.length === 0 &&
+        (!needsDbDeliverable || dbOnDisk) &&
+        (needsCodeDeliverable
+            ? codeOnDisk
+            : (hasAnyNewDeliverable || touchedExisting) &&
+              (expectsFile || prefersDataTransform || prefersNodeArtifact || touchedExisting));
     const defaultAction =
         (goalExpansionDoc?.suggestedTools || [])[0] ||
         (expectsFile ? 'execute_script' : requiresPersonalData ? 'search_all_domains' : 'search_all_domains');
+    const IMAGE_TO_TEXT_ACTIONS = new Set(['image_to_text', 'ocr_image', 'ocr', 'vision_ocr', 'image_ocr']);
+    const planIsImageToText = (action?: string): boolean =>
+        IMAGE_TO_TEXT_ACTIONS.has(String(action || '').toLowerCase());
     const childResultsPack = await loadChildResultsPackForGoal(id, currentGoal);
 
     // Prefer parent_context over dumping all past goals when this is a parent rollup
@@ -882,13 +1045,12 @@ export const agentTickPlan = async (
               recentToolSummary: [
                   researchStateHint,
                   recentToolSummary,
-                  `recentLogs: ${JSON.stringify(last50Logs.slice(-10)).slice(0, 1500)}`,
                   `pastGoals: ${JSON.stringify(pastGoalsForPrompt).slice(0, 1200)}`,
-                  `shellFiles: ${shellWorkspaceListing.length}`,
-                  `workspace: ${agentFolderAbsolutePath || `${containerWorkingDir}/agent/${agent.threadId}`}`,
               ]
                   .filter(Boolean)
                   .join('\n'),
+              contextPack: contextPack.formatted,
+              chatMessages: contextPack.chatWindow,
               tickNumber,
               recentNoopCount,
               skillsCatalog,
@@ -940,14 +1102,95 @@ export const agentTickPlan = async (
             action: defaultAction,
             query: currentGoal.description || currentGoal.title,
             reason: 'No evidence yet — follow goal expansion approach',
-            scriptType: expectsFile ? 'python' : undefined,
-            fileName: expectsFile ? 'create_artifact.py' : undefined,
+            scriptType: expectsFile ? artifactDefaults.scriptType : undefined,
+            fileName: expectsFile ? artifactDefaults.fileName : undefined,
             skillsToLoad: Array.from(
                 new Set([
                     ...(plan.skillsToLoad || []),
                     ...(goalExpansionDoc?.suggestedSkills || []),
                 ])
             ).slice(0, 3),
+        };
+    }
+
+    // Specs/fixtures only: do not loop inspect/find scripts. Write the deliverable.
+    const inspectishName =
+        /^(script_\d+|plan_probe|tmp_|read_|analyze_|inspect_|debug_|probe_|check_|list_|cat_|find_|search_|scan_|locate_|walk_|discover_|investigate_|discovery_|identify_)/i;
+    const planFileRaw =
+        plan.kind === 'expand_goals'
+            ? ''
+            : String(
+                  ('fileName' in plan && plan.fileName) ||
+                      ('query' in plan && plan.query) ||
+                      ''
+              );
+    const planFile = planFileRaw.replace(/\\/g, '/').split('/').pop() || '';
+    const planLooksInspect =
+        inspectishName.test(planFile) ||
+        /^\s*cat\s+/i.test(planFileRaw) ||
+        /\bcat\s+[\w./-]+\b/i.test(planFileRaw) ||
+        /^\s*ls(\s|$)/i.test(planFileRaw);
+    const planIsListWorkspace =
+        plan.kind === 'use_tool' &&
+        /list_workspace_files|list_files|list_workspace/.test(String(plan.action || ''));
+    if (
+        expectsFile &&
+        !requiresPersonalData &&
+        !hasFileDeliverable &&
+        !budget.maxExceeded &&
+        tickNumber >= 1 &&
+        !planIsImageToText(plan.kind === 'use_tool' ? plan.action : undefined) &&
+        !planIsImageToText(defaultAction) &&
+        (plan.kind === 'final_answer' ||
+            planLooksInspect ||
+            planIsListWorkspace ||
+            tickNumber >= 3 ||
+            emptyNamedOutputs.length > 0)
+    ) {
+        plan = {
+            kind: 'use_tool',
+            mode: 'use_tool',
+            action: 'execute_script',
+            query: currentGoal.description || currentGoal.title,
+            reason:
+                emptyNamedOutputs.length > 0
+                    ? `Named output is empty (${emptyNamedOutputs.join(', ')}) — write real content, then print path + size.`
+                    : 'No workspace deliverable yet — write the implementation now. Do not search for a missing stub.',
+            scriptType: artifactDefaults.scriptType,
+            fileName: artifactDefaults.fileName,
+            code: '',
+            skillsToLoad: Array.from(
+                new Set([
+                    ...activeSkillNames,
+                    ...(goalExpansionDoc?.suggestedSkills || []),
+                    'shell-environment',
+                    ...(prefersNodeArtifact ? ['code-nodejs'] : []),
+                    ...(prefersDataTransform ? ['data-transform'] : []),
+                ])
+            ).slice(0, 4),
+        };
+    }
+
+    const planLooksRootFind = /\bfind\s+\//i.test(planFileRaw);
+    if (planLooksRootFind && !budget.maxExceeded && plan.kind === 'use_tool') {
+        plan = {
+            kind: 'use_tool',
+            mode: 'use_tool',
+            action: 'execute_script',
+            query: currentGoal.description || currentGoal.title,
+            reason:
+                'Do not search the whole filesystem. Use list_workspace_files to locate files.',
+            scriptType: artifactDefaults.scriptType,
+            fileName: prefersDataTransform ? 'create_artifact.py' : artifactDefaults.fileName,
+            code: '',
+            skillsToLoad: Array.from(
+                new Set([
+                    ...activeSkillNames,
+                    ...(goalExpansionDoc?.suggestedSkills || []),
+                    'shell-environment',
+                    ...(prefersDataTransform ? ['data-transform'] : []),
+                ])
+            ).slice(0, 4),
         };
     }
 
@@ -958,22 +1201,26 @@ export const agentTickPlan = async (
     );
     const allChildrenCompleted =
         childGoals.length > 0 && childGoals.every((c) => c.status === 'completed');
+    const childResultsLookFake = childGoals.some((c) => looksLikeUnexecutedToolPlan(c.result || ''));
     if (allChildrenCompleted && Boolean(childResultsPack) && !budget.maxExceeded) {
-        if (expectsFile && !hasFileDeliverable) {
+        if ((expectsFile && !hasFileDeliverable) || childResultsLookFake) {
             plan = {
                 kind: 'use_tool',
                 mode: 'use_tool',
                 action: 'execute_script',
                 query: currentGoal.description || currentGoal.title,
-                reason:
-                    'Children marked done but no workspace deliverable on disk — create the file and print absolute path + size',
-                scriptType: 'python',
-                fileName: 'create_artifact.py',
+                reason: childResultsLookFake
+                    ? 'Child result looks like an unexecuted tool plan — run execute_script for real'
+                    : 'Children marked done but no workspace deliverable on disk — create the file and print absolute path + size',
+                scriptType: artifactDefaults.scriptType,
+                fileName: artifactDefaults.fileName,
                 skillsToLoad: Array.from(
                     new Set([
                         ...activeSkillNames,
                         ...(goalExpansionDoc?.suggestedSkills || []),
                         'shell-environment',
+                        ...(prefersNodeArtifact ? ['code-nodejs'] : []),
+                        ...(prefersDataTransform ? ['data-transform'] : []),
                     ])
                 ).slice(0, 3),
             };
@@ -1004,8 +1251,8 @@ export const agentTickPlan = async (
             query: currentGoal.description || currentGoal.title,
             reason: `Min budget not met yet (tokens ${budget.tokens.used}/${budget.tokens.min}, iterations ${budget.iterations.used}/${budget.iterations.min})`,
             skillsToLoad: plan.skillsToLoad || activeSkillNames,
-            scriptType: expectsFile ? 'python' : undefined,
-            fileName: expectsFile ? 'create_artifact.py' : undefined,
+            scriptType: expectsFile ? artifactDefaults.scriptType : undefined,
+            fileName: expectsFile ? artifactDefaults.fileName : undefined,
         };
     }
 
@@ -1031,19 +1278,24 @@ export const agentTickPlan = async (
             workspaceHasDeliverable: hasFileDeliverable,
         });
         if (artifactGate.verdict !== 'ready_to_synthesize') {
+            const nextAction = planIsImageToText(defaultAction)
+                ? 'image_to_text'
+                : artifactGate.suggestedNextAction || 'execute_script';
             plan = {
                 kind: 'use_tool',
                 mode: 'use_tool',
-                action: artifactGate.suggestedNextAction || 'execute_script',
+                action: nextAction,
                 query: currentGoal.description || currentGoal.title,
                 reason: artifactGate.reason,
-                scriptType: 'python',
-                fileName: 'create_artifact.py',
+                scriptType: planIsImageToText(nextAction) ? undefined : artifactDefaults.scriptType,
+                fileName: planIsImageToText(nextAction) ? undefined : artifactDefaults.fileName,
                 skillsToLoad: Array.from(
                     new Set([
                         ...(plan.skillsToLoad || []),
                         ...(goalExpansionDoc?.suggestedSkills || []),
                         'shell-environment',
+                        ...(prefersNodeArtifact ? ['code-nodejs'] : []),
+                        ...(prefersDataTransform ? ['data-transform'] : []),
                     ])
                 ).slice(0, 3),
             };
@@ -1093,6 +1345,28 @@ export const agentTickPlan = async (
             kind: 'final_answer',
             mode: 'final_answer',
             reason: `Deliverable present in workspace — finalize (${names})`,
+            skillsToLoad: activeSkillNames,
+        };
+    }
+
+    // Chat/text: after a couple of successful scripts, stop inventing verify loops.
+    const sameNextStepCount = memories.filter((m) => /^next_step_/i.test(m.key)).length;
+    if (
+        !forceSynthesize &&
+        !budget.maxExceeded &&
+        budget.minsMet &&
+        plan.kind !== 'final_answer' &&
+        recentScriptOkCount >= 2 &&
+        ((isChatOrTextGoal(goalExpansionDoc?.outputFormat) && !expectsFile) ||
+            sameNextStepCount >= 3)
+    ) {
+        plan = {
+            kind: 'final_answer',
+            mode: 'final_answer',
+            reason:
+                isChatOrTextGoal(goalExpansionDoc?.outputFormat) && !expectsFile
+                    ? 'Chat goal already has successful tool output — synthesize the answer'
+                    : 'Same next_step repeated — stop looping and synthesize',
             skillsToLoad: activeSkillNames,
         };
     }
@@ -1265,6 +1539,7 @@ export const agentTickRunTool = async (
         code: plan.code,
         scriptType: plan.scriptType,
         fileName: plan.fileName,
+        relativePath: plan.kind === 'use_tool' ? plan.relativePath : undefined,
         reason: plan.reason,
     };
 
@@ -1406,6 +1681,13 @@ export const agentTickVerify = async (
         tickNumber,
     };
 
+    const verifyContextPack = await buildAgentContextPack({
+        logCtx,
+        agentInstanceId: id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+    });
+
     const budgetContext = formatAgentBudgetContext(
         computeAgentBudgetStatus({
             totalTokens: agent.totalTokens || 0,
@@ -1417,36 +1699,46 @@ export const agentTickVerify = async (
     const goalExpansionDoc = await loadGoalExpansion(currentGoal._id as mongoose.Types.ObjectId);
     const goalExpansion = formatExpansionForPrompt(goalExpansionDoc);
 
-    let verify = await verifyAgentStep({
-        logCtx,
-        llmConfig,
-        goalTitle: currentGoal.title,
-        goalDescription: currentGoal.description || currentGoal.title,
-        lastAction,
-        lastResultSummary: toolResultSummary,
-        memorySummary: formatMemorySummary(verifyMemMapped),
-        activeSkillsBlock,
-        budgetContext,
-        goalExpansion,
-    });
-
-    verify = applyEvidenceGate({
-        verify,
-        memories: verifyMemMapped,
-        requiresPersonalData: goalExpansionDoc?.requiresPersonalData === true,
-        forceSynthesize,
-        tickNumber,
-    });
-
+    // Check disk first — skip expensive verify LLM when the EXPECTED deliverable exists.
     let deliverableReady = false;
     let diskDeliverables: ReturnType<typeof listWorkspaceDeliverables> = [];
-    if (expansionExpectsWorkspaceFile(goalExpansionDoc)) {
+    const expectedExtsObserve = inferExpectedDeliverableExts({
+        title: currentGoal.title,
+        description: currentGoal.description || '',
+        acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+        expectations: goalExpansionDoc?.expectations as string[] | undefined,
+        outputFormat: goalExpansionDoc?.outputFormat,
+        suggestedApproach: goalExpansionDoc?.suggestedApproach,
+    });
+    if (expansionExpectsWorkspaceFile(goalExpansionDoc, `${currentGoal.title}\n${currentGoal.description || ''}`) || toolSuccess) {
         const { shellWorkspaceListing } = await loadShellListing(agent);
         const baseline = await loadOrInitWorkspaceBaseline(agent, shellWorkspaceListing);
-        diskDeliverables = filterNewDeliverables(
-            listWorkspaceDeliverables(shellWorkspaceListing),
-            baseline
-        );
+        const keepNamedObserve = namedFilesFromGoalContext({
+            title: currentGoal.title,
+            description: currentGoal.description || '',
+            outputFormat: goalExpansionDoc?.outputFormat,
+            suggestedApproach: goalExpansionDoc?.suggestedApproach,
+            expectations: goalExpansionDoc?.expectations as string[] | undefined,
+            acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+        });
+        const touchedExisting = toolTouchedWorkspaceFile({
+            lastToolSummary: toolResultSummary,
+            listing: shellWorkspaceListing,
+            baselineSizesByName: baseline.sizesByName,
+        });
+        diskDeliverables = mergeStdoutDeliverables({
+            deliverables: filterNewDeliverables(
+                listWorkspaceDeliverables(shellWorkspaceListing, {
+                    expectedExts: expectedExtsObserve,
+                }),
+                baseline.paths,
+                keepNamedObserve,
+                baseline.sizesByName
+            ),
+            toolSummary: toolResultSummary,
+            baselinePaths: baseline.paths,
+            expectedExts: expectedExtsObserve,
+        });
         const hasRepoCloneEvidence =
             shellWorkspaceListing.some(
                 (f) => !f.isDir && /\/\.git\/HEAD$/i.test(String(f.relativePath || ''))
@@ -1458,33 +1750,199 @@ export const agentTickVerify = async (
                         String(f.pathInAgentFolder || f.relativePath || '').replace(/\\/g, '/')
                     )
             );
-        deliverableReady = diskDeliverables.length > 0 || hasRepoCloneEvidence;
+        if (touchedExisting && diskDeliverables.length === 0) {
+            diskDeliverables = listWorkspaceDeliverables(shellWorkspaceListing, {
+                expectedExts: expectedExtsObserve,
+            })
+                .filter((d) =>
+                    fileSizeChangedFromBaseline(d.pathInAgentFolder, d.size, baseline.sizesByName)
+                )
+                .slice(0, 8);
+        }
+        diskDeliverables = mergeStdoutDeliverables({
+            deliverables: diskDeliverables,
+            toolSummary: toolResultSummary,
+            baselinePaths: baseline.paths,
+            expectedExts: expectedExtsObserve,
+        });
+        deliverableReady =
+            diskDeliverables.length > 0 ||
+            touchedExisting ||
+            (hasRepoCloneEvidence &&
+                (expectedExtsObserve.length === 0 ||
+                    expectedExtsObserve.some((e) => /^(md|txt)$/i.test(e))));
+        const observeNeedsCode = goalRequiresCodeDeliverable(
+            [
+                currentGoal.title || '',
+                currentGoal.description || '',
+                goalExpansionDoc?.suggestedApproach || '',
+                ...(goalExpansionDoc?.acceptanceChecks || []),
+                ...(Array.isArray(goalExpansionDoc?.expectations)
+                    ? goalExpansionDoc.expectations
+                    : []),
+            ].join('\n')
+        );
+        if (
+            observeNeedsCode &&
+            !listWorkspaceDeliverables(shellWorkspaceListing).some((d) =>
+                /\.(js|mjs|cjs|ts|py)$/i.test(d.pathInAgentFolder.split('/').pop() || '')
+            )
+        ) {
+            deliverableReady = false;
+        }
+        const observeNeedsDb = goalRequiresDatabaseDeliverable(
+            [
+                currentGoal.title || '',
+                currentGoal.description || '',
+                goalExpansionDoc?.suggestedApproach || '',
+                ...(goalExpansionDoc?.acceptanceChecks || []),
+                ...(Array.isArray(goalExpansionDoc?.expectations)
+                    ? goalExpansionDoc.expectations
+                    : []),
+            ].join('\n')
+        );
+        if (observeNeedsDb && !hasDatabaseDeliverableEvidence(shellWorkspaceListing, diskDeliverables)) {
+            deliverableReady = false;
+        }
+        const emptyNamedObserve = namedOutputsEmptyOnDisk(shellWorkspaceListing, keepNamedObserve).filter(
+            (n) =>
+                !diskDeliverables.some(
+                    (d) =>
+                        d.size > 0 &&
+                        (d.pathInAgentFolder.replace(/\\/g, '/').split('/').pop() || '').toLowerCase() ===
+                            n.toLowerCase()
+                )
+        );
+        if (emptyNamedObserve.length > 0) {
+            deliverableReady = false;
+        }
     }
+
+    let verify: AgentVerifyVerdict;
+    const observeIsChatAnswer =
+        isChatOrTextGoal(goalExpansionDoc?.outputFormat) &&
+        !expansionExpectsWorkspaceFile(goalExpansionDoc, `${currentGoal.title}\n${currentGoal.description || ''}`) &&
+        toolSuccess &&
+        toolOutputLooksLikeChatAnswer(toolResultSummary);
+    if (observeIsChatAnswer && !forceSynthesize) {
+        verify = {
+            verdict: 'ready_to_synthesize',
+            reason: 'Chat/text goal: tool already printed the answer',
+            evidenceGaps: [],
+        };
+    } else if (deliverableReady && !forceSynthesize) {
+        const evidence = toolEvidenceSupportsDeliverables({
+            lastToolSummary: toolResultSummary,
+            deliverables: diskDeliverables,
+            expectedExts: expectedExtsObserve,
+            acceptanceChecks: goalExpansionDoc?.acceptanceChecks || [],
+        });
+        if (evidence.ok) {
+            const names = diskDeliverables
+                .map((d) => `${d.pathInAgentFolder} (${d.size}b)`)
+                .slice(0, 3)
+                .join(', ');
+            verify = {
+                verdict: 'ready_to_synthesize',
+                reason: `Verified deliverable on disk (${names}) — ${evidence.reason}`.slice(0, 200),
+                evidenceGaps: [],
+            };
+        } else {
+            // File present but weak evidence — still call verify LLM once, biased to continue/verify
+            verify = await verifyAgentStep({
+                logCtx,
+                llmConfig,
+                goalTitle: currentGoal.title,
+                goalDescription: currentGoal.description || currentGoal.title,
+                lastAction,
+                lastResultSummary: `${toolResultSummary}\n\n[deterministic] ${evidence.reason}`,
+                memorySummary: formatMemorySummary(verifyMemMapped),
+                activeSkillsBlock,
+                budgetContext,
+                goalExpansion,
+                contextPack: verifyContextPack.formatted,
+                chatMessages: verifyContextPack.chatWindow,
+            });
+            if (verify.verdict === 'ready_to_synthesize' && !forceSynthesize) {
+                // Require a cheap content/path print before trusting LLM
+                verify = {
+                    ...verify,
+                    verdict: 'continue',
+                    reason: evidence.reason.slice(0, 200),
+                    suggestedNextAction: 'execute_script',
+                    suggestedQuery:
+                        'Print absolute path, size, and first 5 lines of the expected output file to verify contents, then stop.',
+                    evidenceGaps: [evidence.reason],
+                };
+            }
+        }
+    } else {
+        verify = await verifyAgentStep({
+            logCtx,
+            llmConfig,
+            goalTitle: currentGoal.title,
+            goalDescription: currentGoal.description || currentGoal.title,
+            lastAction,
+            lastResultSummary: toolResultSummary,
+            memorySummary: formatMemorySummary(verifyMemMapped),
+            activeSkillsBlock,
+            budgetContext,
+            goalExpansion,
+            contextPack: verifyContextPack.formatted,
+            chatMessages: verifyContextPack.chatWindow,
+        });
+    }
+
+    verify = applyEvidenceGate({
+        verify,
+        memories: verifyMemMapped,
+        requiresPersonalData: goalExpansionDoc?.requiresPersonalData === true,
+        forceSynthesize,
+        tickNumber,
+    });
 
     verify = applyArtifactGate({
         verify,
         memories: verifyMemMapped,
-        expectsWorkspaceFile: expansionExpectsWorkspaceFile(goalExpansionDoc),
+        expectsWorkspaceFile: expansionExpectsWorkspaceFile(goalExpansionDoc, `${currentGoal.title}\n${currentGoal.description || ''}`),
         acceptanceChecks: goalExpansionDoc?.acceptanceChecks || [],
         forceSynthesize,
         lastToolSummary: toolResultSummary,
         workspaceHasDeliverable: deliverableReady,
     });
 
-    // If the deliverable already exists on disk, do not keep looping on verification scripts.
-    if (!forceSynthesize && deliverableReady) {
-        const names = diskDeliverables
-            .map((d) => `${d.pathInAgentFolder} (${d.size}b)`)
-            .slice(0, 3)
-            .join(', ');
-        verify = {
-            ...verify,
-            verdict: 'ready_to_synthesize',
-            reason: `Deliverable present — finalize (${names})`.slice(0, 200),
-            evidenceGaps: [],
-            suggestedNextAction: undefined,
-            retryHint: undefined,
-        };
+    // Finalize only when disk + tool evidence agree (unless forced by budget max).
+    if (!forceSynthesize && deliverableReady && verify.verdict === 'ready_to_synthesize') {
+        const evidence = toolEvidenceSupportsDeliverables({
+            lastToolSummary: toolResultSummary,
+            deliverables: diskDeliverables,
+            expectedExts: expectedExtsObserve,
+            acceptanceChecks: goalExpansionDoc?.acceptanceChecks || [],
+        });
+        if (evidence.ok) {
+            const names = diskDeliverables
+                .map((d) => `${d.pathInAgentFolder} (${d.size}b)`)
+                .slice(0, 3)
+                .join(', ');
+            verify = {
+                ...verify,
+                verdict: 'ready_to_synthesize',
+                reason: `Deliverable verified — finalize (${names})`.slice(0, 200),
+                evidenceGaps: [],
+                suggestedNextAction: undefined,
+                retryHint: undefined,
+            };
+        } else {
+            verify = {
+                ...verify,
+                verdict: 'continue',
+                reason: evidence.reason.slice(0, 200),
+                suggestedNextAction: 'execute_script',
+                suggestedQuery:
+                    'Verify the output file: print absolute path, size, and a short content sniff (first lines / magic header).',
+                evidenceGaps: [evidence.reason],
+            };
+        }
     }
 
     const budgetStatus = computeAgentBudgetStatus({
@@ -1629,14 +2087,6 @@ export const agentTickSynthesize = async (
         resolveSkillsToLoad(skillBodies, activeSkillNames)
     );
 
-    const recentChatDocs = await ModelChatLlm.find({ threadId: agent.threadId })
-        .sort({ createdAtUtc: -1 })
-        .limit(10);
-    const past10Messages = recentChatDocs.reverse().map((m) => ({
-        role: m.isAi ? 'assistant' : 'user',
-        content: m.content.slice(0, 1000),
-    }));
-
     const freshMemories = await ModelAgentMemory.find({ agentInstanceId: id })
         .sort({ createdAtUtc: -1 })
         .limit(40);
@@ -1662,6 +2112,13 @@ export const agentTickSynthesize = async (
         goalId: currentGoal._id as mongoose.Types.ObjectId,
         tickNumber,
     };
+
+    const synthContextPack = await buildAgentContextPack({
+        logCtx,
+        agentInstanceId: id,
+        userId: agent.userId,
+        threadId: agent.threadId,
+    });
 
     const budgetContext = formatAgentBudgetContext(
         computeAgentBudgetStatus({
@@ -1727,6 +2184,145 @@ export const agentTickSynthesize = async (
     const goalExpansion = formatExpansionForPrompt(goalExpansionDoc);
     const childResultsPack = await loadChildResultsPackForGoal(id, currentGoal);
 
+    const expectedExtsSynth = inferExpectedDeliverableExts({
+        title: currentGoal.title,
+        description: currentGoal.description || '',
+        acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+        expectations: goalExpansionDoc?.expectations as string[] | undefined,
+        outputFormat: goalExpansionDoc?.outputFormat,
+        suggestedApproach: goalExpansionDoc?.suggestedApproach,
+    });
+    const { shellWorkspaceListing: synthListing } = await loadShellListing(agent);
+    const synthBaseline = await loadOrInitWorkspaceBaseline(agent, synthListing);
+    const recentSynthUpdates = await ModelAgentUpdate.find({ agentInstanceId: id })
+        .sort({ createdAtUtc: -1 })
+        .limit(12);
+    const synthToolSummary = [
+        toolStdoutFromUpdates(recentSynthUpdates),
+        formatMemorySummary(memMapped).slice(0, 8000),
+        recentSynthUpdates.map((u) => `- [${u.updateType}] ${u.message}`).join('\n').slice(0, 4000),
+    ]
+        .filter(Boolean)
+        .join('\n');
+    const synthTouched = toolTouchedWorkspaceFile({
+        lastToolSummary: synthToolSummary,
+        listing: synthListing,
+        baselineSizesByName: synthBaseline.sizesByName,
+    });
+    const synthKeepNamed = namedFilesFromGoalContext({
+        title: currentGoal.title,
+        description: currentGoal.description || '',
+        outputFormat: goalExpansionDoc?.outputFormat,
+        suggestedApproach: goalExpansionDoc?.suggestedApproach,
+        expectations: goalExpansionDoc?.expectations as string[] | undefined,
+        acceptanceChecks: goalExpansionDoc?.acceptanceChecks,
+    });
+    const expectedDiskDeliverables = mergeStdoutDeliverables({
+        deliverables: filterNewDeliverables(
+            listWorkspaceDeliverables(synthListing, { expectedExts: expectedExtsSynth }),
+            synthBaseline.paths,
+            synthKeepNamed,
+            synthBaseline.sizesByName
+        ),
+        toolSummary: synthToolSummary,
+        baselinePaths: synthBaseline.paths,
+        expectedExts: expectedExtsSynth,
+    });
+    // Citation list: all new non-helpers (not just expected exts) so synthesize cannot invent a .py when only .js was gated.
+    let verifiedDiskDeliverables = mergeStdoutDeliverables({
+        deliverables: filterNewDeliverables(
+            listWorkspaceDeliverables(synthListing),
+            synthBaseline.paths,
+            synthKeepNamed,
+            synthBaseline.sizesByName
+        ),
+        toolSummary: synthToolSummary,
+        baselinePaths: synthBaseline.paths,
+    });
+    if (verifiedDiskDeliverables.length === 0 && synthTouched) {
+        verifiedDiskDeliverables = listWorkspaceDeliverables(synthListing)
+            .filter((d) =>
+                fileSizeChangedFromBaseline(d.pathInAgentFolder, d.size, synthBaseline.sizesByName)
+            )
+            .slice(0, 12);
+    }
+    if (verifiedDiskDeliverables.length === 0) {
+        verifiedDiskDeliverables = expectedDiskDeliverables;
+    }
+    verifiedDiskDeliverables = mergeStdoutDeliverables({
+        deliverables: verifiedDiskDeliverables,
+        toolSummary: synthToolSummary,
+        baselinePaths: synthBaseline.paths,
+    });
+
+    const synthGoalBlob = [
+        currentGoal.title || '',
+        currentGoal.description || '',
+        goalExpansionDoc?.suggestedApproach || '',
+        ...(goalExpansionDoc?.acceptanceChecks || []),
+        ...(Array.isArray(goalExpansionDoc?.expectations) ? goalExpansionDoc.expectations : []),
+    ].join('\n');
+    const synthNeedsCode = goalRequiresCodeDeliverable(synthGoalBlob);
+    const synthNeedsDb = goalRequiresDatabaseDeliverable(synthGoalBlob);
+    const synthCodeDeliverables = listWorkspaceDeliverables(synthListing).filter((d) =>
+        /\.(js|mjs|cjs|ts|py)$/i.test(d.pathInAgentFolder.split('/').pop() || '')
+    );
+
+    const synthEmptyNamed = namedOutputsEmptyOnDisk(synthListing, synthKeepNamed).filter(
+        (n) =>
+            !verifiedDiskDeliverables.some(
+                (d) =>
+                    d.size > 0 &&
+                    (d.pathInAgentFolder.replace(/\\/g, '/').split('/').pop() || '').toLowerCase() ===
+                        n.toLowerCase()
+            )
+    );
+
+    // Hard stop: do not claim success for a file goal when the expected file is missing.
+    if (
+        expansionExpectsWorkspaceFile(goalExpansionDoc, `${currentGoal.title}\n${currentGoal.description || ''}`) &&
+        ((!isChildGoal &&
+            expectedDiskDeliverables.length === 0 &&
+            verifiedDiskDeliverables.length === 0 &&
+            !synthTouched) ||
+            (synthNeedsCode && synthCodeDeliverables.length === 0) ||
+            (synthNeedsDb && !hasDatabaseDeliverableEvidence(synthListing, verifiedDiskDeliverables)) ||
+            synthEmptyNamed.length > 0)
+    ) {
+        const budgetNow = computeAgentBudgetStatus({
+            totalTokens: agent.totalTokens || 0,
+            tickCount: tickNumber,
+            limits: budgetLimitsFromAgentDoc(agent),
+        });
+        if (!budgetNow.maxExceeded) {
+            await writeUpdate({
+                agentInstanceId: id,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                updateType: 'verify',
+                message: `Blocked finalize — expected deliverable missing (${expectedExtsSynth.join('|') || 'file'}). Continuing.`,
+                goalId: currentGoal._id as mongoose.Types.ObjectId,
+                tickNumber,
+            });
+            if (placeholderId) {
+                try {
+                    await ModelChatLlm.findByIdAndDelete(placeholderId);
+                } catch {
+                    /* ignore */
+                }
+            }
+            // Clear streaming placeholder and force another tool tick instead of hallucinating.
+            await ModelAgentInstance.findByIdAndUpdate(id, {
+                $set: {
+                    brainStep: 'use_tool',
+                    statusIsRunning: false,
+                    updatedAtUtc: new Date(),
+                },
+            });
+            return;
+        }
+    }
+
     let answer = '';
     try {
         answer = await synthesizeAgentAnswer({
@@ -1735,15 +2331,20 @@ export const agentTickSynthesize = async (
             goalTitle: currentGoal.title,
             goalDescription: currentGoal.description || currentGoal.title,
             memorySummary: formatMemorySummary(memMapped),
-            pastChatSummary: past10Messages
-                .map((m) => `${m.role}: ${m.content}`)
+            pastChatSummary: synthContextPack.actions
+                .filter((a) => a.kind === 'chat_user' || a.kind === 'chat_assistant')
+                .slice(-20)
+                .map((a) => `${a.kind === 'chat_user' ? 'user' : 'assistant'}: ${a.body}`)
                 .join('\n')
                 .slice(0, 3000),
+            contextPack: synthContextPack.formatted,
+            chatMessages: synthContextPack.chatWindow,
             activeSkillsBlock,
             chatMessageId: placeholderId || undefined,
             budgetContext,
             goalExpansion,
             childResultsPack: childResultsPack || undefined,
+            verifiedDiskDeliverables,
         });
     } catch (synthErr) {
         if (placeholderId) {
@@ -1754,6 +2355,42 @@ export const agentTickSynthesize = async (
             }
         }
         throw synthErr;
+    }
+
+    if (looksLikeUnexecutedToolPlan(answer) || looksLikeIncompleteProgress(answer)) {
+        const budgetNow = computeAgentBudgetStatus({
+            totalTokens: agent.totalTokens || 0,
+            tickCount: tickNumber,
+            limits: budgetLimitsFromAgentDoc(agent),
+        });
+        if (!budgetNow.maxExceeded) {
+            await writeUpdate({
+                agentInstanceId: id,
+                userId: agent.userId,
+                threadId: agent.threadId,
+                updateType: 'verify',
+                message: looksLikeUnexecutedToolPlan(answer)
+                    ? 'Blocked finalize — synthesize returned an unexecuted tool plan. Running execute_script instead.'
+                    : 'Blocked finalize — synthesize was a progress report, not a completed deliverable. Continue implementing.',
+                goalId: currentGoal._id as mongoose.Types.ObjectId,
+                tickNumber,
+            });
+            if (placeholderId) {
+                try {
+                    await ModelChatLlm.findByIdAndDelete(placeholderId);
+                } catch {
+                    /* ignore */
+                }
+            }
+            await ModelAgentInstance.findByIdAndUpdate(id, {
+                $set: {
+                    brainStep: 'use_tool',
+                    statusIsRunning: false,
+                    updatedAtUtc: new Date(),
+                },
+            });
+            return;
+        }
     }
 
     currentGoal.status = 'completed';

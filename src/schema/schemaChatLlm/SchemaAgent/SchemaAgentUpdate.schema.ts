@@ -54,6 +54,7 @@ const agentUpdateSchema = new Schema<IAgentUpdate>({
         ref: 'agentGoal',
     },
     tickNumber: { type: Number, default: 0 },
+    past: { type: Boolean, default: false, index: true },
     createdAtUtc: { type: Date, default: () => new Date(), index: true },
 });
 

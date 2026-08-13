@@ -14,6 +14,7 @@ import { deleteFilesByParentEntityId } from '../../upload/uploadFileS3ForFeature
 import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOrNull';
 import cleanupThreadOnDelete from './utils/cleanupThreadOnDelete';
 import type { tsUserApiKey } from '../../../utils/llm/llmCommonFunc';
+import { contextWindowLimitsFromDoc } from '../chatLlmCrud/agent/agentUtils/agentContextWindow';
 
 // Router
 const router = Router();
@@ -261,6 +262,9 @@ router.post(
                 agentMaxBudgetTokens,
                 agentMinNumberOfIterations,
                 agentMaxNumberOfIterations,
+                agentContextActionLimit,
+                agentContextSummaryCount,
+                agentContextMessagesPerSummary,
 
                 executeShell,
                 shellExecuteMinAttempts,
@@ -293,6 +297,9 @@ router.post(
                 agentMaxBudgetTokens: 1_000_000,
                 agentMinNumberOfIterations: 1,
                 agentMaxNumberOfIterations: 100,
+                agentContextActionLimit: 100,
+                agentContextSummaryCount: 10,
+                agentContextMessagesPerSummary: 10,
 
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
@@ -426,6 +433,21 @@ router.post(
                 }
             };
 
+            const contextWindow = contextWindowLimitsFromDoc({
+                agentContextActionLimit,
+                agentContextSummaryCount,
+                agentContextMessagesPerSummary,
+            });
+            if (typeof agentContextActionLimit === 'number') {
+                addData.agentContextActionLimit = contextWindow.actionLimit;
+            }
+            if (typeof agentContextSummaryCount === 'number') {
+                addData.agentContextSummaryCount = contextWindow.summaryCount;
+            }
+            if (typeof agentContextMessagesPerSummary === 'number') {
+                addData.agentContextMessagesPerSummary = contextWindow.messagesPerSummary;
+            }
+
             // Shell primary command retries (per thread), integers 1–10, min ≤ max
             let shellMinA: number | undefined = undefined;
             let shellMaxA: number | undefined = undefined;
@@ -550,6 +572,9 @@ router.post(
                 agentMaxBudgetTokens,
                 agentMinNumberOfIterations,
                 agentMaxNumberOfIterations,
+                agentContextActionLimit,
+                agentContextSummaryCount,
+                agentContextMessagesPerSummary,
 
                 executeShell,
 
@@ -721,6 +746,21 @@ router.post(
                     updateData.agentMaxNumberOfIterations = maxIterations;
                 }
             };
+
+            const contextWindowEdit = contextWindowLimitsFromDoc({
+                agentContextActionLimit,
+                agentContextSummaryCount,
+                agentContextMessagesPerSummary,
+            });
+            if (typeof agentContextActionLimit === 'number') {
+                updateData.agentContextActionLimit = contextWindowEdit.actionLimit;
+            }
+            if (typeof agentContextSummaryCount === 'number') {
+                updateData.agentContextSummaryCount = contextWindowEdit.summaryCount;
+            }
+            if (typeof agentContextMessagesPerSummary === 'number') {
+                updateData.agentContextMessagesPerSummary = contextWindowEdit.messagesPerSummary;
+            }
 
             let shellMinB: number | undefined = undefined;
             let shellMaxB: number | undefined = undefined;

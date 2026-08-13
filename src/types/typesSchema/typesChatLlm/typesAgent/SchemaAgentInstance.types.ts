@@ -42,7 +42,12 @@ export interface IAgentInstance extends Document {
     maxBudgetTokens: number;
     minNumberOfIterations: number;
     maxNumberOfIterations: number;
+    contextActionLimit: number;
+    contextSummaryCount: number;
+    contextMessagesPerSummary: number;
     activeSkillNames: string[];
     createdAtUtc: Date;
     updatedAtUtc: Date;
+    /** Set when status becomes success or failed */
+    completedAtUtc: Date | null;
 }

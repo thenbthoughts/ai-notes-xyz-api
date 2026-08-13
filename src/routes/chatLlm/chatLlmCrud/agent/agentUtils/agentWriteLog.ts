@@ -25,6 +25,8 @@ export type WriteAgentLogArgs = {
     raw?: unknown;
     goalId?: mongoose.Types.ObjectId | null;
     tickNumber?: number;
+    /** Copied history. Never increment instance usage for these rows. */
+    past?: boolean;
 };
 
 /** Shared context for shell / LLM logs tied to an agent run. */
@@ -34,6 +36,7 @@ export type AgentLogContext = {
     threadId: mongoose.Types.ObjectId;
     goalId?: mongoose.Types.ObjectId | null;
     tickNumber?: number;
+    past?: boolean;
 };
 
 const shortTitle = (action: string, message: string, title?: string): string => {
@@ -65,6 +68,7 @@ const writeAgentLog = async (args: WriteAgentLogArgs): Promise<void> => {
             raw: args.raw ?? null,
             goalId: args.goalId || null,
             tickNumber: args.tickNumber ?? 0,
+            past: Boolean(args.past),
             createdAtUtc: new Date(),
         });
     } catch (err) {
@@ -197,7 +201,7 @@ export const fetchLlmUnifiedLogged = async ({
             },
         });
 
-        if (result.success && result.usageStats && logCtx.agentInstanceId) {
+        if (result.success && result.usageStats && logCtx.agentInstanceId && !logCtx.past) {
             const u = result.usageStats;
             const prompt = Number(u.promptTokens) || 0;
             const completion = Number(u.completionTokens) || 0;

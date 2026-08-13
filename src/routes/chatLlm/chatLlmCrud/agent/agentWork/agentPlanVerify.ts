@@ -3,6 +3,11 @@ import { fetchLlmUnifiedStream } from '../../../../../utils/llmPendingTask/utils
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import writeAgentLog, { fetchLlmUnifiedLogged, AgentLogContext } from '../agentUtils/agentWriteLog';
 import { AGENT_SHELL_ENV_BLURB } from '../agentUtils/agentShell/agentShellEnvironmentContext';
+import {
+    isAgentContextMemoryKey,
+    withContextChatMessages,
+    type AgentChatWindow,
+} from '../agentUtils/agentContextWindow';
 import type { AgentSkillCatalogItem } from '../../agentSkills/agentSkillsLib';
 import { ModelAgentInstance } from '../../../../../schema/schemaChatLlm/SchemaAgent/SchemaAgentInstance.schema';
 import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
@@ -44,6 +49,7 @@ export type AgentPlanDecision =
           code?: string;
           scriptType?: string;
           fileName?: string;
+          relativePath?: string;
           reason?: string;
           skillsToLoad: string[];
       };
@@ -97,7 +103,7 @@ export const detectArtifactEvidence = (
     ].join('\n');
     // Require /app/data/... or ai-notes-xyz-shell-files/... (optional PDF_PATH= prefix).
     const pathRe =
-        /(?:(?:PDF|XLSX|FILE|OUT)_PATH=)?(?:\/app\/data\/|ai-notes-xyz-shell-files\/)[^\s"'`<>|]{3,400}\.(pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx)/gi;
+        /(?:(?:PDF|XLSX|FILE|OUT)_PATH=)?(?:\/app\/data\/|ai-notes-xyz-shell-files\/)[^\s"'`<>|]{3,400}\.([a-z0-9]{1,12})/gi;
     const paths: string[] = [];
     const extSet = new Set<string>();
     let m: RegExpExecArray | null;
@@ -114,12 +120,173 @@ export const detectArtifactEvidence = (
 };
 
 const DELIVERABLE_EXT_RE =
-    /\.(pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx|txt|md|eml|html|json|ics)$/i;
+    /\.(pdf|xlsx|xls|csv|tsv|png|jpe?g|webp|gif|zip|docx|txt|md|eml|html|json|ics|js|mjs|cjs|ts|py|sql|ya?ml|mmd|db|sqlite3?)$/i;
+
+/** Well-known files with no extension (Makefile, Dockerfile, …). */
+const EXTENSIONLESS_DELIVERABLE_RE =
+    /^(makefile|dockerfile|procfile|gemfile|rakefile|license|copying|cmakelists\.txt|\.env(?:\.example)?|\.gitignore)$/i;
+
+/** Helper / probe scripts the agent writes — never count these as the user deliverable. */
+const HELPER_SCRIPT_NAME_RE =
+    /^(script_\d+|create_artifact|create_[a-z0-9_-]+\.(?:py|js|mjs|cjs|ts)$|plan_probe|tmp_|read_|analyze_|inspect_|debug_|probe_|check_|verify_|count_|process_|convert_|sort_|append_|validate_|identify_|final_|list_|cat_|find_|search_|scan_|locate_|walk_|discover_|investigate_|discovery_|encode_|decode_|replace_|generate_|parse_)|_check\.(?:py|js|mjs|cjs|ts)$/i;
+
+/** Tool stdout that proves a file was written (OUT=/SIZE= plus common print shapes). */
+const TOOL_PRINTED_META_RE =
+    /OUT\s*=|SIZE\s*[:=]|SIZE_?BYTES?\s*[:=]|FILE[_ ]?(?:CREATED|SIZE)|File created|absolute path|\d+\s*bytes\b|appended|updated|wrote|written|saved (to|successfully)|output saved/i;
+
+const parsePrintedFileSize = (summary: string): number => {
+    const m =
+        String(summary || '').match(/SIZE(?:_?BYTES?)?\s*[:=]\s*(\d+)/i) ||
+        String(summary || '').match(/FILE_SIZE\s*[:=]\s*(\d+)/i) ||
+        String(summary || '').match(/Size:\s*(\d+)\s*bytes/i) ||
+        String(summary || '').match(/(\d+)\s*bytes\b/i);
+    const n = m ? Number(m[1]) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+/**
+ * Infer expected output extensions from goal expansion / title / description.
+ * Empty array = any non-helper deliverable is acceptable.
+ */
+export const inferExpectedDeliverableExts = (params: {
+    title?: string;
+    description?: string;
+    acceptanceChecks?: string[];
+    expectations?: string[];
+    outputFormat?: string;
+    suggestedApproach?: string;
+}): string[] => {
+    const blob = [
+        params.title || '',
+        params.description || '',
+        params.outputFormat || '',
+        params.suggestedApproach || '',
+        ...(params.acceptanceChecks || []),
+        ...(params.expectations || []),
+    ]
+        .join('\n')
+        .toLowerCase();
+
+    const found = new Set<string>();
+    const add = (ext: string) => found.add(ext.replace(/^\./, '').toLowerCase());
+
+    // Count/list/report-over-inputs: ".md files in this tree" are inputs, not the deliverable.
+    // Returning [] lets any new non-helper file (or chat answer) stop the loop.
+    const isInputScanOnly =
+        /\b(count|how many|list|enumerate|search for)\b/.test(blob) &&
+        !/\b(create|write|save|generate|convert|build|produce|merge|export|render|replace|substitute)\b/.test(
+            blob
+        );
+    if (isInputScanOnly) {
+        return [];
+    }
+
+    // Standalone type mentions (".json", "save as .ics") — not the ext inside input names like fields.txt.
+    const standaloneType = blob.matchAll(
+        /(?:^|[\s'"(`[])\.(pdf|xlsx|xls|csv|tsv|png|jpe?g|webp|gif|zip|docx|txt|md|eml|html|json|ics|js|mjs|cjs|ts|sql|ya?ml|mmd)\b/gi
+    );
+    for (const m of standaloneType) add(m[1]);
+    // Named outputs / in-place edit targets (including uncommon exts like input.b64).
+    for (const m of blob.matchAll(/\b([a-z0-9][\w.-]*\.([a-z0-9]{1,12}))\b/gi)) {
+        const name = String(m[1] || '');
+        const ext = String(m[2] || '').toLowerCase();
+        if (!ext || /^(pyc|pyo|class|lock|map|tmp|git|log|example|env)$/.test(ext)) continue;
+        if (HELPER_SCRIPT_NAME_RE.test(name)) continue;
+        const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const asOutput = new RegExp(
+            `(?:into|to|named|create|write|save|generate|output)\\s+['"\`]?${esc}\\b|\\b${esc}\\b.{0,40}(?:created|exists)\\b`,
+            'i'
+        );
+        const asInPlace = new RegExp(
+            `(?:replace|append|edit|overwrite|trim|modify|in-place).{0,60}${esc}|${esc}.{0,60}(?:replace|append|modified|in-place)`,
+            'i'
+        );
+        if (asOutput.test(blob) || asInPlace.test(blob)) add(ext);
+    }
+
+    if (/\bics\b|icalendar|calendar invite|meeting\.ics/i.test(blob)) add('ics');
+    if (/\bpdf\b/i.test(blob)) add('pdf');
+    if (/\bxlsx\b|excel/i.test(blob)) add('xlsx');
+    if (/\bjson\b/i.test(blob) && /\b(write|create|save|generate|output|file|object|document)\b/i.test(blob)) {
+        add('json');
+    }
+    if (/\bhtml\b/i.test(blob) && /\b(convert|write|create|save|generate|output|file|render)\b/i.test(blob)) {
+        add('html');
+    }
+    if (/\btsv\b/i.test(blob) || (/tabs?\b/i.test(blob) && /csv|comma/i.test(blob))) add('tsv');
+    if (/\bzip\b|password-protected zip|archive/i.test(blob)) add('zip');
+    if (
+        /\bsqlite3?\b/.test(blob) ||
+        (/\b(database|\.db|\.sqlite)\b/.test(blob) &&
+            /\b(create|seed|insert|populate|import)\b/.test(blob))
+    ) {
+        add('db');
+        add('sqlite');
+        add('sqlite3');
+    }
+    if (
+        /\bgrayscale|resize|rotate|watermark|screenshot|compress.*image/i.test(blob)
+    ) {
+        add('png');
+        add('jpg');
+        add('jpeg');
+        add('webp');
+    }
+    // Sum/count/average of a file with no named output — a .txt result is the deliverable.
+    if (
+        found.size === 0 &&
+        /\b(sum|total|count|average|calculate|compute)\b/.test(blob) &&
+        !/\b(personal-research|search_all_domains)\b/.test(blob)
+    ) {
+        add('txt');
+    }
+    // Implement JS/TS — not merely mentioning "Node.js" (e.g. a .gitignore for Node).
+    if (
+        /\bttl cache|in-memory cache|shared module|refactor|middleware|express|flask|fastify/i.test(blob) ||
+        /\bget\s+\/[a-z0-9]/i.test(blob) ||
+        /\b(endpoint|http server|web server|rest[\s-]?api)\b/i.test(blob) ||
+        (/\b(javascript|typescript)\b/.test(blob) &&
+            /\b(script|module|file|implement|write|create|build)\b/.test(blob)) ||
+        (/\bnode(?:\.js|js)?\b/.test(blob) &&
+            /\b(script|module|server|app|implement|express)\b/.test(blob))
+    ) {
+        add('js');
+        add('mjs');
+    }
+
+    return [...found];
+};
+
+/** HTTP/API implement goals need a real .js/.py module — a JSON dump is not enough. */
+export const goalRequiresCodeDeliverable = (blob: string): boolean => {
+    const t = String(blob || '').toLowerCase();
+    return (
+        /\b(express|flask|fastify|koa|middleware)\b/.test(t) ||
+        /\bget\s+\/[a-z0-9]/.test(t) ||
+        /\b(endpoint|http server|web server|rest[\s-]?api|createserver)\b/.test(t) ||
+        /\bserve\b.{0,80}\b(get\b|\/[a-z]|users\b|api\b)/.test(t)
+    );
+};
+
+const DATABASE_FILE_RE = /\.(db|sqlite3?)$/i;
+
+/** SQLite/create-DB goals need a real .db/.sqlite on disk — a converter script is not enough. */
+export const goalRequiresDatabaseDeliverable = (blob: string): boolean => {
+    const t = String(blob || '').toLowerCase();
+    return (
+        /\bsqlite3?\b/.test(t) ||
+        (/\b(database|\.db|\.sqlite)\b/.test(t) &&
+            /\b(create|seed|insert|populate|import)\b/.test(t))
+    );
+};
 
 /**
  * Non-venv workspace files that look like user deliverables (size > 0).
  * Used to stop endless "verify with pandas" loops once the file exists.
  * Fixture inputs are excluded via workspace baseline (not by skipping uploads/).
+ * Helper scripts (read_*.py, create_artifact.*, analyze_*) never count.
+ * When expectedExts is set, ONLY matching extensions count (prevents read_meeting.py
+ * counting as success for an .ics goal).
  */
 export const listWorkspaceDeliverables = (
     listing: Array<{
@@ -128,8 +295,19 @@ export const listWorkspaceDeliverables = (
         absolutePath?: string;
         isDir?: boolean;
         size?: number;
-    }>
+    }>,
+    opts?: { expectedExts?: string[] }
 ): Array<{ relativePath: string; pathInAgentFolder: string; absolutePath: string; size: number }> => {
+    const expectedExts = (opts?.expectedExts || [])
+        .map((e) => e.replace(/^\./, '').toLowerCase())
+        .filter(Boolean);
+    // JS/TS are interchangeable. Do not treat probe .py scripts as a Node/JWT/Express app.
+    const JS_EXTS = ['js', 'mjs', 'cjs', 'ts'];
+    if (expectedExts.some((e) => JS_EXTS.includes(e))) {
+        for (const e of JS_EXTS) {
+            if (!expectedExts.includes(e)) expectedExts.push(e);
+        }
+    }
     const out: Array<{
         relativePath: string;
         pathInAgentFolder: string;
@@ -139,16 +317,27 @@ export const listWorkspaceDeliverables = (
     for (const f of listing || []) {
         if (!f || f.isDir) continue;
         const rel = String(f.relativePath || '').replace(/\\/g, '/');
-        if (!rel || !DELIVERABLE_EXT_RE.test(rel)) continue;
-        if (/\/venv\/|\/venv_|\.agent_venv\/|site-packages|__pycache__|\.dist-info\//i.test(rel)) continue;
+        if (!rel) continue;
+        if (/\/venv\/|\/venv_|\.agent_venv\/|site-packages|__pycache__|\.dist-info\//i.test(rel)) {
+            continue;
+        }
+        if (/\.(pyc|pyo|class|lock|map|tmp)$/i.test(rel)) continue;
         const pathInAgentFolder = String(f.pathInAgentFolder || rel.split('/').pop() || rel).replace(
             /\\/g,
             '/'
         );
-        // Agent helper scripts are not user deliverables.
         const baseName = pathInAgentFolder.split('/').pop() || pathInAgentFolder;
-        if (/^(script_\d+|create_artifact|plan_probe|tmp_)\./i.test(baseName)) {
-            continue;
+        if (HELPER_SCRIPT_NAME_RE.test(baseName)) continue;
+        const knownExt = DELIVERABLE_EXT_RE.test(rel);
+        const anyShortExt = /\.[a-z0-9]{1,12}$/i.test(baseName);
+        const extensionlessOk = EXTENSIONLESS_DELIVERABLE_RE.test(baseName);
+        if (!knownExt && !anyShortExt && !extensionlessOk) continue;
+        if (expectedExts.length > 0) {
+            const ok =
+                expectedExts.some((e) => new RegExp(`\\.${e}$`, 'i').test(baseName)) ||
+                extensionlessOk;
+            if (!ok && knownExt) continue;
+            if (!ok && !anyShortExt && !extensionlessOk) continue;
         }
         const size = typeof f.size === 'number' ? f.size : 0;
         if (size <= 0) continue;
@@ -162,20 +351,299 @@ export const listWorkspaceDeliverables = (
     return out;
 };
 
-/** Keep only deliverables that were not present in the pre-run baseline (fixtures). */
+export const listingHasDatabaseDeliverable = (
+    listing: Parameters<typeof listWorkspaceDeliverables>[0]
+): boolean =>
+    listWorkspaceDeliverables(listing).some((d) =>
+        DATABASE_FILE_RE.test(d.pathInAgentFolder.split('/').pop() || '')
+    );
+
+/** Listing can miss .db files; also accept stdout-merged / extra deliverable paths. */
+export const hasDatabaseDeliverableEvidence = (
+    listing: Parameters<typeof listWorkspaceDeliverables>[0],
+    extraDeliverables?: Array<{ pathInAgentFolder?: string; relativePath?: string; absolutePath?: string }>
+): boolean => {
+    if (listingHasDatabaseDeliverable(listing)) return true;
+    return (extraDeliverables || []).some((d) =>
+        DATABASE_FILE_RE.test(
+            String(d.pathInAgentFolder || d.relativePath || d.absolutePath || '')
+                .replace(/\\/g, '/')
+                .split('/')
+                .pop() || ''
+        )
+    );
+};
+
+/** Filenames mentioned in the goal (e.g. doc.txt). */
+export const namedFilesInGoalText = (blob: string): string[] => {
+    const found = new Set<string>();
+    for (const m of String(blob || '').matchAll(/(?:^|[^\w])(\.?[a-z0-9][\w.-]*\.[a-z0-9]{1,12})\b/gi)) {
+        const n = String(m[1] || '').toLowerCase();
+        if (n && !HELPER_SCRIPT_NAME_RE.test(n)) found.add(n);
+    }
+    return [...found];
+};
+
+/** Named files that are outputs or in-place edit targets — not mere inputs like app.log. */
+export const namedOutputFilesInGoalText = (blob: string): string[] => {
+    const text = String(blob || '');
+    const out: string[] = [];
+    for (const n of namedFilesInGoalText(text)) {
+        const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const asOutput = new RegExp(
+            `(?:into|to|named|create|write|save|generate|output)\\s+['"\`]?${esc}\\b|\\b${esc}\\b.{0,40}(?:created|exists)\\b`,
+            'i'
+        );
+        const asInPlace = new RegExp(
+            `(?:replace|append|edit|overwrite|trim|modify|in-place|add|implement|update|insert|patch|validation).{0,80}${esc}|${esc}.{0,60}(?:replace|append|modified|in-place|validation)`,
+            'i'
+        );
+        if (asOutput.test(text) || asInPlace.test(text)) out.push(n);
+    }
+    return out;
+};
+
+/** True when this file’s size differs from the workspace baseline (in-place edit). */
+export const fileSizeChangedFromBaseline = (
+    pathInAgentFolder: string,
+    size: number,
+    sizesByName?: Map<string, number> | Record<string, number>
+): boolean => {
+    if (!sizesByName) return true;
+    const name =
+        String(pathInAgentFolder || '')
+            .replace(/\\/g, '/')
+            .toLowerCase()
+            .split('/')
+            .pop() || '';
+    if (!name) return true;
+    const baseSize =
+        sizesByName instanceof Map ? sizesByName.get(name) : sizesByName[name];
+    if (typeof baseSize !== 'number') return true;
+    return size !== baseSize;
+};
+
+/** Named outputs that exist on disk but are empty (size 0) — not done yet. */
+export const namedOutputsEmptyOnDisk = (
+    listing: Array<{
+        pathInAgentFolder?: string;
+        relativePath?: string;
+        isDir?: boolean;
+        size?: number;
+    }>,
+    keepNamed?: Iterable<string>
+): string[] => {
+    const keep = new Set(
+        [...(keepNamed || [])]
+            .map((p) =>
+                String(p || '')
+                    .replace(/\\/g, '/')
+                    .toLowerCase()
+                    .split('/')
+                    .pop()
+            )
+            .filter(Boolean)
+    );
+    if (!keep.size) return [];
+    const empty: string[] = [];
+    for (const f of listing || []) {
+        if (!f || f.isDir) continue;
+        const name = String(f.pathInAgentFolder || f.relativePath || '')
+            .replace(/\\/g, '/')
+            .split('/')
+            .pop();
+        if (!name || !keep.has(name.toLowerCase())) continue;
+        if ((typeof f.size === 'number' ? f.size : 0) <= 0) empty.push(name);
+    }
+    return empty;
+};
+
+/** Keep new files, plus named in-place targets whose size changed vs the fixture. */
 export const filterNewDeliverables = (
     deliverables: ReturnType<typeof listWorkspaceDeliverables>,
-    baselinePaths: Iterable<string>
+    baselinePaths: Iterable<string>,
+    keepNamed?: Iterable<string>,
+    baselineSizesByName?: Map<string, number> | Record<string, number>
 ): ReturnType<typeof listWorkspaceDeliverables> => {
     const base = new Set(
         [...baselinePaths].map((p) => String(p || '').replace(/\\/g, '/').toLowerCase())
+    );
+    const keep = new Set(
+        [...(keepNamed || [])]
+            .map((p) =>
+                String(p || '')
+                    .replace(/\\/g, '/')
+                    .toLowerCase()
+                    .split('/')
+                    .pop()
+            )
+            .filter(Boolean)
     );
     if (base.size === 0) return deliverables;
     return deliverables.filter((d) => {
         const a = d.pathInAgentFolder.replace(/\\/g, '/').toLowerCase();
         const b = d.relativePath.replace(/\\/g, '/').toLowerCase();
-        return !base.has(a) && !base.has(b) && !base.has(a.split('/').pop() || '');
+        const name = a.split('/').pop() || '';
+        if (keep.has(name)) {
+            return fileSizeChangedFromBaseline(name, d.size, baselineSizesByName);
+        }
+        return !base.has(a) && !base.has(b) && !base.has(name);
     });
+};
+
+/**
+ * When the shell listing is stale, still count grounded tool stdout paths
+ * (`/app/data/...` or `ai-notes-xyz-shell-files/...` plus a printed size).
+ * Helper scripts never count. Baseline fixtures are left to listing / in-place detection.
+ */
+export const mergeStdoutDeliverables = (params: {
+    deliverables: ReturnType<typeof listWorkspaceDeliverables>;
+    toolSummary?: string;
+    baselinePaths?: Iterable<string>;
+    expectedExts?: string[];
+}): ReturnType<typeof listWorkspaceDeliverables> => {
+    const existing = [...(params.deliverables || [])];
+    const summary = String(params.toolSummary || '');
+    if (!summary.trim()) return existing;
+    if (/<\|tool_call|call:shell-environment:execute_script\{/i.test(summary)) return existing;
+
+    const { paths } = detectArtifactEvidence([], summary);
+    if (!paths.length) return existing;
+
+    const expectedExts = (params.expectedExts || [])
+        .map((e) => e.replace(/^\./, '').toLowerCase())
+        .filter(Boolean);
+    const have = new Set(
+        existing.map((d) => (d.pathInAgentFolder.replace(/\\/g, '/').split('/').pop() || '').toLowerCase())
+    );
+
+    for (const p of paths) {
+        const clean = p.replace(/^\/app\/data\//, '').replace(/\\/g, '/');
+        const name = clean.split('/').pop() || '';
+        if (!name || HELPER_SCRIPT_NAME_RE.test(name)) continue;
+        if (have.has(name.toLowerCase())) continue;
+        if (expectedExts.length > 0 && !expectedExts.some((e) => new RegExp(`\\.${e}$`, 'i').test(name))) {
+            continue;
+        }
+        const size = parsePrintedFileSize(summary);
+        if (size <= 0) continue;
+        existing.push({
+            relativePath: clean,
+            pathInAgentFolder: name,
+            absolutePath: p.startsWith('/') ? p : `/app/data/${clean}`,
+            size,
+        });
+        have.add(name.toLowerCase());
+    }
+    return existing;
+};
+
+/**
+ * True when tool stdout shows a workspace file was written/updated (including baseline fixtures).
+ * Prevents infinite loops on in-place edits (append, migrate, overwrite).
+ */
+export const toolTouchedWorkspaceFile = (params: {
+    lastToolSummary?: string;
+    listing: Array<{ pathInAgentFolder?: string; relativePath?: string; isDir?: boolean; size?: number }>;
+    baselineSizesByName?: Map<string, number> | Record<string, number>;
+}): boolean => {
+    const summary = String(params.lastToolSummary || '');
+    if (!summary.trim()) return false;
+    if (/<\|tool_call|call:shell-environment:execute_script\{/i.test(summary)) return false;
+    const printed = TOOL_PRINTED_META_RE.test(summary);
+    if (!printed) return false;
+    return (params.listing || []).some((f) => {
+        if (!f || f.isDir) return false;
+        const name = String(f.pathInAgentFolder || f.relativePath || '')
+            .replace(/\\/g, '/')
+            .split('/')
+            .pop();
+        if (!name || name.length < 2) return false;
+        if (HELPER_SCRIPT_NAME_RE.test(name)) return false;
+        if (!fileSizeChangedFromBaseline(name, f.size || 0, params.baselineSizesByName)) return false;
+        return summary.includes(name) || new RegExp(name.replace(/\./g, '\\.'), 'i').test(summary);
+    });
+};
+
+/**
+ * Cheap evidence from tool stdout + deliverable names.
+ * Basics only — LLM decides how to produce the file.
+ */
+export const toolEvidenceSupportsDeliverables = (params: {
+    lastToolSummary?: string;
+    deliverables: Array<{ pathInAgentFolder: string; size: number }>;
+    expectedExts?: string[];
+    acceptanceChecks?: string[];
+}): { ok: boolean; reason: string } => {
+    const summary = String(params.lastToolSummary || '');
+    const dels = params.deliverables || [];
+    if (!dels.length) {
+        return { ok: false, reason: 'No matching deliverable on disk' };
+    }
+    if (/<\|tool_call|call:shell-environment:execute_script/i.test(summary)) {
+        return { ok: false, reason: 'Unexecuted tool plan in transcript — run execute_script' };
+    }
+    const names = dels.map((d) => (d.pathInAgentFolder.split('/').pop() || d.pathInAgentFolder).toLowerCase());
+    const mentioned = names.some((n) => summary.toLowerCase().includes(n));
+    const printedMeta = TOOL_PRINTED_META_RE.test(summary);
+    if (!summary.trim()) {
+        if (dels.every((d) => d.size > 0)) {
+            return { ok: true, reason: 'Deliverable on disk with size>0' };
+        }
+        return { ok: false, reason: 'Empty tool transcript and empty deliverable' };
+    }
+    if (!mentioned && !printedMeta) {
+        return {
+            ok: false,
+            reason: 'Tool output does not reference the deliverable — print path/size then continue',
+        };
+    }
+    return { ok: true, reason: 'Tool evidence supports deliverable' };
+};
+
+/** Synthesize/child results that are fake tool-call XML must not complete the goal. */
+export const looksLikeUnexecutedToolPlan = (text: string): boolean =>
+    /<\|tool_call|call:shell-environment:execute_script\{/i.test(String(text || ''));
+
+/** Progress report / "I'll do it next" is not a finished deliverable. */
+export const looksLikeIncompleteProgress = (text: string): boolean => {
+    const t = String(text || '');
+    if (!t.trim()) return false;
+    if (
+        /\bcould not fully synthesize|try sending the question again|no domain evidence was collected yet\b/i.test(
+            t
+        )
+    ) {
+        return true;
+    }
+    const progressy =
+        /\b(next steps|ready to proceed|once (the )?(files?|api|stub|application|structure).{0,60}(located|found|identified)|prepared a search|i will (then|next|proceed)|as soon as .{0,40} (located|found))\b/i.test(
+            t
+        );
+    const claimedDone = /\b(created|wrote|saved|implemented|renamed)\b/i.test(t);
+    return progressy && !claimedDone;
+};
+
+/** Chat/text expansions: the answer belongs in the thread, not as a workspace file. */
+export const isChatOrTextGoal = (outputFormat?: string | null): boolean => {
+    const f = String(outputFormat || '').toLowerCase();
+    return f === 'chat_update' || f === 'text_answer';
+};
+
+/**
+ * Successful execute_script stdout that already contains the user-facing answer
+ * (lists, generated values, counts). Used to stop chat-goal verify loops.
+ */
+export const toolOutputLooksLikeChatAnswer = (lastResultSummary: string): boolean => {
+    const t = String(lastResultSummary || '');
+    if (!t.trim()) return false;
+    if (/<\|tool_call|call:shell-environment:execute_script\{/i.test(t)) return false;
+    if (!/execute_script:\s*ok|script \S+ executed|successfully generated/i.test(t)) return false;
+    const lines = t
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+    return lines.length >= 4;
 };
 
 /**
@@ -405,6 +873,9 @@ export const planAgentStep = async (params: {
     budgetContext?: Record<string, unknown>;
     goalExpansion?: Record<string, unknown> | null;
     childResultsPack?: string;
+    /** Sliding window: last N actions + last M summaries + global summary. */
+    contextPack?: string;
+    chatMessages?: Message[] | AgentChatWindow;
 }): Promise<AgentPlanDecision> => {
     const {
         logCtx,
@@ -421,6 +892,8 @@ export const planAgentStep = async (params: {
         budgetContext,
         goalExpansion,
         childResultsPack,
+        contextPack,
+        chatMessages,
     } = params;
 
     const catalogText = skillsCatalog.length
@@ -473,6 +946,7 @@ Reply JSON ONLY:
   "code": "optional script source",
   "scriptType": "node"|"python",
   "fileName": "script.py or script.js matching scriptType",
+  "relativePath": "optional workspace image path for image_to_text (e.g. uploads/photo.png)",
   "reason": "short why"
 }
 
@@ -481,7 +955,12 @@ Rules:
 - mode=final_answer when evidence may already be enough; include action+code only if a short verify/check script is needed.
 - mode=expand_goals only if the expansion/sub-goals clearly cannot produce the deliverable.
 - Honor suggestedApproach / suggestedTools when sensible.
-- If requiresShell and a file is expected, use execute_script (or list_workspace_files). Print absolute paths.
+- If the user uploaded an image and wants text, OCR, or a description of what is in the image, use image_to_text (set relativePath or fileName). Do not use execute_script/Pillow for OCR.
+- If requiresShell and a file is expected, call execute_script immediately. Named inputs in the user message / workspace baseline are enough — do not list_workspace_files first.
+- If workspace outputs are required and no output filename is given, write the computed result to a file (result.txt is fine), print OUT/SIZE, then stop. Do not only print the answer in chat.
+- Use list_workspace_files only to locate an unknown upload, not to confirm a fixture that is already named.
+- If the user asked to implement/add code and the workspace only has specs/fixtures (no app files), WRITE the files. Do not loop searching for a missing stub.
+- Do not final_answer with a progress report ("next steps", "once files are located"). Either create the deliverable or keep using tools.
 - If requiresPersonalData, search domains before final_answer; do not invent personal facts.
 - Honor budget: do not final_answer before minsMet unless maxExceeded/nearMax.
 - Never call Answer Machine.`;
@@ -496,6 +975,7 @@ Rules:
             budget: budgetContext || null,
             memory: memorySummary,
             recentToolResults: recentToolSummary,
+            context: contextPack || null,
             instruction:
                 recentNoopCount >= 2
                     ? 'Too many noops. Prefer the most direct tool, or final_answer if acceptanceChecks are met.'
@@ -505,10 +985,11 @@ Rules:
         2
     );
 
-    const messages: Message[] = [
+    const messages: Message[] = withContextChatMessages(
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-    ];
+        chatMessages,
+        { role: 'user', content: userPrompt }
+    );
 
     const llmResult = await fetchLlmUnifiedLogged({
         logCtx,
@@ -520,7 +1001,7 @@ Rules:
             model: llmConfig.model,
             messages,
             temperature: 0.25,
-            maxTokens: 2000,
+            maxTokens: 900,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
         },
@@ -609,6 +1090,14 @@ Rules:
         scriptType:
             typeof json.scriptType === 'string' ? json.scriptType : requiresShell ? 'python' : undefined,
         fileName: typeof json.fileName === 'string' ? json.fileName : undefined,
+        relativePath:
+            typeof json.relativePath === 'string'
+                ? json.relativePath
+                : typeof json.imagePath === 'string'
+                  ? json.imagePath
+                  : typeof json.filePath === 'string'
+                    ? json.filePath
+                    : undefined,
         reason,
         skillsToLoad: mergedSkills,
     };
@@ -628,6 +1117,8 @@ export const verifyAgentStep = async (params: {
     activeSkillsBlock?: string;
     budgetContext?: Record<string, unknown>;
     goalExpansion?: Record<string, unknown> | null;
+    contextPack?: string;
+    chatMessages?: Message[] | AgentChatWindow;
 }): Promise<AgentVerifyVerdict> => {
     const {
         logCtx,
@@ -640,12 +1131,18 @@ export const verifyAgentStep = async (params: {
         activeSkillsBlock,
         budgetContext,
         goalExpansion,
+        contextPack,
+        chatMessages,
     } = params;
 
-    const expectsFile = goalExpansion?.requiresShell === true;
+    const format = String(goalExpansion?.outputFormat || '').toLowerCase();
+    const expectsFile =
+        goalExpansion?.requiresShell === true &&
+        format !== 'chat_update' &&
+        format !== 'text_answer';
     const requiresPersonalData = goalExpansion?.requiresPersonalData === true;
 
-    const messages: Message[] = [
+    const messages: Message[] = withContextChatMessages(
         {
             role: 'system',
             content:
@@ -662,16 +1159,20 @@ export const verifyAgentStep = async (params: {
                 '}\n' +
                 '- ready_to_synthesize if acceptanceChecks / successCriteria look met from lastResult + memory.\n' +
                 (expectsFile
-                    ? '- File deliverable: if memory/tool output already shows a real .xlsx/.pdf/etc path (or list_workspace_files shows it), use ready_to_synthesize. Do NOT keep looping on pandas/openpyxl verification scripts or venv installs once the file exists.\n'
-                    : '') +
+                    ? '- File existing alone is NOT enough when acceptanceChecks mention content (headers, BEGIN:VCALENDAR, row counts, etc.). Require tool evidence of those checks, or continue with a short verify script.\n' +
+                      '- If lastResult already printed absolute path + size for the EXPECTED output (right extension/name) AND acceptanceChecks are evidenced, use ready_to_synthesize — do NOT re-run the same conversion.\n' +
+                      '- Do NOT treat helper scripts (read_*.py, analyze_*.py, create_artifact.*) as the deliverable.\n' +
+                      '- File deliverable: prefer shell listing / OUT=/SIZE= for the expected extension. After create, a one-line content sniff (head/python) that proves format is preferred before ready_to_synthesize.\n'
+                    : '- Chat/text goals: if lastResult already answers the question (a list, a count, generated values) with successful tool output, use ready_to_synthesize. Do NOT invent extra verify loops, extra check scripts, or require a new file.\n') +
                 (requiresPersonalData
                     ? '- Personal data: once 2+ domains appear in memory (or several searches already ran), use ready_to_synthesize. Do NOT keep searching for every missing detail forever — synthesize grounded advice and mark gaps.\n'
                     : '') +
-                '- continue: more work needed.\n' +
+                '- continue: more work needed (name the missing acceptanceCheck).\n' +
                 '- retry: last action failed; set retryHint.\n' +
                 'Honor budget mins/max.\n' +
                 (activeSkillsBlock ? `\n${activeSkillsBlock}` : ''),
         },
+        chatMessages,
         {
             role: 'user',
             content: JSON.stringify(
@@ -679,15 +1180,18 @@ export const verifyAgentStep = async (params: {
                     goal: { title: goalTitle, description: goalDescription },
                     goalExpansion: goalExpansion || null,
                     lastAction,
-                    lastResultSummary: lastResultSummary.slice(0, 4000),
-                    memory: memorySummary.slice(0, 6000),
+                    lastResultSummary: lastResultSummary.slice(0, 3500),
+                    memory: memorySummary.slice(0, 4500),
+                    context: contextPack || null,
                     budget: budgetContext || null,
+                    verifyInstruction:
+                        'Check each acceptanceCheck. ready_to_synthesize only if all are evidenced; otherwise continue with the cheapest next verify/create step.',
                 },
                 null,
                 2
             ),
-        },
-    ];
+        }
+    );
 
     const llmResult = await fetchLlmUnifiedLogged({
         logCtx,
@@ -699,7 +1203,7 @@ export const verifyAgentStep = async (params: {
             model: llmConfig.model,
             messages,
             temperature: 0.2,
-            maxTokens: 1200,
+            maxTokens: 500,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
         },
@@ -753,6 +1257,14 @@ export const synthesizeAgentAnswer = async (params: {
     budgetContext?: Record<string, unknown>;
     goalExpansion?: Record<string, unknown> | null;
     childResultsPack?: string;
+    contextPack?: string;
+    chatMessages?: Message[] | AgentChatWindow;
+    /** Real files on disk from shell listing — never invent beyond this list. */
+    verifiedDiskDeliverables?: Array<{
+        pathInAgentFolder: string;
+        absolutePath: string;
+        size: number;
+    }>;
 }): Promise<string> => {
     const {
         logCtx,
@@ -766,29 +1278,59 @@ export const synthesizeAgentAnswer = async (params: {
         budgetContext,
         goalExpansion,
         childResultsPack,
+        contextPack,
+        chatMessages,
+        verifiedDiskDeliverables,
     } = params;
 
     const expectsFile = goalExpansion?.requiresShell === true;
-    const artifact = detectArtifactEvidence(
-        memorySummary
-            .split('\n')
-            .filter(Boolean)
-            .map((line, i) => ({ key: `mem_${i}`, content: line })),
-        memorySummary
-    );
+    const diskList = (verifiedDiskDeliverables || [])
+        .map((d) => `- ${d.pathInAgentFolder} | ${d.absolutePath} | ${d.size} bytes`)
+        .slice(0, 12);
+    const hasVerifiedDisk = diskList.length > 0;
 
-    const messages: Message[] = [
+    const pinToVerifiedDisk = (text: string): string => {
+        if (!text || !hasVerifiedDisk) return text;
+        const allowed = new Set(
+            (verifiedDiskDeliverables || []).map((d) =>
+                (d.pathInAgentFolder.split('/').pop() || d.pathInAgentFolder).toLowerCase()
+            )
+        );
+        const cited = [
+            ...text.matchAll(
+                /\b([A-Za-z0-9][\w.-]*\.(?:pdf|xlsx|xls|csv|tsv|png|jpe?g|webp|gif|zip|docx|txt|md|eml|html|json|ics|js|mjs|cjs|ts|py|sql|ya?ml|mmd|db|sqlite3?))\b/gi
+            ),
+        ].map((m) => String(m[1] || '').toLowerCase());
+        const invented = [...new Set(cited)].filter((n) => {
+            if (allowed.has(n) || HELPER_SCRIPT_NAME_RE.test(n)) return false;
+            if (/\.(js|mjs|cjs|ts|py|db|sqlite3?)$/i.test(n)) return true;
+            const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`${esc}[^\\n]{0,100}\\d+\\s*bytes|\\d+\\s*bytes[^\\n]{0,100}${esc}`, 'i').test(
+                text
+            );
+        });
+        if (!invented.length) return text;
+        return `${text.trim()}\n\nActual workspace files (authoritative; ignore invented names/sizes):\n${diskList.join('\n')}`.slice(
+            0,
+            12000
+        );
+    };
+
+    const messages: Message[] = withContextChatMessages(
         {
             role: 'system',
             content:
                 'You write the FINAL ANSWER for an autonomous agent.\n' +
                 'Follow the goal expansion outputFormat and successCriteria.\n' +
                 (expectsFile
-                    ? 'Include exact filename and absolute workspace path from evidence. Do not invent paths. If missing, say the file was not created.\n'
+                    ? hasVerifiedDisk
+                        ? 'VERIFIED_DISK_FILES lists real files on disk. Copy those names and sizes EXACTLY. Never invent, rename, or add files that are not on that list.\n'
+                        : 'No verified workspace deliverable is on disk. You MUST say the expected file was NOT created. Do not invent Absolute Path / File Size.\n'
                     : 'Citation-first when personal evidence exists; mark speculation clearly.\n') +
                 'Be practical and structured. Plain text only.\n' +
                 (activeSkillsBlock ? `\n${activeSkillsBlock}` : ''),
         },
+        chatMessages,
         {
             role: 'user',
             content: [
@@ -799,9 +1341,12 @@ export const synthesizeAgentAnswer = async (params: {
                     : '',
                 childResultsPack ? `CHILD RESULTS PACK:\n${childResultsPack}` : '',
                 pastChatSummary ? `RECENT CHAT:\n${pastChatSummary}` : '',
+                contextPack ? `CONTEXT WINDOW:\n${contextPack}` : '',
                 `EVIDENCE / MEMORY:\n${memorySummary || '(none)'}`,
-                expectsFile && artifact.paths.length
-                    ? `DETECTED ARTIFACT PATHS:\n${artifact.paths.join('\n')}`
+                expectsFile
+                    ? hasVerifiedDisk
+                        ? `VERIFIED_DISK_FILES (only cite these):\n${diskList.join('\n')}`
+                        : 'VERIFIED_DISK_FILES:\n(none — do not invent paths)'
                     : '',
                 budgetContext
                     ? `BUDGET STATUS:\n${JSON.stringify(budgetContext, null, 2)}`
@@ -810,8 +1355,8 @@ export const synthesizeAgentAnswer = async (params: {
             ]
                 .filter(Boolean)
                 .join('\n\n'),
-        },
-    ];
+        }
+    );
 
     const llmParams = {
         provider: llmConfig.provider as
@@ -836,7 +1381,7 @@ export const synthesizeAgentAnswer = async (params: {
         totalTokens: number;
         costInUsd: number;
     }) => {
-        if (!logCtx.agentInstanceId) return;
+        if (!logCtx.agentInstanceId || logCtx.past) return;
         const prompt = Number(usage.promptTokens) || 0;
         const completion = Number(usage.completionTokens) || 0;
         try {
@@ -904,12 +1449,13 @@ export const synthesizeAgentAnswer = async (params: {
             await applyStreamUsage(streamResult);
 
             const answer = (streamResult.fullContent || fullContent || '').trim().slice(0, 12000);
-            const finalContent =
+            const finalContent = pinToVerifiedDisk(
                 cancelled || streamResult.cancelled
                     ? answer
                         ? `${answer}\n\n(Generation stopped.)`
                         : '(Generation cancelled.)'
-                    : answer;
+                    : answer
+            );
 
             await ModelChatLlm.findByIdAndUpdate(chatMessageId, {
                 $set: {
@@ -936,6 +1482,13 @@ export const synthesizeAgentAnswer = async (params: {
                     purpose: 'agent_synthesize',
                     streaming: true,
                     cancelled: Boolean(cancelled || streamResult.cancelled),
+                    usage: {
+                        promptTokens: streamResult.promptTokens || 0,
+                        completionTokens: streamResult.completionTokens || 0,
+                        reasoningTokens: streamResult.reasoningTokens || 0,
+                        totalTokens: streamResult.totalTokens || 0,
+                        costInUsd: streamResult.costInUsd || 0,
+                    },
                 },
             });
 
@@ -959,7 +1512,7 @@ export const synthesizeAgentAnswer = async (params: {
         params: llmParams,
     });
 
-    const answer = (llmResult.content || '').trim();
+    const answer = pinToVerifiedDisk((llmResult.content || '').trim());
     if (answer) {
         if (chatMessageId) {
             await ModelChatLlm.findByIdAndUpdate(chatMessageId, {
@@ -989,9 +1542,8 @@ export const synthesizeAgentAnswer = async (params: {
     });
 
     const fallback =
-        `Based on available personal context for "${goalTitle}":\n\n` +
-        `${memorySummary.slice(0, 3000) || 'No domain evidence was collected yet.'}\n\n` +
-        `I could not fully synthesize a richer answer this tick — try sending the question again.`;
+        `Could not fully synthesize a richer answer this tick — continue with tools.\n\n` +
+        `${memorySummary.slice(0, 2000) || 'No evidence was collected yet.'}`;
 
     if (chatMessageId) {
         await ModelChatLlm.findByIdAndUpdate(chatMessageId, {
@@ -1006,6 +1558,7 @@ export const formatMemorySummary = (
     memories: Array<{ key: string; memoryType?: string; content: string }>
 ): string =>
     memories
+        .filter((m) => !isAgentContextMemoryKey(m.key))
         .slice(0, 25)
         .map((m) => `- [${m.memoryType || 'other'}] ${m.key}: ${m.content.slice(0, 800)}`)
         .join('\n')
