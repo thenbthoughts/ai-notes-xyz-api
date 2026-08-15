@@ -27,6 +27,7 @@ import routesChatLlmAddAutoNextMessage from './chatLlm/chatLlmCrud/concise/chatL
 import routesChatLlmPolling from './chatLlm/chatLlmPolling/answerMachinePolling.route';
 import routesChatLlmTts from './chatLlm/chatLlmCrud/chatUtils/chatLlmTts.route';
 import routesShellFilesExplorer from './chatLlm/chatLlmCrud/agent/agentUtils/agentShell/shellFilesExplorer.route';
+import routesLibreOffice from './chatLlm/libreOffice/libreOffice.route';
 import routesAgentSkills from './chatLlm/chatLlmCrud/agentSkills/agentSkills.route';
 
 // dynamic data
@@ -124,6 +125,7 @@ router.use('/chat-llm/add-auto-next-message', routesChatLlmAddAutoNextMessage);
 router.use('/chat-llm/polling', routesChatLlmPolling);
 router.use('/chat-llm/tts', routesChatLlmTts);
 router.use('/chat-llm/shell-files', routesShellFilesExplorer);
+router.use('/chat-llm/libreoffice', routesLibreOffice);
 router.use('/chat-llm/agent-skills', routesAgentSkills);
 
 // routes -> task
