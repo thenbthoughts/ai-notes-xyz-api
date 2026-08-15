@@ -14,6 +14,10 @@ import { getApiKeyByObject } from '../../../../../utils/llm/llmCommonFunc';
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import { agentTaskFilesDir, getAgentShellConfig } from '../agentUtils/agentShell/agentShellWorkspace';
 import {
+    AGENT_WORKSPACE_CONTAINER_STORAGE,
+    AGENT_WORKSPACE_SHELL_PREFIX,
+} from '../../../../../utils/agentWorkspace/agentWorkspacePaths';
+import {
     AGENT_SHELL_CONTEXT_FILE_LIMIT,
     normalizeAgentShellListing,
     type AgentShellListEntry,
@@ -713,8 +717,8 @@ const loadOrInitWorkspaceBaseline = async (
 const loadShellListing = async (agent: IAgentInstance) => {
     const agentShellDir = agentTaskFilesDir(String(agent.threadId));
     let shellWorkspaceListing: AgentShellListEntry[] = [];
-    let containerWorkingDir = '/app/data/ai-notes-xyz-shell-files';
-    let agentFolderAbsolutePath = `/app/data/${agentShellDir}`;
+    let containerWorkingDir = `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${AGENT_WORKSPACE_SHELL_PREFIX}`;
+    let agentFolderAbsolutePath = `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${agentShellDir}`;
 
     try {
         const apiKeyDoc = await ModelUserApiKey.findOne({ userId: agent.userId });
@@ -750,11 +754,11 @@ const loadShellListing = async (agent: IAgentInstance) => {
                             );
                             break;
                         }
-                        if (abs.includes('/ai-notes-xyz-shell-files/')) {
-                            const idx = abs.indexOf('/ai-notes-xyz-shell-files/');
+                        if (abs.includes(`/${AGENT_WORKSPACE_SHELL_PREFIX}/`)) {
+                            const idx = abs.indexOf(`/${AGENT_WORKSPACE_SHELL_PREFIX}/`);
                             containerWorkingDir = abs.slice(
                                 0,
-                                idx + '/ai-notes-xyz-shell-files'.length
+                                idx + `/${AGENT_WORKSPACE_SHELL_PREFIX}`.length
                             );
                         }
                     }

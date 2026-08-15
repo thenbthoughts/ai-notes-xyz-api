@@ -36,9 +36,7 @@ router.post(
                 apiKeyLocalaiValid: false,
                 smtpValid: false,
                 telegramValid: false,
-                shellEngineValid: false,
-                libreOfficeValid: false,
-                apiKeyOpencodeWithShellValid: false,
+                agentWorkspaceValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -73,9 +71,7 @@ router.post(
                             apiKeyLocalaiValid: false,
                             smtpValid: false,
                             telegramValid: false,
-                            shellEngineValid: false,
-                            libreOfficeValid: false,
-                            apiKeyOpencodeWithShellValid: false,
+                            agentWorkspaceValid: false,
                         }
                     },
                     {
@@ -162,25 +158,10 @@ router.post(
                 }
             }
 
-            // shell engine (ai-notes-xyz-shell)
+            // ai-notes-xyz-agent-workspace
             if (resultUserInfoApi) {
-                if (typeof resultUserInfoApi?.shellEngineValid === 'boolean') {
-                    resultApiKey.shellEngineValid = resultUserInfoApi.shellEngineValid;
-                }
-            }
-
-            // ai-notes-xyz-libreoffice
-            if (resultUserInfoApi) {
-                if (typeof resultUserInfoApi?.libreOfficeValid === 'boolean') {
-                    resultApiKey.libreOfficeValid = resultUserInfoApi.libreOfficeValid;
-                }
-            }
-
-            // OpenCode with shell
-            if (resultUserInfoApi) {
-                if (typeof resultUserInfoApi?.apiKeyOpencodeWithShellValid === 'boolean') {
-                    resultApiKey.apiKeyOpencodeWithShellValid =
-                        resultUserInfoApi.apiKeyOpencodeWithShellValid;
+                if (typeof resultUserInfoApi?.agentWorkspaceValid === 'boolean') {
+                    resultApiKey.agentWorkspaceValid = resultUserInfoApi.agentWorkspaceValid;
                 }
             }
 

@@ -7,6 +7,7 @@ import fileUpload from 'express-fileupload';
 import middlewareUserAuth from '../../../../../../middleware/middlewareUserAuth';
 import { ModelUserApiKey } from '../../../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../../../../../utils/llm/llmCommonFunc';
+import { AGENT_WORKSPACE_ROOT } from '../../../../../../utils/agentWorkspace/agentWorkspacePaths';
 import { getAgentShellConfig, shellDeleteRelativePath, type AgentShellConfig } from './agentShellWorkspace';
 import {
     readBufferFromShellEngine,
@@ -17,7 +18,7 @@ import {
 
 const router = Router();
 
-const DEFAULT_ROOT_DIR = 'ai-notes-xyz-shell-files';
+const DEFAULT_ROOT_DIR = AGENT_WORKSPACE_ROOT;
 const ZIP_MAX_FILES = 400;
 const ZIP_MAX_TOTAL_BYTES = 40 * 1024 * 1024;
 const ZIP_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
@@ -32,7 +33,7 @@ const sanitizeRelativePath = (rawDir: string): string => {
     if (clean.includes('..')) {
         throw new Error('Invalid path: path cannot contain ..');
     }
-    if (!clean.startsWith(DEFAULT_ROOT_DIR) && !clean.startsWith('ai-notes-xyz')) {
+    if (!clean.startsWith(DEFAULT_ROOT_DIR)) {
         clean = `${DEFAULT_ROOT_DIR}/${clean}`;
     }
     return clean;
@@ -47,7 +48,7 @@ const resolveUserShell = async (
     }
     const shell = getAgentShellConfig(getApiKeyByObject(apiKeyDoc));
     if (!shell) {
-        return { ok: false, status: 400, message: 'Shell Engine is not configured in settings.' };
+        return { ok: false, status: 400, message: 'Agent Workspace is not configured in settings.' };
     }
     return { ok: true, shell };
 };
@@ -104,7 +105,7 @@ const writeShellEntries = async (params: {
 
 /**
  * GET /api/chat-llm/shell-files/list
- * List files and directories inside root ai-notes-xyz-shell-files
+ * List files and directories inside root ai-notes-xyz-agent-workspace
  */
 router.get('/list', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
@@ -120,7 +121,7 @@ router.get('/list', middlewareUserAuth, async (req: Request, res: Response) => {
         const shell = getAgentShellConfig(apiKey);
 
         if (!shell) {
-            return res.status(400).json({ message: 'Shell Engine is not configured in settings.' });
+            return res.status(400).json({ message: 'Agent Workspace is not configured in settings.' });
         }
 
         const normalizedDir = relativeDir.replace(/\/+$/, '');
@@ -173,7 +174,7 @@ router.get('/list', middlewareUserAuth, async (req: Request, res: Response) => {
         const errMsg =
             lsRes.data && typeof lsRes.data === 'object' && 'message' in lsRes.data
                 ? String(lsRes.data.message)
-                : `Shell Engine HTTP ${lsRes.status}`;
+                : `Agent Workspace HTTP ${lsRes.status}`;
         return res.status(lsRes.status).json({ message: errMsg });
     } catch (error) {
         console.error('shell-files list error:', error);
@@ -185,7 +186,7 @@ router.get('/list', middlewareUserAuth, async (req: Request, res: Response) => {
 
 /**
  * GET /api/chat-llm/shell-files/download
- * Download a file from ai-notes-xyz-shell-files
+ * Download a file from ai-notes-xyz-agent-workspace
  */
 router.get('/download', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
@@ -204,7 +205,7 @@ router.get('/download', middlewareUserAuth, async (req: Request, res: Response) 
         const shell = getAgentShellConfig(apiKey);
 
         if (!shell) {
-            return res.status(400).json({ message: 'Shell Engine is not configured in settings.' });
+            return res.status(400).json({ message: 'Agent Workspace is not configured in settings.' });
         }
 
         const readResult = await readBufferFromShellEngine({
@@ -234,7 +235,7 @@ router.get('/download', middlewareUserAuth, async (req: Request, res: Response) 
 });
 /**
  * POST /api/chat-llm/shell-files/delete
- * Delete a file or directory inside root ai-notes-xyz-shell-files
+ * Delete a file or directory inside root ai-notes-xyz-agent-workspace
  */
 router.post('/delete', middlewareUserAuth, async (req: Request, res: Response) => {
     try {
@@ -253,7 +254,7 @@ router.post('/delete', middlewareUserAuth, async (req: Request, res: Response) =
         const shell = getAgentShellConfig(apiKey);
 
         if (!shell) {
-            return res.status(400).json({ message: 'Shell Engine is not configured in settings.' });
+            return res.status(400).json({ message: 'Agent Workspace is not configured in settings.' });
         }
 
         const result = await shellDeleteRelativePath({ shell, relativePath });

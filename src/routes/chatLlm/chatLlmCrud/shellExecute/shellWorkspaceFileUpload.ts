@@ -6,6 +6,7 @@ import { ModelChatLlm } from '../../../../schema/schemaChatLlm/SchemaChatLlm.sch
 import type IUserApiKey from '../../../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 import type { S3Config } from '../../../../utils/upload/uploadFunc';
 import { getFile } from '../../../../utils/upload/uploadFunc';
+import { AGENT_WORKSPACE_SHELL_PREFIX } from '../../../../utils/agentWorkspace/agentWorkspacePaths';
 
 const LOG = '[shellWorkspaceFileUpload]';
 
@@ -45,8 +46,8 @@ function buildS3Config(keys: {
 }
 
 /**
- * Copies recent user-attached documents from app storage into the shell service workspace
- * (`ai-notes-xyz-shell-files/...`) so planner/commands can run on those paths.
+ * Copies recent user-attached documents from app storage into the Agent Workspace
+ * (`ai-notes-xyz-agent-workspace/shell/...`) so planner/commands can run on those paths.
  */
 export async function uploadRecentUserFilesToShellWorkspace(params: {
     threadId: mongoose.Types.ObjectId;
@@ -102,7 +103,7 @@ export async function uploadRecentUserFilesToShellWorkspace(params: {
 
     for (const c of candidates) {
         const baseName = safeShellFileBaseName(c.fileUrl);
-        const relativePath = `ai-notes-xyz-shell-files/thread-${String(threadId)}/msg-${String(c.messageId)}-${baseName}`;
+        const relativePath = `${AGENT_WORKSPACE_SHELL_PREFIX}/thread-${String(threadId)}/msg-${String(c.messageId)}-${baseName}`;
 
         const fileResult = await getFile({
             fileName: c.fileUrl,

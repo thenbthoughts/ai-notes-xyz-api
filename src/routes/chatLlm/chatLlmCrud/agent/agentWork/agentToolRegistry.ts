@@ -189,7 +189,7 @@ ${
         : `NODE RULES:
 - Write the named deliverable file the task asked for. Do not leave the product only in create_artifact.js.
 - Scripts must exit. Do not start a long-lived HTTP server unless the user asked for one.
-- Never listen on ports 2000 or 3000. If a demo server is required, bind 127.0.0.1 on 18080+ or port 0, print the port, then exit.`
+- Never listen on ports 2000, 2001, 3000, 3010, or 3011. If a demo server is required, bind 127.0.0.1 on 18080+ or port 0, print the port, then exit.`
 }`,
         },
         contextPack?.chatWindow,
@@ -205,7 +205,7 @@ ${contextPack?.formatted || '(none — call list_workspace_files first if you ne
 CRITICAL FILE PATH RULES:
 - Do not assume a working directory or file listing. Use paths from recent list_workspace_files / tool results in CONTEXT.
 - Use either an exact absolutePath from those results OR a pathInAgentFolder (e.g. 'uploads/filename.jpg').
-- NEVER use full workspace prefix 'ai-notes-xyz-shell-files/agent/...' as a relative path when running inside the agent folder!
+- NEVER use full workspace prefix 'ai-notes-xyz-agent-workspace/shell/agent/...' as a relative path when running inside the agent folder!
 - Do NOT invent placeholder filenames like 'input.jpg', 'image.png', or 'test.txt'.
 - Save output files in the workspace root or uploads/ folder.`,
         }
@@ -472,7 +472,7 @@ export class AgentToolRegistry {
         this.register({
             name: 'list_workspace_files',
             description:
-                'Search/list files in the agent Shell workspace for this thread. The planner is not given a working directory or file dump — call this to locate uploads or created files.',
+                'Search/list files in the Agent Workspace for this thread. The planner is not given a working directory or file dump — call this to locate uploads or created files.',
             execute: async (ctx) => {
                 const agentShellDir = agentTaskFilesDir(String(ctx.threadId));
                 const apiKeyDoc = await ModelUserApiKey.findOne({ userId: ctx.userId });
@@ -490,7 +490,7 @@ export class AgentToolRegistry {
                     return {
                         success: false,
                         action: 'list_workspace_files',
-                        resultSummary: 'Shell Engine is not configured in Settings → API Keys',
+                        resultSummary: 'Agent Workspace is not configured in Settings → API Keys',
                         error: 'shell_not_configured',
                     };
                 }
@@ -562,7 +562,7 @@ export class AgentToolRegistry {
         this.register({
             name: 'execute_script',
             description:
-                'Write and execute a Node.js (.js) or Python 3 (.py) script on the Shell Engine workspace. Scripts must exit. Never listen on ports 2000 or 3000. For Python set scriptType="python" and fileName ending in .py. For PDF use reportlab/fpdf2; for images use Pillow.',
+                'Write and execute a Node.js (.js) or Python 3 (.py) script on the Agent Workspace. Scripts must exit. Never listen on ports 2000, 2001, 3000, 3010, or 3011. For Python set scriptType="python" and fileName ending in .py. For PDF use reportlab/fpdf2 or soffice; for images use Pillow.',
             execute: async (ctx, args) => {
                 const thread = await ModelChatLlmThread.findById(ctx.threadId)
                     .select('executeShell')
@@ -625,11 +625,14 @@ export class AgentToolRegistry {
                     scriptType = 'python';
                 }
 
-                // Puppeteer/Playwright are already global. Local npm install hits allow-scripts and false-fails.
-                if (/\bnpm\s+i(?:nstall)?\b[\s\S]{0,160}(puppeteer|playwright)/i.test(rawCode)) {
+                // Puppeteer is not in Agent Workspace. Local npm install hits allow-scripts and false-fails.
+                if (
+                    /\bnpm\s+i(?:nstall)?\b[\s\S]{0,160}(puppeteer|playwright)/i.test(rawCode) ||
+                    /\brequire\(\s*['"]puppeteer['"]|\bfrom\s+['"]puppeteer['"]/.test(rawCode)
+                ) {
                     rawCode = await generateCodeViaLlm(
                         ctx,
-                        `${promptReason}\n\nIMPORTANT: Do NOT npm install puppeteer or playwright (already global; local install false-fails on allow-scripts). Use require('puppeteer') with executablePath process.env.CHROME_BIN || '/usr/bin/google-chrome-stable', or: google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=shot.png file:///absolute/page.html. Print OUT=<absolute path> and SIZE=<bytes>, then stop.`,
+                        `${promptReason}\n\nIMPORTANT: Do NOT npm install or require puppeteer/playwright (not installed in Agent Workspace; local install false-fails on allow-scripts). Use google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=shot.png file:///absolute/page.html. Print OUT=<absolute path> and SIZE=<bytes>, then stop.`,
                         'node'
                     );
                     scriptType = 'node';
@@ -723,7 +726,7 @@ export class AgentToolRegistry {
                 const apiKey = getApiKeyByObject(apiKeyDoc);
                 const shell = getAgentShellConfig(apiKey);
                 if (!shell) {
-                    throw new Error('Shell Engine is not configured in Settings → API Keys');
+                    throw new Error('Agent Workspace is not configured in Settings → API Keys');
                 }
 
                 const scriptRel = agentTaskFilePath(chatId, rawFileName);
@@ -986,7 +989,7 @@ export class AgentToolRegistry {
 
                 const pathMatches =
                     execStdout.match(
-                        /(?:PDF_PATH=|Excel file ready.*?|absolutePath[=:\s"]+|\/app\/data\/[^\s"'<>|]+\.(?:pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx)|ai-notes-xyz-shell-files\/[^\s"'<>|]+\.(?:pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx))/gi
+                        /(?:PDF_PATH=|Excel file ready.*?|absolutePath[=:\s"]+|\/config\/[^\s"'<>|]+\.(?:pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx)|ai-notes-xyz-agent-workspace\/[^\s"'<>|]+\.(?:pdf|xlsx|xls|csv|png|jpe?g|webp|gif|zip|docx))/gi
                     ) || [];
                 const cleanedPaths = pathMatches
                     .map((p) => p.replace(/^PDF_PATH=/i, '').replace(/^absolutePath[=:\s"]+/i, '').replace(/["']/g, ''))

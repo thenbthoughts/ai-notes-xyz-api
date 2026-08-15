@@ -18,10 +18,11 @@ import {
     getAgentShellConfig,
     shellDeleteRelativePath,
 } from '../../chatLlmCrud/agent/agentUtils/agentShell/agentShellWorkspace';
+import { AGENT_WORKSPACE_SHELL_PREFIX } from '../../../../utils/agentWorkspace/agentWorkspacePaths';
 
 /** Concise / chat-shell workspace for a thread. */
 const shellThreadWorkspaceRelativeDir = (threadId: mongoose.Types.ObjectId): string =>
-    `ai-notes-xyz-shell-files/thread-${String(threadId)}`;
+    `${AGENT_WORKSPACE_SHELL_PREFIX}/thread-${String(threadId)}`;
 
 /**
  * On conversation delete: remove agent + chat-shell DB rows and shell workspace folders.

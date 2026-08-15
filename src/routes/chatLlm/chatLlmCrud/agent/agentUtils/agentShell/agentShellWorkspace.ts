@@ -5,6 +5,10 @@ import type { tsUserApiKey } from '../../../../../../utils/llm/llmCommonFunc';
 import { uploadBufferToShellEngine, readBufferFromShellEngine } from '../../../shellExecute/shellFileUpload';
 import { writeAgentLogFromContext, type AgentLogContext } from '../agentWriteLog';
 import { assertAgentShellSafe } from './agentShellSafety';
+import {
+    AGENT_WORKSPACE_ROOT,
+    agentWorkspaceTaskFilesDir,
+} from '../../../../../../utils/agentWorkspace/agentWorkspacePaths';
 
 export type AgentShellConfig = {
     baseUrl: string;
@@ -19,21 +23,16 @@ export const shellStdoutShowsDeliverable = (text: string): boolean => {
     return /OUT\s*=\S/.test(t) && /SIZE\s*[:=]\s*[1-9]\d*/.test(t);
 };
 
-/** Prefer dedicated Shell Engine; else OpenCode-with-Shell's shell URL (shell only, no OpenCode). */
+/** Agent Workspace API (shell + files). Env fallback for local tests. */
 export const getAgentShellConfig = (apiKey: tsUserApiKey): AgentShellConfig | null => {
-    if (apiKey.shellEngineValid && apiKey.shellEngineUrl?.trim() && apiKey.shellEngineToken) {
-        return {
-            baseUrl: apiKey.shellEngineUrl.replace(/\/+$/, ''),
-            token: apiKey.shellEngineToken,
-        };
-    }
     if (
-        apiKey.opencodeWithCustomShellUrl?.trim() &&
-        apiKey.opencodeWithCustomShellToken
+        apiKey.agentWorkspaceValid &&
+        apiKey.agentWorkspaceApiUrl?.trim() &&
+        apiKey.agentWorkspaceApiToken
     ) {
         return {
-            baseUrl: apiKey.opencodeWithCustomShellUrl.replace(/\/+$/, ''),
-            token: apiKey.opencodeWithCustomShellToken,
+            baseUrl: apiKey.agentWorkspaceApiUrl.replace(/\/+$/, ''),
+            token: apiKey.agentWorkspaceApiToken,
         };
     }
     const envUrl = process.env.AM4_SHELL_ENGINE_URL?.trim() || process.env.SHELL_ENGINE_URL?.trim();
@@ -44,11 +43,8 @@ export const getAgentShellConfig = (apiKey: tsUserApiKey): AgentShellConfig | nu
     return null;
 };
 
-/** Workspace root for an agent run: ai-notes-xyz-shell-files/agent/{chat_id} */
-export const agentTaskFilesDir = (chatId: string): string => {
-    const safe = String(chatId || 'unknown').replace(/[^a-fA-F0-9]/g, '').slice(0, 64) || 'unknown';
-    return `ai-notes-xyz-shell-files/agent/${safe}`;
-};
+/** Workspace root for an agent run: ai-notes-xyz-agent-workspace/shell/agent/{chat_id} */
+export const agentTaskFilesDir = (chatId: string): string => agentWorkspaceTaskFilesDir(chatId);
 
 export const agentTaskFilePath = (chatId: string, fileName: string): string => {
     const base = path.basename(String(fileName || 'file').replace(/\\/g, '/'));
@@ -58,8 +54,8 @@ export const agentTaskFilePath = (chatId: string, fileName: string): string => {
 
 export const assertAgentTaskRelativePath = (relativePath: string): void => {
     const normalized = relativePath.split(/[/\\]/).join('/');
-    if (!normalized.startsWith('ai-notes-xyz-shell-files/')) {
-        throw new Error(`Agent shell path must start with ai-notes-xyz-shell-files/: ${normalized}`);
+    if (!normalized.startsWith(`${AGENT_WORKSPACE_ROOT}/`)) {
+        throw new Error(`Agent shell path must start with ${AGENT_WORKSPACE_ROOT}/: ${normalized}`);
     }
     if (normalized.includes('..')) {
         throw new Error('Agent shell path must not contain ..');
@@ -446,9 +442,9 @@ export const shellPing = async (
 };
 
 const BLOCKED_SHELL_DELETE_ROOTS = new Set([
-    'ai-notes-xyz-shell-files',
-    'ai-notes-xyz',
-    'ai-notes-xyz/task',
+    AGENT_WORKSPACE_ROOT,
+    `${AGENT_WORKSPACE_ROOT}/shell`,
+    `${AGENT_WORKSPACE_ROOT}/features`,
 ]);
 
 const assertDeletableShellRelativePath = (relativePath: string): void => {
@@ -459,11 +455,8 @@ const assertDeletableShellRelativePath = (relativePath: string): void => {
     if (BLOCKED_SHELL_DELETE_ROOTS.has(normalized)) {
         throw new Error('Cannot delete the workspace root');
     }
-    if (
-        !normalized.startsWith('ai-notes-xyz-shell-files/') &&
-        !normalized.startsWith('ai-notes-xyz/task/')
-    ) {
-        throw new Error('Path is not inside the shell workspace');
+    if (!normalized.startsWith(`${AGENT_WORKSPACE_ROOT}/`)) {
+        throw new Error('Path is not inside the Agent Workspace');
     }
 };
 
@@ -480,8 +473,8 @@ const extractShellErrorMessage = (data: unknown, fallback: string): string => {
 };
 
 /**
- * Delete a file or directory under the shell workspace (best-effort).
- * Tries Shell Engine file/delete, then falls back to `rm -rf` via run-shell/execute.
+ * Delete a file or directory under the Agent Workspace (best-effort).
+ * Tries file/delete, then falls back to `rm -rf` via run-shell/execute.
  */
 export const shellDeleteRelativePath = async (params: {
     shell: AgentShellConfig;
@@ -511,10 +504,10 @@ export const shellDeleteRelativePath = async (params: {
             return { ok: true };
         }
 
-        // FILE_STORAGE_PATH defaults to <cwd>/data on the shell host. rm must target that root;
+        // FILE_STORAGE_PATH is /config in ai-notes-xyz-agent-workspace. rm must target that root;
         // a bare relative path is a no-op when cwd is not the storage folder.
         const deleteCommand = [
-            'ROOT="${FILE_STORAGE_PATH:-$(pwd)/data}"',
+            'ROOT="${FILE_STORAGE_PATH:-/config}"',
             `rm -rf -- "$ROOT"/${shellSingleQuote(relativePath)}`,
         ].join(' && ');
 

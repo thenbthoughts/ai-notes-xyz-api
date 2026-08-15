@@ -66,12 +66,12 @@ interface IUserApiKey extends Document {
     /** forum topic id; omit or null for non-forum chats */
     telegramMessageThreadId?: number | null;
 
-    /** ai-notes-xyz-shell: server origin only, no /api (e.g. http://host:2001) */
+    /** unused at runtime — kept in Mongo */
     shellEngineValid: boolean;
     shellEngineUrl: string;
     shellEngineToken: string;
 
-    /** ai-notes-xyz-libreoffice: desktop origin + basic auth; utils API origin + X-API-Token */
+    /** unused at runtime — kept in Mongo */
     libreOfficeValid: boolean;
     libreOfficeUrl: string;
     libreOfficeBasicAuthUsername: string;
@@ -79,15 +79,23 @@ interface IUserApiKey extends Document {
     libreOfficeUtilsUrl: string;
     libreOfficeUtilsToken: string;
 
-    /** OpenCode server credentials (shared with OpenCode + shell integration) */
+    /** unused at runtime — kept in Mongo */
     opencodeUsername: string;
     opencodePassword: string;
 
-    /** OpenCode + ai-notes-xyz-shell token */
+    /** unused at runtime — kept in Mongo */
     apiKeyOpencodeWithShellValid: boolean;
     opencodeUrl: string;
     opencodeWithCustomShellUrl: string;
     opencodeWithCustomShellToken: string;
+
+    /** ai-notes-xyz-agent-workspace: desktop origin + basic auth; API origin + X-API-Token */
+    agentWorkspaceValid: boolean;
+    agentWorkspaceDesktopUrl: string;
+    agentWorkspaceDesktopUsername: string;
+    agentWorkspaceDesktopPassword: string;
+    agentWorkspaceApiUrl: string;
+    agentWorkspaceApiToken: string;
 
     // user-email-verify
     userEmailVerifyOtp: number;

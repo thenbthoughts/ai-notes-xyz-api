@@ -10,6 +10,7 @@ import { ModelChatShellRunTodo } from '../../../../schema/schemaChatLlm/SchemaSh
 import { ModelChatShellGeneratedFile } from '../../../../schema/schemaChatLlm/SchemaShellExecute/SchemaChatShellGeneratedFile.schema';
 import { ModelUserFileUpload } from '../../../../schema/schemaUser/SchemaUserFileUpload.schema';
 import { getApiKeyByObject } from '../../../../utils/llm/llmCommonFunc';
+import { getAgentShellConfig } from '../agent/agentUtils/agentShell/agentShellWorkspace';
 import { getLlmConfig } from '../chatUtils/chatLlmGetLlmConfig';
 import fetchLlmUnified, { Message } from '../../../../utils/llmPendingTask/utils/fetchLlmUnified';
 import { putFile, S3Config } from '../../../../utils/upload/uploadFunc';
@@ -28,6 +29,7 @@ import type { IChatShellRunGroup } from '../../../../types/typesSchema/typesChat
 import type IUserApiKey from '../../../../types/typesSchema/typesUser/SchemaUserApiKey.types';
 import type IUserFileUpload from '../../../../types/typesSchema/typesUser/SchemaUserFileUpload.types';
 import type { DefaultDateTimeIpAddress } from '../../../../utils/llm/normalizeDateTimeIpAddress';
+import { AGENT_WORKSPACE_SHELL_PREFIX } from '../../../../utils/agentWorkspace/agentWorkspacePaths';
 
 const SHELL_RUN_LOG = '[runChatShellForThread]';
 
@@ -182,7 +184,7 @@ const SHELL_EXECUTE_COMMAND_GUIDANCE =
     '4) If the thread has **[Shell workspace: ... uploaded ...]**, those strings are **real paths** on disk — copy them **verbatim** into shellCommand (or use the **basename** only, since cwd is that folder). **Never** use placeholders like `input_file`, `output_file.png`, `YOUR_IMAGE.jpg`, or `photo.ext` — ImageMagick `convert`/`magick`, ffmpeg, and `file` will fail with "No such file or directory". If names are unclear, first shellExecute: `ls -F` then use an actual name from stdout in the next todo.\n' +
     '5) Write NEW outputs under the thread workspace (see [Shell workspace cwd ...]) so the server can import them.\n' +
     '5b) **Website → PNG (headless screenshot):** Use **`chromium`** or **`/usr/bin/chromium`** (Debian package, already installed). Example: `chromium --headless=new --disable-gpu --no-sandbox --disable-dev-shm-usage --screenshot=page.png` then the target URL as the last argument (wrap the URL in single quotes in bash if it has query params). **Never use `chromium-browser`** and **never `apt-get install chromium-browser`** — on Ubuntu 24.04 that metapackage is a **snap stub** (requires the chromium snap); **snap is unavailable in Docker**, so the command always fails. Do not run `snap install chromium`. If a prior step installed chromium-browser, use **`chromium`** only in the next step.\n' +
-    '6) PDFs: **weasyprint** / **wkhtmltopdf** via **apt** first; **pdfkit** / **puppeteer** via npm if needed. After HTML exists in cwd: `weasyprint datetime.html datetime.pdf`. Do not run weasyprint until the HTML step **exits 0**.\n' +
+    '6) PDFs: prefer **soffice** / LibreOffice, or **weasyprint** / **wkhtmltopdf** via **apt**. Do not npm-install puppeteer. After HTML exists in cwd: `weasyprint datetime.html datetime.pdf`. Do not run weasyprint until the HTML step **exits 0**.\n' +
     '7) **node -e "..."**: no real newlines in shellCommand; no **${...}** in double-quoted Node (bash expands it). Build strings with `+` or `.join()`. **Avoid raw `"` characters inside HTML** when using `python3 -c "..."` — bash sees those `"` and the validator treats `;` in Python as unquoted shell chaining. Prefer **NODE_GOLDEN** below for datetime HTML.\n' +
     '7b) **python3 -c** (only if Node is awkward): no f-strings; no `strftime(\\\'...\\\')` (backslash-quote breaks). Keep HTML free of `"` or wrap the whole step in `bash -c \'...\'` with a single-quoted inner script.\n' +
     '7c) **GOLDEN — write datetime.html with Node** (same cwd as weasyprint): ' +
@@ -375,7 +377,7 @@ Forbidden: backticks, real newlines, unquoted | ; & at the top shell level, and 
 ${SHELL_EXECUTE_COMMAND_GUIDANCE}
 Example MD5 of a literal string (no $):
 node -e "console.log(require('crypto').createHash('md5').update('YOUR_STRING').digest('hex'))"
-For file hashes on disk under ai-notes-xyz-shell-files, prefer openssl dgst -sha256 PATH or sha256sum PATH on this Linux image.
+For file hashes on disk under ai-notes-xyz-agent-workspace, prefer openssl dgst -sha256 PATH or sha256sum PATH on this Linux image.
 ${extraDirective}`,
         },
         {
@@ -478,7 +480,7 @@ function normalizeTodos(raw: unknown[]): ParsedTodo[] {
 
 function extractShellRelativePaths(text: string): string[] {
     const found = new Set<string>();
-    const re = /[^\s"'<>]+ai-notes-xyz-shell-files[^\s"'<>]+/g;
+    const re = /[^\s"'<>]+ai-notes-xyz-agent-workspace[^\s"'<>]+/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
         let p = m[0].replace(/^[`"'(,]+|[\)`"',.;:]+$/g, '');
@@ -491,7 +493,7 @@ function extractShellRelativePaths(text: string): string[] {
 }
 
 function shellThreadWorkspaceRelativeDir(threadId: mongoose.Types.ObjectId): string {
-    return `ai-notes-xyz-shell-files/thread-${String(threadId)}`;
+    return `${AGENT_WORKSPACE_SHELL_PREFIX}/thread-${String(threadId)}`;
 }
 
 function clipShellOutput(text: string, max: number): string {
@@ -1005,25 +1007,19 @@ async function shellStep1LoadThreadAndKeys(params: {
     }
 
     const keys = getApiKeyByObject(userKeyDoc);
-    const isShellValid = keys.shellEngineValid;
-    const shellUrl = keys.shellEngineUrl;
-    const shellToken = keys.shellEngineToken;
+    const shell = getAgentShellConfig(keys);
 
-    if (!isShellValid || !shellUrl || !shellToken) {
-        logStep(1, 'shell engine not configured on keys', {
-            isShellValid,
-            hasUrl: Boolean(shellUrl),
-            hasToken: Boolean(shellToken),
-        });
+    if (!shell) {
+        logStep(1, 'agent workspace not configured on keys');
         return {
             ok: false,
-            error: 'Shell execute is enabled but Shell service is not configured in API Keys.',
+            error: 'Shell execute is enabled but Agent Workspace is not configured in API Keys.',
         };
     }
 
-    const shellOrigin = shellUrl.replace(/\/+$/, '');
+    const shellOrigin = shell.baseUrl.replace(/\/+$/, '');
     const apiBase = `${shellOrigin}/api`;
-    const token = shellToken;
+    const token = shell.token;
     logStep(1, 'shell HTTP target ready', { apiBase, tokenLength: token.length });
 
     return {

@@ -1,17 +1,17 @@
 /**
- * Single source of truth for Shell Engine Docker environment context
- * (from ai-notes-xyz-opencode-custom-utils Dockerfile + README).
+ * Single source of truth for Agent Workspace Docker environment context
+ * (from ai-notes-xyz-agent-workspace Dockerfile + README).
  */
 
-export const AGENT_SHELL_ENV_BLURB = `SHELL ENGINE ENVIRONMENT (always true for execute_script):
-- Ubuntu 24.04 Docker; Node.js 24; Python 3 (use python3, not python); npm; pip; apt-get; git; ffmpeg; openssl.
+export const AGENT_SHELL_ENV_BLURB = `AGENT WORKSPACE ENVIRONMENT (always true for execute_script):
+- Ubuntu XFCE webtop Docker; Node.js 24; Python 3 (use python3, not python); npm; pip; apt-get; git; ffmpeg; openssl; LibreOffice; VS Code.
 - Chromium via google-chrome-stable; aliases: chromium, chromium-browser. NEVER use snap or apt chromium-browser metapackage.
-- Puppeteer is global; PUPPETEER_SKIP_DOWNLOAD=true; use CHROME_BIN / PUPPETEER_EXECUTABLE_PATH or /usr/bin/google-chrome-stable. Do not npm install puppeteer.
-- Workspace: ai-notes-xyz-shell-files/agent/{threadId}/ with uploads/ for user files and index-data-{threadId}/ for folder search indexes.
-- Prefer Node for .js; Python3 + Pillow for image resize/compress. npm init -y / pip install allowed when needed.
-- Scripts must exit. Do not listen on ports 2000 or 3000 (host API/web). Demo HTTP: 127.0.0.1 and port 18080+ or 0, then exit.
+- Screenshots: google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png. Do not npm install puppeteer.
+- Workspace: ai-notes-xyz-agent-workspace/shell/agent/{threadId}/ with uploads/ for user files and index-data-{threadId}/ for folder search indexes.
+- Prefer Node for .js; Python3 + Pillow for image resize/compress; soffice/LibreOffice for office/PDF when useful. npm init -y / pip install allowed when needed.
+- Scripts must exit. Do not listen on ports 2000, 2001, 3000, 3010, or 3011. Demo HTTP: 127.0.0.1 and port 18080+ or 0, then exit.
 - Python pip: use --break-system-packages or a local .agent_venv (PEP 668). For .xlsx prefer openpyxl (not csv when xlsx asked).
-- Paths must stay under ai-notes-xyz-shell-files (no ..).
+- Paths must stay under ai-notes-xyz-agent-workspace/shell or .../features (no ..). Absolute paths are under /config/.
 - Safety: draft email content as files OK; git clone/fetch/pull OK; do NOT send email/SMS/webhooks; do NOT git push or publish to remotes.`.trim();
 
 export type BuiltinAgentSkillSeed = {
@@ -24,20 +24,20 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
     {
         name: 'shell-environment',
         description:
-            'Documents the Shell Engine Docker runtime (Ubuntu 24.04, Node 24, Python 3, Chromium, ffmpeg, workspace paths). Use when writing or debugging execute_script, installing packages, screenshots, or media processing in the agent workspace.',
+            'Documents the Agent Workspace Docker runtime (Ubuntu XFCE webtop, Node 24, Python 3, Chromium, LibreOffice, VS Code, ffmpeg, workspace paths). Use when writing or debugging execute_script, installing packages, screenshots, or media processing in the agent workspace.',
         body: `# Shell Environment
 
 ## Runtime
-- OS: Ubuntu 24.04 in Docker
+- OS: Ubuntu XFCE webtop in Docker
 - Node.js 24, npm; Python 3 via \`python3\` (system \`python\` may be missing)
-- apt-get, build-essential, git, openssl, ffmpeg, zip/unzip, sqlite3
+- apt-get, build-essential, git, openssl, ffmpeg, zip/unzip, sqlite3, LibreOffice (\`soffice\`), VS Code
 - Google Chrome stable installed; \`chromium\` and \`chromium-browser\` are aliases to it
 - Do **not** use snap or \`apt-get install chromium-browser\` (snap stub fails in Docker)
-- Puppeteer installed globally with \`PUPPETEER_SKIP_DOWNLOAD=true\` — use system Chrome
-- Screenshots: \`google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png file:///abs/page.html\` or global puppeteer. Do **not** \`npm install puppeteer\` (allow-scripts false-fail)
+- Screenshots: \`google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png file:///abs/page.html\`. Do **not** \`npm install puppeteer\`
 
 ## Workspace
-- Agent files live under \`ai-notes-xyz-shell-files/agent/{threadId}/\`
+- Agent files live under \`ai-notes-xyz-agent-workspace/shell/agent/{threadId}/\`
+- Absolute paths are under \`/config/\` (FILE_STORAGE_PATH)
 - User uploads: \`.../uploads/{id}_{filename}\`
 - Folder index (skill \`index-data-chat\`): \`index-data-{threadId}/\`
 - Relative paths for scripts should be workspace-local; prefer absolute paths returned by shell write when running commands
@@ -45,9 +45,10 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
 ## Script rules
 - \`.py\` → \`python3\`; \`.js\` → \`node\` — never run Python with node
 - May install packages (npm / pip with \`--break-system-packages\` or a local \`.agent_venv\`) when needed
+- Office/PDF: prefer \`soffice\` / LibreOffice convert when useful
 - Prefer printing \`OUT=<absolute path>\` and \`SIZE=<bytes>\` for created outputs, then stop.
 - Scripts must **exit**. Do not leave HTTP daemons running.
-- Host already uses ports **2000** (API) and **3000** (web) — never \`listen\` on those. If a demo server is required, bind \`127.0.0.1\` on **18080+** or port **0**, print the port, self-request, then exit. Prefer a CLI that prints JSON and exits.
+- Host already uses ports **2000** (API), **2001** (workspace API), **3000** (web), **3010/3011** (desktop) — never \`listen\` on those. If a demo server is required, bind \`127.0.0.1\` on **18080+** or port **0**, print the port, self-request, then exit. Prefer a CLI that prints JSON and exits.
 
 ## Safety (hard rules)
 - Allowed: local shell, file edits, installs, \`git clone\` / \`fetch\` / \`pull\`, drafting email/message content as files (\`.txt\` / \`.md\` / \`.eml\`)
@@ -75,7 +76,7 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
     {
         name: 'image-media',
         description:
-            'Image and media processing with Python Pillow or ffmpeg in the Shell Engine.',
+            'Image and media processing with Python Pillow or ffmpeg in the Agent Workspace.',
         body: `# Image & Media
 
 ## Prefer
@@ -83,7 +84,7 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
 - Resize/compress/convert images: \`execute_script\` + python3 + Pillow (\`from PIL import Image\`)
 - If \`import PIL\` fails: \`python3 -m pip install --break-system-packages Pillow\` — never create \`.agent_venv\` in the workspace
 - JPEG has no alpha: \`.convert('RGB')\` before \`save(..., 'JPEG')\`
-- HTML screenshot: system Chrome headless \`--screenshot=\` or global puppeteer — never \`npm install puppeteer\`
+- HTML screenshot: system Chrome headless \`--screenshot=\` — never \`npm install puppeteer\`
 - Print absolute path + size when done; write outputs in the workspace root when possible
 
 ## Avoid
@@ -94,7 +95,7 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
     {
         name: 'document-pdf',
         description:
-            'Create PDF documents in the Shell Engine with Python (reportlab or fpdf2).',
+            'Create PDF documents in the Agent Workspace with Python (reportlab or fpdf2) or LibreOffice (\`soffice\`).',
         body: `# Document PDF
 
 ## Prefer
@@ -115,7 +116,7 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
 - Write the **named** deliverable \`.js\`/\`.mjs\` with \`execute_script\` (not \`create_artifact.js\` as the product)
 - Node 24; if package.json has \`"type": "module"\`, use import/export (or \`.cjs\` for require helpers)
 - Print absolute path + size when done, then stop
-- Prefer a CLI that exits. If HTTP is required: bind \`127.0.0.1:18080+\` or port \`0\` — never 2000/3000
+- Prefer a CLI that exits. If HTTP is required: bind \`127.0.0.1:18080+\` or port \`0\` — never 2000/2001/3000/3010/3011
 
 ## Avoid
 - Endless analyze/report loops when the user asked for working code
@@ -129,7 +130,7 @@ export const BUILTIN_AGENT_SKILL_SEEDS: BuiltinAgentSkillSeed[] = [
         body: `# Index data for this chat
 
 ## Folder (required)
-Workspace: \`ai-notes-xyz-shell-files/agent/{chatId}/\`
+Workspace: \`ai-notes-xyz-agent-workspace/shell/agent/{chatId}/\`
 Index root: \`index-data-{chatId}/\` (example: \`index-data-6a7d7ed158f2310f03da399c/\`)
 
 \`\`\`
@@ -193,7 +194,7 @@ After indexing, answer from \`index.jsonl\`: case-insensitive keyword / phrase m
     {
         name: 'data-transform',
         description:
-            'One-shot text/CSV/TSV/JSON/line transforms in the Shell Engine.',
+            'One-shot text/CSV/TSV/JSON/line transforms in the Agent Workspace.',
         body: `# Data Transform
 
 ## Rule
