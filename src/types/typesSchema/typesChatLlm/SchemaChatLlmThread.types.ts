@@ -53,6 +53,8 @@ export interface IChatLlmThread extends Document {
     agentContextActionLimit: number;
     agentContextSummaryCount: number;
     agentContextMessagesPerSummary: number;
+    /** Per-call max tokens for generated scripts. Older documents may omit this field. */
+    agentScriptMaxTokens?: number;
 
     /** Persisted on thread; older documents may omit this field */
     executeShell?: boolean;

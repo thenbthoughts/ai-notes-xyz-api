@@ -946,7 +946,7 @@ Reply JSON ONLY:
   "memoryContent": "optional",
   "memoryType": "fact"|"observation"|"plan"|"result"|"other",
   "message": "optional chat text",
-  "code": "optional script source",
+  "code": "leave empty — execute_script generates the full file (do not paste a long script; it will be truncated)",
   "scriptType": "node"|"python",
   "fileName": "script.py or script.js matching scriptType",
   "relativePath": "optional workspace image path for image_to_text (e.g. uploads/photo.png)",
@@ -960,6 +960,7 @@ Rules:
 - Honor suggestedApproach / suggestedTools when sensible.
 - If the user uploaded an image and wants text, OCR, or a description of what is in the image, use image_to_text (set relativePath or fileName). Do not use execute_script/Pillow for OCR.
 - If requiresShell and a file is expected, call execute_script immediately. Named inputs in the user message / workspace baseline are enough — do not list_workspace_files first.
+- Do not put full script source in "code". Leave code empty (or a one-line stub). execute_script generates the complete file with a higher token limit.
 - If workspace outputs are required and no output filename is given, write the computed result to a file (result.txt is fine), print OUT/SIZE, then stop. Do not only print the answer in chat.
 - Use list_workspace_files only to locate an unknown upload, not to confirm a fixture that is already named.
 - If the user asked to implement/add code and the workspace only has specs/fixtures (no app files), WRITE the files. Do not loop searching for a missing stub.

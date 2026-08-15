@@ -116,6 +116,11 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         type: Number,
         default: 10,
     },
+    /** Per-call max tokens when generating execute_script source (not the run budget). */
+    agentScriptMaxTokens: {
+        type: Number,
+        default: 8192,
+    },
 
     /** When true, run shell prep before the next AI reply (concise stream or Agent) */
     executeShell: {
