@@ -13,6 +13,7 @@ import {
     parseOpenCodeServiceOrigin,
     validateShellEngineEndpoints,
 } from '../../utils/shell/validateShellEngine';
+import { validateLibreOfficeEndpoints } from '../../utils/libreOffice/validateLibreOffice';
 import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
@@ -428,6 +429,70 @@ router.post(
                     shellEngineValid: true,
                     shellEngineUrl: shellCheck.origin,
                     shellEngineToken: shellCheck.token,
+                },
+                {
+                    new: true,
+                }
+            );
+
+            return res.json({
+                success: 'Updated',
+                error: '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User Libre Office (ai-notes-xyz-libreoffice — URL + basic auth + X-API-Token)
+router.post(
+    '/updateUserApiLibreOffice',
+    middlewareUserAuth,
+    async (
+        req: Request, res: Response
+    ) => {
+        try {
+            const {
+                libreOfficeUrl,
+                libreOfficeBasicAuthUsername,
+                libreOfficeBasicAuthPassword,
+                libreOfficeUtilsUrl,
+                libreOfficeUtilsToken,
+            } = req.body as {
+                libreOfficeUrl?: string;
+                libreOfficeBasicAuthUsername?: string;
+                libreOfficeBasicAuthPassword?: string;
+                libreOfficeUtilsUrl?: string;
+                libreOfficeUtilsToken?: string;
+            };
+
+            const libreCheck = await validateLibreOfficeEndpoints(
+                typeof libreOfficeUrl === 'string' ? libreOfficeUrl : '',
+                typeof libreOfficeBasicAuthUsername === 'string' ? libreOfficeBasicAuthUsername : '',
+                typeof libreOfficeBasicAuthPassword === 'string' ? libreOfficeBasicAuthPassword : '',
+                typeof libreOfficeUtilsUrl === 'string' ? libreOfficeUtilsUrl : '',
+                typeof libreOfficeUtilsToken === 'string' ? libreOfficeUtilsToken : '',
+            );
+            if (!libreCheck.ok) {
+                return res.status(400).json({
+                    success: '',
+                    error: libreCheck.error,
+                });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                {
+                    userId: res.locals.auth_userId,
+                },
+                {
+                    libreOfficeValid: true,
+                    libreOfficeUrl: libreCheck.desktopOrigin,
+                    libreOfficeBasicAuthUsername: libreCheck.username,
+                    libreOfficeBasicAuthPassword: libreCheck.password,
+                    libreOfficeUtilsUrl: libreCheck.utilsOrigin,
+                    libreOfficeUtilsToken: libreCheck.token,
                 },
                 {
                     new: true,
@@ -1701,6 +1766,7 @@ router.post(
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
                 'shellEngine',
+                'libreOffice',
                 'opencodeWithShell',
             ];
 
@@ -1773,6 +1839,14 @@ router.post(
                     shellEngineValid: false,
                     shellEngineUrl: '',
                     shellEngineToken: '',
+                },
+                libreOffice: {
+                    libreOfficeValid: false,
+                    libreOfficeUrl: '',
+                    libreOfficeBasicAuthUsername: '',
+                    libreOfficeBasicAuthPassword: '',
+                    libreOfficeUtilsUrl: '',
+                    libreOfficeUtilsToken: '',
                 },
                 opencodeWithShell: {
                     apiKeyOpencodeWithShellValid: false,

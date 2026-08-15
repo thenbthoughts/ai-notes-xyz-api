@@ -73,6 +73,14 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     shellEngineUrl: { type: String, default: '' },
     shellEngineToken: { type: String, default: '' },
 
+    // ai-notes-xyz-libreoffice (desktop origin + basic auth, utils API origin + X-API-Token)
+    libreOfficeValid: { type: Boolean, default: false },
+    libreOfficeUrl: { type: String, default: '' },
+    libreOfficeBasicAuthUsername: { type: String, default: '' },
+    libreOfficeBasicAuthPassword: { type: String, default: '' },
+    libreOfficeUtilsUrl: { type: String, default: '' },
+    libreOfficeUtilsToken: { type: String, default: '' },
+
     // OpenCode server credentials (shared with OpenCode + shell integration)
     opencodeUsername: { type: String, default: '' },
     opencodePassword: { type: String, default: '' },

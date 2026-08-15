@@ -49,6 +49,14 @@ export interface tsUserApiKey {
     shellEngineUrl: string;
     shellEngineToken: string;
 
+    // ai-notes-xyz-libreoffice
+    libreOfficeValid: boolean;
+    libreOfficeUrl: string;
+    libreOfficeBasicAuthUsername: string;
+    libreOfficeBasicAuthPassword: string;
+    libreOfficeUtilsUrl: string;
+    libreOfficeUtilsToken: string;
+
     // OpenCode
     opencodeUsername: string;
     opencodePassword: string;
@@ -111,6 +119,14 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         shellEngineValid: false,
         shellEngineUrl: '',
         shellEngineToken: '',
+
+        // ai-notes-xyz-libreoffice
+        libreOfficeValid: false,
+        libreOfficeUrl: '',
+        libreOfficeBasicAuthUsername: '',
+        libreOfficeBasicAuthPassword: '',
+        libreOfficeUtilsUrl: '',
+        libreOfficeUtilsToken: '',
 
         // OpenCode
         opencodeUsername: '',
@@ -252,6 +268,32 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.shellEngineToken === 'string') {
                 apiKey.shellEngineToken = apiKeyObject.shellEngineToken;
+            }
+
+            // ai-notes-xyz-libreoffice
+            if (typeof apiKeyObject.libreOfficeValid === 'boolean') {
+                if (apiKeyObject.libreOfficeValid) {
+                    apiKey.libreOfficeValid = true;
+                }
+            }
+            if (typeof apiKeyObject.libreOfficeUrl === 'string') {
+                apiKey.libreOfficeUrl = apiKeyObject.libreOfficeUrl.trim().replace(/\/+$/, '');
+            }
+            if (typeof apiKeyObject.libreOfficeBasicAuthUsername === 'string') {
+                apiKey.libreOfficeBasicAuthUsername = apiKeyObject.libreOfficeBasicAuthUsername;
+            }
+            if (typeof apiKeyObject.libreOfficeBasicAuthPassword === 'string') {
+                apiKey.libreOfficeBasicAuthPassword = apiKeyObject.libreOfficeBasicAuthPassword;
+            }
+            if (typeof apiKeyObject.libreOfficeUtilsUrl === 'string') {
+                let u = apiKeyObject.libreOfficeUtilsUrl.trim().replace(/\/+$/, '');
+                if (u.endsWith('/api')) {
+                    u = u.slice(0, -4).replace(/\/+$/, '');
+                }
+                apiKey.libreOfficeUtilsUrl = u;
+            }
+            if (typeof apiKeyObject.libreOfficeUtilsToken === 'string') {
+                apiKey.libreOfficeUtilsToken = apiKeyObject.libreOfficeUtilsToken;
             }
 
             // OpenCode

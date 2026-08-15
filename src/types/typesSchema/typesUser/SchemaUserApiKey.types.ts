@@ -71,6 +71,14 @@ interface IUserApiKey extends Document {
     shellEngineUrl: string;
     shellEngineToken: string;
 
+    /** ai-notes-xyz-libreoffice: desktop origin + basic auth; utils API origin + X-API-Token */
+    libreOfficeValid: boolean;
+    libreOfficeUrl: string;
+    libreOfficeBasicAuthUsername: string;
+    libreOfficeBasicAuthPassword: string;
+    libreOfficeUtilsUrl: string;
+    libreOfficeUtilsToken: string;
+
     /** OpenCode server credentials (shared with OpenCode + shell integration) */
     opencodeUsername: string;
     opencodePassword: string;

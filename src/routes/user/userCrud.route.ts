@@ -37,6 +37,7 @@ router.post(
                 smtpValid: false,
                 telegramValid: false,
                 shellEngineValid: false,
+                libreOfficeValid: false,
                 apiKeyOpencodeWithShellValid: false,
 
                 // timezone
@@ -73,6 +74,7 @@ router.post(
                             smtpValid: false,
                             telegramValid: false,
                             shellEngineValid: false,
+                            libreOfficeValid: false,
                             apiKeyOpencodeWithShellValid: false,
                         }
                     },
@@ -164,6 +166,13 @@ router.post(
             if (resultUserInfoApi) {
                 if (typeof resultUserInfoApi?.shellEngineValid === 'boolean') {
                     resultApiKey.shellEngineValid = resultUserInfoApi.shellEngineValid;
+                }
+            }
+
+            // ai-notes-xyz-libreoffice
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.libreOfficeValid === 'boolean') {
+                    resultApiKey.libreOfficeValid = resultUserInfoApi.libreOfficeValid;
                 }
             }
 
