@@ -44,28 +44,13 @@ export interface tsUserApiKey {
     apiKeyLocalaiEndpoint: string;
     apiKeyLocalai: string;
 
-    // shell engine (ai-notes-xyz-shell)
-    shellEngineValid: boolean;
-    shellEngineUrl: string;
-    shellEngineToken: string;
-
-    // ai-notes-xyz-libreoffice
-    libreOfficeValid: boolean;
-    libreOfficeUrl: string;
-    libreOfficeBasicAuthUsername: string;
-    libreOfficeBasicAuthPassword: string;
-    libreOfficeUtilsUrl: string;
-    libreOfficeUtilsToken: string;
-
-    // OpenCode
-    opencodeUsername: string;
-    opencodePassword: string;
-
-    // OpenCode + shell
-    apiKeyOpencodeWithShellValid: boolean;
-    opencodeUrl: string;
-    opencodeWithCustomShellUrl: string;
-    opencodeWithCustomShellToken: string;
+    // ai-notes-xyz-agent-workspace
+    agentWorkspaceValid: boolean;
+    agentWorkspaceDesktopUrl: string;
+    agentWorkspaceDesktopUsername: string;
+    agentWorkspaceDesktopPassword: string;
+    agentWorkspaceApiUrl: string;
+    agentWorkspaceApiToken: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -115,28 +100,13 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         apiKeyLocalaiEndpoint: '',
         apiKeyLocalai: '',
 
-        // shell engine
-        shellEngineValid: false,
-        shellEngineUrl: '',
-        shellEngineToken: '',
-
-        // ai-notes-xyz-libreoffice
-        libreOfficeValid: false,
-        libreOfficeUrl: '',
-        libreOfficeBasicAuthUsername: '',
-        libreOfficeBasicAuthPassword: '',
-        libreOfficeUtilsUrl: '',
-        libreOfficeUtilsToken: '',
-
-        // OpenCode
-        opencodeUsername: '',
-        opencodePassword: '',
-
-        // OpenCode + shell
-        apiKeyOpencodeWithShellValid: false,
-        opencodeUrl: '',
-        opencodeWithCustomShellUrl: '',
-        opencodeWithCustomShellToken: '',
+        // ai-notes-xyz-agent-workspace
+        agentWorkspaceValid: false,
+        agentWorkspaceDesktopUrl: '',
+        agentWorkspaceDesktopUsername: '',
+        agentWorkspaceDesktopPassword: '',
+        agentWorkspaceApiUrl: '',
+        agentWorkspaceApiToken: '',
     } as tsUserApiKey;
 
     try {
@@ -253,71 +223,30 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
                 apiKey.apiKeyLocalai = apiKeyObject.apiKeyLocalai;
             }
 
-            // shell engine
-            if (typeof apiKeyObject.shellEngineValid === 'boolean') {
-                if (apiKeyObject.shellEngineValid) {
-                    apiKey.shellEngineValid = true;
+            // ai-notes-xyz-agent-workspace
+            if (typeof apiKeyObject.agentWorkspaceValid === 'boolean') {
+                if (apiKeyObject.agentWorkspaceValid) {
+                    apiKey.agentWorkspaceValid = true;
                 }
             }
-            if (typeof apiKeyObject.shellEngineUrl === 'string') {
-                let u = apiKeyObject.shellEngineUrl.trim().replace(/\/+$/, '');
+            if (typeof apiKeyObject.agentWorkspaceDesktopUrl === 'string') {
+                apiKey.agentWorkspaceDesktopUrl = apiKeyObject.agentWorkspaceDesktopUrl.trim().replace(/\/+$/, '');
+            }
+            if (typeof apiKeyObject.agentWorkspaceDesktopUsername === 'string') {
+                apiKey.agentWorkspaceDesktopUsername = apiKeyObject.agentWorkspaceDesktopUsername;
+            }
+            if (typeof apiKeyObject.agentWorkspaceDesktopPassword === 'string') {
+                apiKey.agentWorkspaceDesktopPassword = apiKeyObject.agentWorkspaceDesktopPassword;
+            }
+            if (typeof apiKeyObject.agentWorkspaceApiUrl === 'string') {
+                let u = apiKeyObject.agentWorkspaceApiUrl.trim().replace(/\/+$/, '');
                 if (u.endsWith('/api')) {
                     u = u.slice(0, -4).replace(/\/+$/, '');
                 }
-                apiKey.shellEngineUrl = u;
+                apiKey.agentWorkspaceApiUrl = u;
             }
-            if (typeof apiKeyObject.shellEngineToken === 'string') {
-                apiKey.shellEngineToken = apiKeyObject.shellEngineToken;
-            }
-
-            // ai-notes-xyz-libreoffice
-            if (typeof apiKeyObject.libreOfficeValid === 'boolean') {
-                if (apiKeyObject.libreOfficeValid) {
-                    apiKey.libreOfficeValid = true;
-                }
-            }
-            if (typeof apiKeyObject.libreOfficeUrl === 'string') {
-                apiKey.libreOfficeUrl = apiKeyObject.libreOfficeUrl.trim().replace(/\/+$/, '');
-            }
-            if (typeof apiKeyObject.libreOfficeBasicAuthUsername === 'string') {
-                apiKey.libreOfficeBasicAuthUsername = apiKeyObject.libreOfficeBasicAuthUsername;
-            }
-            if (typeof apiKeyObject.libreOfficeBasicAuthPassword === 'string') {
-                apiKey.libreOfficeBasicAuthPassword = apiKeyObject.libreOfficeBasicAuthPassword;
-            }
-            if (typeof apiKeyObject.libreOfficeUtilsUrl === 'string') {
-                let u = apiKeyObject.libreOfficeUtilsUrl.trim().replace(/\/+$/, '');
-                if (u.endsWith('/api')) {
-                    u = u.slice(0, -4).replace(/\/+$/, '');
-                }
-                apiKey.libreOfficeUtilsUrl = u;
-            }
-            if (typeof apiKeyObject.libreOfficeUtilsToken === 'string') {
-                apiKey.libreOfficeUtilsToken = apiKeyObject.libreOfficeUtilsToken;
-            }
-
-            // OpenCode
-            if (typeof apiKeyObject.opencodeUsername === 'string') {
-                apiKey.opencodeUsername = apiKeyObject.opencodeUsername;
-            }
-            if (typeof apiKeyObject.opencodePassword === 'string') {
-                apiKey.opencodePassword = apiKeyObject.opencodePassword;
-            }
-
-            // OpenCode + shell
-            if (typeof apiKeyObject.apiKeyOpencodeWithShellValid === 'boolean') {
-                if (apiKeyObject.apiKeyOpencodeWithShellValid) {
-                    apiKey.apiKeyOpencodeWithShellValid = true;
-                }
-            }
-            if (typeof apiKeyObject.opencodeUrl === 'string') {
-                apiKey.opencodeUrl = apiKeyObject.opencodeUrl;
-            }
-            if (typeof apiKeyObject.opencodeWithCustomShellUrl === 'string') {
-                apiKey.opencodeWithCustomShellUrl = apiKeyObject.opencodeWithCustomShellUrl;
-            }
-            if (typeof apiKeyObject.opencodeWithCustomShellToken === 'string') {
-                apiKey.opencodeWithCustomShellToken = apiKeyObject.opencodeWithCustomShellToken;
+            if (typeof apiKeyObject.agentWorkspaceApiToken === 'string') {
+                apiKey.agentWorkspaceApiToken = apiKeyObject.agentWorkspaceApiToken;
             }
         }
         return apiKey;

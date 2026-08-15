@@ -68,12 +68,12 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     /** set for Telegram forum supergroups (topic / “channel” inside the group) */
     telegramMessageThreadId: { type: Number, default: null },
 
-    // ai-notes-xyz-shell (origin URL without /api, + X-API-Token)
+    // ai-notes-xyz-shell (origin URL without /api, + X-API-Token) — unused at runtime
     shellEngineValid: { type: Boolean, default: false },
     shellEngineUrl: { type: String, default: '' },
     shellEngineToken: { type: String, default: '' },
 
-    // ai-notes-xyz-libreoffice (desktop origin + basic auth, utils API origin + X-API-Token)
+    // ai-notes-xyz-libreoffice (desktop origin + basic auth, utils API origin + X-API-Token) — unused at runtime
     libreOfficeValid: { type: Boolean, default: false },
     libreOfficeUrl: { type: String, default: '' },
     libreOfficeBasicAuthUsername: { type: String, default: '' },
@@ -81,15 +81,23 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     libreOfficeUtilsUrl: { type: String, default: '' },
     libreOfficeUtilsToken: { type: String, default: '' },
 
-    // OpenCode server credentials (shared with OpenCode + shell integration)
+    // OpenCode server credentials — unused at runtime
     opencodeUsername: { type: String, default: '' },
     opencodePassword: { type: String, default: '' },
 
-    // OpenCode + shell (separate shell origin + token; both must validate)
+    // OpenCode + shell — unused at runtime
     apiKeyOpencodeWithShellValid: { type: Boolean, default: false },
     opencodeUrl: { type: String, default: '' },
     opencodeWithCustomShellUrl: { type: String, default: '' },
     opencodeWithCustomShellToken: { type: String, default: '' },
+
+    // ai-notes-xyz-agent-workspace (desktop origin + basic auth, API origin + X-API-Token)
+    agentWorkspaceValid: { type: Boolean, default: false },
+    agentWorkspaceDesktopUrl: { type: String, default: '' },
+    agentWorkspaceDesktopUsername: { type: String, default: '' },
+    agentWorkspaceDesktopPassword: { type: String, default: '' },
+    agentWorkspaceApiUrl: { type: String, default: '' },
+    agentWorkspaceApiToken: { type: String, default: '' },
 
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },

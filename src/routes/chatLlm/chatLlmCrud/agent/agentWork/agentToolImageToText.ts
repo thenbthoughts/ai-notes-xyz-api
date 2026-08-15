@@ -13,6 +13,10 @@ import {
     shellWriteFile,
 } from '../agentUtils/agentShell/agentShellWorkspace';
 import {
+    AGENT_WORKSPACE_ROOT,
+    AGENT_WORKSPACE_SHELL_PREFIX,
+} from '../../../../../utils/agentWorkspace/agentWorkspacePaths';
+import {
     AGENT_SHELL_CONTEXT_FILE_LIMIT,
     normalizeAgentShellListing,
     type AgentShellListEntry,
@@ -58,8 +62,9 @@ export const resolveWorkspaceImagePath = (threadId: string, raw: string): string
     if (!clean) {
         throw new Error('empty image path');
     }
-    if (clean.startsWith('ai-notes-xyz-shell-files/')) return clean;
-    if (clean.startsWith('agent/')) return `ai-notes-xyz-shell-files/${clean}`;
+    if (clean.startsWith(`${AGENT_WORKSPACE_ROOT}/`)) return clean;
+    if (clean.startsWith('shell/agent/')) return `${AGENT_WORKSPACE_ROOT}/${clean}`;
+    if (clean.startsWith('agent/')) return `${AGENT_WORKSPACE_SHELL_PREFIX}/${clean}`;
     return `${agentTaskFilesDir(threadId)}/${clean}`;
 };
 
@@ -126,7 +131,7 @@ const listWorkspaceImages = async (
             result: {
                 success: false,
                 action: 'image_to_text',
-                resultSummary: 'Shell Engine is not configured in Settings → API Keys',
+                resultSummary: 'Agent Workspace is not configured in Settings → API Keys',
                 error: 'shell_not_configured',
             },
         };
@@ -187,7 +192,7 @@ export const createImageToTextTool = (): AgentToolDefinition => ({
             return {
                 success: false,
                 action: 'image_to_text',
-                resultSummary: 'Shell Engine is not configured in Settings → API Keys',
+                resultSummary: 'Agent Workspace is not configured in Settings → API Keys',
                 error: 'shell_not_configured',
             };
         }

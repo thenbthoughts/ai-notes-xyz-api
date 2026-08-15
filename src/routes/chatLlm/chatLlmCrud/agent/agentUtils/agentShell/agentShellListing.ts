@@ -1,7 +1,12 @@
 /**
- * Normalize Shell Engine file/list rows for agent context.
+ * Normalize Agent Workspace file/list rows for agent context.
  * Keep agent workspace uploads + generated outputs only; drop junk; newest first; cap at 100.
  */
+
+import {
+    AGENT_WORKSPACE_CONTAINER_STORAGE,
+    AGENT_WORKSPACE_ROOT,
+} from '../../../../../../utils/agentWorkspace/agentWorkspacePaths';
 
 export const AGENT_SHELL_CONTEXT_FILE_LIMIT = 100;
 
@@ -56,13 +61,13 @@ export const normalizeAgentShellListing = (params: {
         // Only agent workspace paths (uploads + generated scripts/outputs).
         if (agentShellDir && !rel.includes(agentShellDir) && !rel.startsWith('agent/')) {
             // Still allow pathInAgentFolder-style rows that are already relative
-            if (rel.includes('ai-notes-xyz-shell-files/') && !rel.includes('/agent/')) continue;
+            if (rel.includes(`${AGENT_WORKSPACE_ROOT}/`) && !rel.includes('/agent/')) continue;
         }
 
         const abs =
             typeof o.absolutePath === 'string' && o.absolutePath.trim()
                 ? o.absolutePath.replace(/\\/g, '/')
-                : `/app/data/${rel}`;
+                : `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${rel}`;
         const pathInAgentFolder = pathInAgentFolderFrom(rel, agentShellDir);
         if (!pathInAgentFolder || isIgnoredAgentShellPath(pathInAgentFolder)) continue;
 
@@ -96,7 +101,7 @@ export const normalizeAgentShellListing = (params: {
                     byPath.set(folderKey, {
                         relativePath: folderRel,
                         pathInAgentFolder: acc,
-                        absolutePath: `/app/data/${folderRel}`,
+                        absolutePath: `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${folderRel}`,
                         isDir: true,
                         size: 0,
                         mtimeMs,

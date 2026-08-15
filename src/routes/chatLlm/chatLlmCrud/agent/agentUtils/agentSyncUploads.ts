@@ -47,7 +47,7 @@ const listShellFilesQuiet = async (
 
 /**
  * Sync user attachments & inline message photos for a chat thread:
- *   Storage (R2/S3/GridFS) -> Buffer -> ai-notes-xyz-shell-files/agent/${chat_id}/uploads/${recordId}_${fileName}
+ *   Storage (R2/S3/GridFS) -> Buffer -> ai-notes-xyz-agent-workspace/shell/agent/${chat_id}/uploads/${recordId}_${fileName}
  *
  * Skips re-upload when the same basename already exists in the shell workspace with the same byte size.
  */

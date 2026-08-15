@@ -12,19 +12,19 @@ export type LibreOfficeConfig = {
 
 export const getLibreOfficeConfig = (apiKey: tsUserApiKey): LibreOfficeConfig | null => {
     if (
-        !apiKey.libreOfficeValid ||
-        !apiKey.libreOfficeUrl?.trim() ||
-        !apiKey.libreOfficeUtilsUrl?.trim() ||
-        !apiKey.libreOfficeUtilsToken
+        !apiKey.agentWorkspaceValid ||
+        !apiKey.agentWorkspaceDesktopUrl?.trim() ||
+        !apiKey.agentWorkspaceApiUrl?.trim() ||
+        !apiKey.agentWorkspaceApiToken
     ) {
         return null;
     }
     return {
-        desktopUrl: apiKey.libreOfficeUrl.replace(/\/+$/, ''),
-        utilsUrl: apiKey.libreOfficeUtilsUrl.replace(/\/+$/, ''),
-        token: apiKey.libreOfficeUtilsToken,
-        basicAuthUsername: apiKey.libreOfficeBasicAuthUsername || '',
-        basicAuthPassword: apiKey.libreOfficeBasicAuthPassword || '',
+        desktopUrl: apiKey.agentWorkspaceDesktopUrl.replace(/\/+$/, ''),
+        utilsUrl: apiKey.agentWorkspaceApiUrl.replace(/\/+$/, ''),
+        token: apiKey.agentWorkspaceApiToken,
+        basicAuthUsername: apiKey.agentWorkspaceDesktopUsername || '',
+        basicAuthPassword: apiKey.agentWorkspaceDesktopPassword || '',
     };
 };
 
@@ -132,14 +132,14 @@ export async function uploadBufferToLibreOffice(params: {
         }
         return {
             ok: false,
-            error: `Upload to Libre Office failed: ${messageFromBody(data, res.status)}`,
+            error: `Upload to Agent Workspace failed: ${messageFromBody(data, res.status)}`,
             status: res.status,
         };
     } catch (e) {
         console.log('[libreoffice upload] catch', e);
         return {
             ok: false,
-            error: `Could not reach Libre Office utils write API: ${e instanceof Error ? e.message : String(e)}`,
+            error: `Could not reach Agent Workspace write API: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 }
@@ -171,14 +171,14 @@ export async function openFileInLibreOffice(params: {
         }
         return {
             ok: false,
-            error: `Libre Office open failed: ${messageFromBody(res.data, res.status)}`,
+            error: `Agent Workspace open failed: ${messageFromBody(res.data, res.status)}`,
             status: res.status,
         };
     } catch (e) {
         console.log('[libreoffice openFile] catch', e);
         return {
             ok: false,
-            error: `Could not reach Libre Office open API: ${e instanceof Error ? e.message : String(e)}`,
+            error: `Could not reach Agent Workspace open API: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 }

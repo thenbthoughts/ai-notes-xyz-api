@@ -4,6 +4,9 @@ import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import writeAgentLog, { fetchLlmUnifiedLogged, AgentLogContext } from '../agentUtils/agentWriteLog';
 import { AGENT_SHELL_ENV_BLURB } from '../agentUtils/agentShell/agentShellEnvironmentContext';
 import {
+    AGENT_WORKSPACE_CONTAINER_STORAGE,
+} from '../../../../../utils/agentWorkspace/agentWorkspacePaths';
+import {
     isAgentContextMemoryKey,
     withContextChatMessages,
     type AgentChatWindow,
@@ -101,9 +104,9 @@ export const detectArtifactEvidence = (
         ...memories.map((m) => `${m.key}\n${m.content}`),
         extraText,
     ].join('\n');
-    // Require /app/data/... or ai-notes-xyz-shell-files/... (optional PDF_PATH= prefix).
+    // Require /config/... or ai-notes-xyz-agent-workspace/... (optional PDF_PATH= prefix).
     const pathRe =
-        /(?:(?:PDF|XLSX|FILE|OUT)_PATH=)?(?:\/app\/data\/|ai-notes-xyz-shell-files\/)[^\s"'`<>|]{3,400}\.([a-z0-9]{1,12})/gi;
+        /(?:(?:PDF|XLSX|FILE|OUT)_PATH=)?(?:\/config\/|ai-notes-xyz-agent-workspace\/)[^\s"'`<>|]{3,400}\.([a-z0-9]{1,12})/gi;
     const paths: string[] = [];
     const extSet = new Set<string>();
     let m: RegExpExecArray | null;
@@ -344,7 +347,7 @@ export const listWorkspaceDeliverables = (
         out.push({
             relativePath: rel,
             pathInAgentFolder,
-            absolutePath: String(f.absolutePath || `/app/data/${rel}`),
+            absolutePath: String(f.absolutePath || `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${rel}`),
             size,
         });
     }
@@ -493,7 +496,7 @@ export const filterNewDeliverables = (
 
 /**
  * When the shell listing is stale, still count grounded tool stdout paths
- * (`/app/data/...` or `ai-notes-xyz-shell-files/...` plus a printed size).
+ * (`/config/...` or `ai-notes-xyz-agent-workspace/...` plus a printed size).
  * Helper scripts never count. Baseline fixtures are left to listing / in-place detection.
  */
 export const mergeStdoutDeliverables = (params: {
@@ -530,7 +533,7 @@ export const mergeStdoutDeliverables = (params: {
         existing.push({
             relativePath: clean,
             pathInAgentFolder: name,
-            absolutePath: p.startsWith('/') ? p : `/app/data/${clean}`,
+            absolutePath: p.startsWith('/') ? p : `${AGENT_WORKSPACE_CONTAINER_STORAGE}/${clean}`,
             size,
         });
         have.add(name.toLowerCase());
@@ -680,7 +683,7 @@ export const applyArtifactGate = (params: {
     }
 
     // When a shell listing was checked, require a real non-upload deliverable on disk.
-    // Do not trust LLM-mentioned /app/data/... paths alone (easy to hallucinate).
+    // Do not trust LLM-mentioned /config/... paths alone (easy to hallucinate).
     if (typeof workspaceHasDeliverable === 'boolean') {
         if (workspaceHasDeliverable) {
             return verify;

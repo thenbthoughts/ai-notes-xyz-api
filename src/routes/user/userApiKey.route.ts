@@ -8,12 +8,7 @@ import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema
 import { ModelUserTelegramConversationCache } from '../../schema/schemaUser/SchemaUserTelegramConversationCache';
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { validateOpencodeHealth } from '../../utils/opencode/validateOpencodeHealth';
-import {
-    parseOpenCodeServiceOrigin,
-    validateShellEngineEndpoints,
-} from '../../utils/shell/validateShellEngine';
-import { validateLibreOfficeEndpoints } from '../../utils/libreOffice/validateLibreOffice';
+import { validateAgentWorkspaceEndpoints } from '../../utils/agentWorkspace/validateAgentWorkspace';
 import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
@@ -403,21 +398,39 @@ router.post(
     }
 );
 
-// Update User Shell Engine (ai-notes-xyz-shell — base URL + X-API-Token)
+// Update User Agent Workspace (ai-notes-xyz-agent-workspace — desktop + API)
 router.post(
-    '/updateUserApiShellEngine',
+    '/updateUserApiAgentWorkspace',
     middlewareUserAuth,
     async (
         req: Request, res: Response
     ) => {
         try {
-            const { shellEngineUrl, shellEngineToken } = req.body;
+            const {
+                agentWorkspaceDesktopUrl,
+                agentWorkspaceDesktopUsername,
+                agentWorkspaceDesktopPassword,
+                agentWorkspaceApiUrl,
+                agentWorkspaceApiToken,
+            } = req.body as {
+                agentWorkspaceDesktopUrl?: string;
+                agentWorkspaceDesktopUsername?: string;
+                agentWorkspaceDesktopPassword?: string;
+                agentWorkspaceApiUrl?: string;
+                agentWorkspaceApiToken?: string;
+            };
 
-            const shellCheck = await validateShellEngineEndpoints(shellEngineUrl, shellEngineToken);
-            if (!shellCheck.ok) {
+            const check = await validateAgentWorkspaceEndpoints(
+                typeof agentWorkspaceDesktopUrl === 'string' ? agentWorkspaceDesktopUrl : '',
+                typeof agentWorkspaceDesktopUsername === 'string' ? agentWorkspaceDesktopUsername : '',
+                typeof agentWorkspaceDesktopPassword === 'string' ? agentWorkspaceDesktopPassword : '',
+                typeof agentWorkspaceApiUrl === 'string' ? agentWorkspaceApiUrl : '',
+                typeof agentWorkspaceApiToken === 'string' ? agentWorkspaceApiToken : '',
+            );
+            if (!check.ok) {
                 return res.status(400).json({
                     success: '',
-                    error: shellCheck.error,
+                    error: check.error,
                 });
             }
 
@@ -426,163 +439,16 @@ router.post(
                     userId: res.locals.auth_userId,
                 },
                 {
-                    shellEngineValid: true,
-                    shellEngineUrl: shellCheck.origin,
-                    shellEngineToken: shellCheck.token,
+                    agentWorkspaceValid: true,
+                    agentWorkspaceDesktopUrl: check.desktopOrigin,
+                    agentWorkspaceDesktopUsername: check.username,
+                    agentWorkspaceDesktopPassword: check.password,
+                    agentWorkspaceApiUrl: check.apiOrigin,
+                    agentWorkspaceApiToken: check.token,
                 },
                 {
                     new: true,
                 }
-            );
-
-            return res.json({
-                success: 'Updated',
-                error: '',
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
-// Update User Libre Office (ai-notes-xyz-libreoffice — URL + basic auth + X-API-Token)
-router.post(
-    '/updateUserApiLibreOffice',
-    middlewareUserAuth,
-    async (
-        req: Request, res: Response
-    ) => {
-        try {
-            const {
-                libreOfficeUrl,
-                libreOfficeBasicAuthUsername,
-                libreOfficeBasicAuthPassword,
-                libreOfficeUtilsUrl,
-                libreOfficeUtilsToken,
-            } = req.body as {
-                libreOfficeUrl?: string;
-                libreOfficeBasicAuthUsername?: string;
-                libreOfficeBasicAuthPassword?: string;
-                libreOfficeUtilsUrl?: string;
-                libreOfficeUtilsToken?: string;
-            };
-
-            const libreCheck = await validateLibreOfficeEndpoints(
-                typeof libreOfficeUrl === 'string' ? libreOfficeUrl : '',
-                typeof libreOfficeBasicAuthUsername === 'string' ? libreOfficeBasicAuthUsername : '',
-                typeof libreOfficeBasicAuthPassword === 'string' ? libreOfficeBasicAuthPassword : '',
-                typeof libreOfficeUtilsUrl === 'string' ? libreOfficeUtilsUrl : '',
-                typeof libreOfficeUtilsToken === 'string' ? libreOfficeUtilsToken : '',
-            );
-            if (!libreCheck.ok) {
-                return res.status(400).json({
-                    success: '',
-                    error: libreCheck.error,
-                });
-            }
-
-            await ModelUserApiKey.findOneAndUpdate(
-                {
-                    userId: res.locals.auth_userId,
-                },
-                {
-                    libreOfficeValid: true,
-                    libreOfficeUrl: libreCheck.desktopOrigin,
-                    libreOfficeBasicAuthUsername: libreCheck.username,
-                    libreOfficeBasicAuthPassword: libreCheck.password,
-                    libreOfficeUtilsUrl: libreCheck.utilsOrigin,
-                    libreOfficeUtilsToken: libreCheck.token,
-                },
-                {
-                    new: true,
-                }
-            );
-
-            return res.json({
-                success: 'Updated',
-                error: '',
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
-// Update User API OpenCode with Shell (OpenCode health + shell about/private)
-router.post(
-    '/updateUserApiOpencodeWithShell',
-    middlewareUserAuth,
-    async (req: Request, res: Response) => {
-        try {
-            const {
-                opencodeUrl,
-                opencodeUsername,
-                opencodePassword,
-                opencodeWithCustomShellUrl,
-                opencodeWithCustomShellToken,
-            } = req.body as {
-                opencodeUrl?: string;
-                opencodeUsername?: string;
-                opencodePassword?: string;
-                opencodeWithCustomShellUrl?: string;
-                opencodeWithCustomShellToken?: string;
-            };
-
-            const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl : '';
-            const user = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : '';
-            const pass = typeof opencodePassword === 'string' ? opencodePassword : '';
-
-            const originParsed = parseOpenCodeServiceOrigin(urlRaw);
-            if ('error' in originParsed) {
-                return res.status(400).json({
-                    success: '',
-                    error: originParsed.error,
-                });
-            }
-
-            if (!user || !pass) {
-                return res.status(400).json({
-                    success: '',
-                    error: 'OpenCode userId and password are required',
-                });
-            }
-
-            const health = await validateOpencodeHealth(originParsed.origin, user, pass);
-            if (!health.ok) {
-                return res.status(400).json({
-                    success: '',
-                    error: health.error,
-                });
-            }
-
-            const shellUrl =
-                typeof opencodeWithCustomShellUrl === 'string' ? opencodeWithCustomShellUrl : '';
-            const shellTok =
-                typeof opencodeWithCustomShellToken === 'string'
-                    ? opencodeWithCustomShellToken
-                    : '';
-
-            const shellCheck = await validateShellEngineEndpoints(shellUrl, shellTok);
-            if (!shellCheck.ok) {
-                return res.status(400).json({
-                    success: '',
-                    error: shellCheck.error,
-                });
-            }
-
-            await ModelUserApiKey.findOneAndUpdate(
-                { userId: res.locals.auth_userId },
-                {
-                    apiKeyOpencodeWithShellValid: true,
-                    opencodeUrl: originParsed.origin,
-                    opencodeWithCustomShellUrl: shellCheck.origin,
-                    opencodeWithCustomShellToken: shellCheck.token,
-                    opencodeUsername: user,
-                    opencodePassword: pass,
-                },
-                { new: true }
             );
 
             return res.json({
@@ -1765,9 +1631,7 @@ router.post(
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
-                'shellEngine',
-                'libreOffice',
-                'opencodeWithShell',
+                'agentWorkspace',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1835,24 +1699,13 @@ router.post(
                     telegramChatId: '',
                     telegramMessageThreadId: null,
                 },
-                shellEngine: {
-                    shellEngineValid: false,
-                    shellEngineUrl: '',
-                    shellEngineToken: '',
-                },
-                libreOffice: {
-                    libreOfficeValid: false,
-                    libreOfficeUrl: '',
-                    libreOfficeBasicAuthUsername: '',
-                    libreOfficeBasicAuthPassword: '',
-                    libreOfficeUtilsUrl: '',
-                    libreOfficeUtilsToken: '',
-                },
-                opencodeWithShell: {
-                    apiKeyOpencodeWithShellValid: false,
-                    opencodeUrl: '',
-                    opencodeWithCustomShellUrl: '',
-                    opencodeWithCustomShellToken: '',
+                agentWorkspace: {
+                    agentWorkspaceValid: false,
+                    agentWorkspaceDesktopUrl: '',
+                    agentWorkspaceDesktopUsername: '',
+                    agentWorkspaceDesktopPassword: '',
+                    agentWorkspaceApiUrl: '',
+                    agentWorkspaceApiToken: '',
                 },
             };
 
