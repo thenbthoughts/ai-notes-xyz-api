@@ -123,22 +123,17 @@ export async function validateLibreOfficeEndpoints(
             httpsAgent: desktopOrigin.startsWith('https:') ? insecureHttpsAgent : undefined,
         });
 
-        console.log(desktopRes);
-
         if (desktopRes.status === 401) {
             return {
                 ok: false,
-                error:
-                    'Libre Office basic auth failed. Use CUSTOM_USER and PASSWORD from ai-notes-xyz-libreoffice (desktop defaults: libreoffice / libreoffice) against the web desktop URL (e.g. http://localhost:3010/).',
+                error: `Libre Office basic auth failed for ${desktopOrigin}/`,
             };
         }
-
-        console.log(desktopRes);
 
         if (desktopRes.status < 200 || desktopRes.status >= 400) {
             return {
                 ok: false,
-                error: `Libre Office desktop check failed (HTTP ${desktopRes.status}). Use the web desktop origin (e.g. http://localhost:3010/ or https://localhost:3011/), not the utils API port.`,
+                error: `Libre Office desktop check failed (HTTP ${desktopRes.status}) for ${desktopOrigin}/`,
             };
         }
     } catch (error) {
@@ -149,8 +144,7 @@ export async function validateLibreOfficeEndpoints(
         }
         return {
             ok: false,
-            error:
-                'Could not reach the Libre Office desktop. Ensure ai-notes-xyz-libreoffice is running (e.g. http://localhost:3010/).',
+            error: `Could not reach the Libre Office desktop at ${desktopOrigin}/`,
         };
     }
 
