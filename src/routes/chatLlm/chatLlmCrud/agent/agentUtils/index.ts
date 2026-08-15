@@ -42,3 +42,14 @@ export {
 } from './agentShell/agentShellWorkspace';
 export { ensureAgentTerminalChatMessage, agentRunTag } from './ensureAgentTerminalChatMessage';
 export { default as syncThreadUploadsToAgentWorkspace } from './agentSyncUploads';
+export {
+    AGENT_SCRIPT_MAX_TOKENS_DEFAULT,
+    AGENT_SCRIPT_MAX_TOKENS_MIN,
+    AGENT_SCRIPT_MAX_TOKENS_MAX,
+    AGENT_SCRIPT_CONTINUE_MAX,
+    normalizeAgentScriptMaxTokens,
+    resolveAgentScriptMaxTokens,
+    scaleScriptMaxTokensForTask,
+    looksLikeIncompleteScript,
+    stripGeneratedCodeFences,
+} from './agentScriptMaxTokens';

@@ -15,6 +15,7 @@ import { getMongodbObjectOrNull } from '../../../utils/common/getMongodbObjectOr
 import cleanupThreadOnDelete from './utils/cleanupThreadOnDelete';
 import type { tsUserApiKey } from '../../../utils/llm/llmCommonFunc';
 import { contextWindowLimitsFromDoc } from '../chatLlmCrud/agent/agentUtils/agentContextWindow';
+import { normalizeAgentScriptMaxTokens } from '../chatLlmCrud/agent/agentUtils/agentScriptMaxTokens';
 
 // Router
 const router = Router();
@@ -265,6 +266,7 @@ router.post(
                 agentContextActionLimit,
                 agentContextSummaryCount,
                 agentContextMessagesPerSummary,
+                agentScriptMaxTokens,
 
                 executeShell,
                 shellExecuteMinAttempts,
@@ -300,6 +302,7 @@ router.post(
                 agentContextActionLimit: 100,
                 agentContextSummaryCount: 10,
                 agentContextMessagesPerSummary: 10,
+                agentScriptMaxTokens: 8192,
 
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
@@ -447,6 +450,9 @@ router.post(
             if (typeof agentContextMessagesPerSummary === 'number') {
                 addData.agentContextMessagesPerSummary = contextWindow.messagesPerSummary;
             }
+            if (typeof agentScriptMaxTokens === 'number') {
+                addData.agentScriptMaxTokens = normalizeAgentScriptMaxTokens(agentScriptMaxTokens);
+            }
 
             // Shell primary command retries (per thread), integers 1–10, min ≤ max
             let shellMinA: number | undefined = undefined;
@@ -575,6 +581,7 @@ router.post(
                 agentContextActionLimit,
                 agentContextSummaryCount,
                 agentContextMessagesPerSummary,
+                agentScriptMaxTokens,
 
                 executeShell,
 
@@ -760,6 +767,9 @@ router.post(
             }
             if (typeof agentContextMessagesPerSummary === 'number') {
                 updateData.agentContextMessagesPerSummary = contextWindowEdit.messagesPerSummary;
+            }
+            if (typeof agentScriptMaxTokens === 'number') {
+                updateData.agentScriptMaxTokens = normalizeAgentScriptMaxTokens(agentScriptMaxTokens);
             }
 
             let shellMinB: number | undefined = undefined;

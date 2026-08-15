@@ -21,6 +21,13 @@ import {
 import { assertAgentShellSafe } from '../agentUtils/agentShell/agentShellSafety';
 import writeAgentLog, { fetchLlmUnifiedLogged } from '../agentUtils/agentWriteLog';
 import { buildAgentContextPack, withContextChatMessages } from '../agentUtils/agentContextWindow';
+import {
+    AGENT_SCRIPT_CONTINUE_MAX,
+    looksLikeIncompleteScript,
+    resolveAgentScriptMaxTokens,
+    scaleScriptMaxTokensForTask,
+    stripGeneratedCodeFences,
+} from '../agentUtils/agentScriptMaxTokens';
 
 const updateTypeToLogAction = (updateType: string, payload?: Record<string, unknown>): string => {
     if (updateType === 'tick') {
@@ -164,6 +171,14 @@ const generateCodeViaLlm = async (
             : `print('Task: ${promptText.replace(/'/g, "\\'")}')`;
     }
 
+    const thread = await ModelChatLlmThread.findById(ctx.threadId)
+        .select('agentScriptMaxTokens chatLlmMaxTokens')
+        .lean();
+    const maxTokens = scaleScriptMaxTokensForTask(
+        `${promptText}\n${ctx.currentGoal.title}\n${ctx.currentGoal.description}`,
+        resolveAgentScriptMaxTokens(thread)
+    );
+
     const contextPack = ctx.logCtx
         ? await buildAgentContextPack({
               logCtx: ctx.logCtx,
@@ -173,10 +188,9 @@ const generateCodeViaLlm = async (
           })
         : null;
 
-    const messages: Message[] = withContextChatMessages(
-        {
-            role: 'system',
-            content: `You are an expert ${scriptType === 'node' ? 'Node.js' : 'Python 3'} developer. Write executable, complete, production-ready ${scriptType === 'node' ? 'Node.js' : 'Python 3'} code to fulfill the task. Do NOT include markdown text, explanations, or backticks. Return raw executable code ONLY. Save output files using Node.js 'fs' or Python 'open' if needed.
+    const langLabel = scriptType === 'node' ? 'Node.js' : 'Python 3';
+    const systemContent = `You are an expert ${langLabel} developer. Write executable, complete, production-ready ${langLabel} code to fulfill the task. Do NOT include markdown text, explanations, or backticks. Return raw executable code ONLY. Save output files using Node.js 'fs' or Python 'open' if needed.
+The output must be a complete file that parses and runs. Do not stop mid-function, mid-string, or mid-HTML.
 ${
     scriptType === 'python'
         ? `PYTHON RULES:
@@ -190,12 +204,9 @@ ${
 - Write the named deliverable file the task asked for. Do not leave the product only in create_artifact.js.
 - Scripts must exit. Do not start a long-lived HTTP server unless the user asked for one.
 - Never listen on ports 2000, 2001, 3000, 3010, or 3011. If a demo server is required, bind 127.0.0.1 on 18080+ or port 0, print the port, then exit.`
-}`,
-        },
-        contextPack?.chatWindow,
-        {
-            role: 'user',
-            content: `Goal / Task: ${promptText}
+}`;
+
+    const userContent = `Goal / Task: ${promptText}
 Goal Title: ${ctx.currentGoal.title}
 Goal Description: ${ctx.currentGoal.description}
 
@@ -207,8 +218,12 @@ CRITICAL FILE PATH RULES:
 - Use either an exact absolutePath from those results OR a pathInAgentFolder (e.g. 'uploads/filename.jpg').
 - NEVER use full workspace prefix 'ai-notes-xyz-agent-workspace/shell/agent/...' as a relative path when running inside the agent folder!
 - Do NOT invent placeholder filenames like 'input.jpg', 'image.png', or 'test.txt'.
-- Save output files in the workspace root or uploads/ folder.`,
-        }
+- Save output files in the workspace root or uploads/ folder.`;
+
+    const messages: Message[] = withContextChatMessages(
+        { role: 'system', content: systemContent },
+        contextPack?.chatWindow,
+        { role: 'user', content: userContent }
     );
 
     const res = await fetchLlmUnifiedLogged({
@@ -221,12 +236,55 @@ CRITICAL FILE PATH RULES:
             model: llmConfig.model,
             messages,
             temperature: 0.2,
-            maxTokens: 3000,
+            maxTokens,
+            headersExtra: llmConfig.customHeaders,
         },
     });
 
-    let rawCode = res.content || '';
-    rawCode = rawCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
+    let rawCode = stripGeneratedCodeFences(res.content || '');
+    let continuations = 0;
+    while (
+        looksLikeIncompleteScript(rawCode, scriptType) &&
+        continuations < AGENT_SCRIPT_CONTINUE_MAX
+    ) {
+        continuations += 1;
+        const continueRes = await fetchLlmUnifiedLogged({
+            logCtx: ctx.logCtx,
+            purpose: 'agent_script_code_gen_continue',
+            params: {
+                provider: llmConfig.provider,
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                model: llmConfig.model,
+                messages: [
+                    {
+                        role: 'system',
+                        content:
+                            `The previous ${langLabel} script was cut off by a token limit. ` +
+                            `Output ONLY the remaining raw code to append so the file is complete. ` +
+                            `Do not repeat existing lines. No markdown or explanations.`,
+                    },
+                    {
+                        role: 'user',
+                        content: `TASK:\n${promptText}\n\nEXISTING CODE (continue from the end):\n${rawCode.slice(-6000)}`,
+                    },
+                ],
+                temperature: 0.1,
+                maxTokens,
+                headersExtra: llmConfig.customHeaders,
+            },
+        });
+        const chunk = stripGeneratedCodeFences(continueRes.content || '');
+        if (!chunk) break;
+        if (
+            /^(the script|this (code|script)|already complete|nothing to (add|append))/i.test(chunk) &&
+            !/\b(const|let|var|function|def |import |from |class |print\(|console\.)/.test(chunk)
+        ) {
+            break;
+        }
+        rawCode = `${rawCode}\n${chunk}`;
+    }
+
     return rawCode;
 };
 
@@ -604,8 +662,12 @@ export class AgentToolRegistry {
 
                 let scriptType = resolveScriptType(args, rawFileName, rawCode);
 
-                // Validate code vs English text
-                if (!isExecutableCode(rawCode, scriptType)) {
+                // Validate code vs English text, and regenerate if the planner JSON
+                // (900-token cap) or a prior call left a truncated file.
+                if (
+                    !isExecutableCode(rawCode, scriptType) ||
+                    looksLikeIncompleteScript(rawCode, scriptType)
+                ) {
                     rawCode = await generateCodeViaLlm(ctx, promptReason, scriptType);
                     // Re-resolve in case generated code is clearly the other language
                     scriptType = resolveScriptType(args, rawFileName, rawCode);
