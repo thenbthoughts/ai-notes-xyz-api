@@ -278,6 +278,8 @@ router.post(
                 executeShell,
                 shellExecuteMinAttempts,
                 shellExecuteMaxAttempts,
+
+                useOmniparser,
             } = req.body;
 
             const addData = {
@@ -314,6 +316,8 @@ router.post(
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
                 shellExecuteMaxAttempts: 1,
+
+                useOmniparser: false,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -365,6 +369,10 @@ router.post(
 
             if (typeof executeShell === 'boolean') {
                 addData.executeShell = executeShell;
+            };
+
+            if (typeof useOmniparser === 'boolean') {
+                addData.useOmniparser = useOmniparser;
             };
             
             // Agent budgets: tokens (1–1M) and iterations (1–100), min <= max
@@ -594,6 +602,8 @@ router.post(
 
                 shellExecuteMinAttempts,
                 shellExecuteMaxAttempts,
+
+                useOmniparser,
             } = req.body;
 
             // Build update object
@@ -673,6 +683,10 @@ router.post(
 
             if (typeof executeShell === 'boolean') {
                 updateData.executeShell = executeShell;
+            };
+
+            if (typeof useOmniparser === 'boolean') {
+                updateData.useOmniparser = useOmniparser;
             };
             
             // Agent budgets: tokens (1–1M) and iterations (1–100)

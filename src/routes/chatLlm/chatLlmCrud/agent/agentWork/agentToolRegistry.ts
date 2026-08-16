@@ -10,6 +10,7 @@ import { Message } from '../../../../../utils/llmPendingTask/utils/fetchLlmUnifi
 import { getLlmConfig } from '../../chatUtils/chatLlmGetLlmConfig';
 import { AgentToolContext, AgentToolDefinition, AgentToolResult } from './agentToolTypes';
 import { createImageToTextTool } from './agentToolImageToText';
+import { createOmniparserTool } from '../agentUtils/omniparser/omniparserTool';
 import { searchAgentDomain, searchAllAgentDomains, AgentDomainSearchSource } from '../agentUtils/agentDomainAccess';
 import axios from 'axios';
 import { agentTaskFilesDir, agentTaskFilePath, getAgentShellConfig, shellExecuteCommand, shellStdoutShowsDeliverable, shellWriteFile } from '../agentUtils/agentShell/agentShellWorkspace';
@@ -615,6 +616,7 @@ export class AgentToolRegistry {
         });
 
         this.register(createImageToTextTool());
+        this.register(createOmniparserTool());
 
         // 6. Execute Script Tool (Node.js preference / Python 3 secondary + Code Auto-Gen & Self-Healing)
         this.register({

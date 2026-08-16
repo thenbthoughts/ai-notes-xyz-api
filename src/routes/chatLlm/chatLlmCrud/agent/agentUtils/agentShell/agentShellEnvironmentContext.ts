@@ -6,13 +6,20 @@
 export const AGENT_SHELL_ENV_BLURB = `AGENT WORKSPACE ENVIRONMENT (always true for execute_script):
 - Ubuntu XFCE webtop Docker; Node.js 24; Python 3 (use python3, not python); npm; pip; apt-get; git; ffmpeg; openssl; LibreOffice; VS Code.
 - Chromium via google-chrome-stable; aliases: chromium, chromium-browser. NEVER use snap or apt chromium-browser metapackage.
-- Screenshots: google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png. Do not npm install puppeteer.
-- Workspace: ai-notes-xyz-agent-workspace/shell/agent/{threadId}/ with uploads/ for user files and index-data-{threadId}/ for folder search indexes.
+- Workspace: ai-notes-xyz-agent-workspace/shell/agent/{threadId}/ with uploads/ for user files and index-data-{threadId}/ for folder search indexes. You can write file, read file, execute command, install npm, run node/python. Divide file by complexity when needed (split large file, process per chunk, merge). Just add the question, execute the solution — infer from requirement.
+- PREFERENCE: Try shell first for all tasks (execute_script). Use GUI only if required (browser rendering test, visual verification, desktop app). For GUI, take screenshot and pass to vision LLM via image_to_text.
 - Prefer Node for .js; Python3 + Pillow for image resize/compress; soffice/LibreOffice for office/PDF when useful. npm init -y / pip install allowed when needed.
 - Scripts must exit. Do not listen on ports 2000, 2001, 3000, 3010, or 3011. Demo HTTP: 127.0.0.1 and port 18080+ or 0, then exit.
 - Python pip: use --break-system-packages or a local .agent_venv (PEP 668). For .xlsx prefer openpyxl (not csv when xlsx asked).
 - Paths must stay under ai-notes-xyz-agent-workspace/shell or .../features (no ..). Absolute paths are under /config/.
 - Safety: draft email content as files OK; git clone/fetch/pull OK; do NOT send email/SMS/webhooks; do NOT git push or publish to remotes.`.trim();
+
+export const AGENT_GUI_ENV_BLURB = `GUI DESKTOP (ai-notes-xyz-agent-workspace) — USE ONLY IF REQUIRED (shell is preferred):
+- Ubuntu XFCE webtop Docker, desktop on :3010/:3011 (user abc / agentworkspace), VNC-like.
+- Workspace files under ai-notes-xyz-agent-workspace/shell/agent/{threadId}/, absolute /config/ (FILE_STORAGE_PATH).
+- Human-like (only when shell insufficient): test file in browser (google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png file:///config/.../index.html, then image_to_text for vision LLM), make zip (zip -r out.zip folder/), use app (code, soffice --convert-to), etc. For any GUI visual check, take screenshot and pass to vision LLM via image_to_text tool.
+- Ports 2000 API, 2001 workspace API, 3000 web, 3010/3011 desktop reserved.
+- Use when requirement implies browser test, archive, or desktop app and shell cannot verify — infer from requirement, generic, shell-first.`.trim();
 
 export type BuiltinAgentSkillSeed = {
     name: string;
@@ -211,6 +218,39 @@ One \`execute_script\`: write the output, print \`OUT=<absolute path>\` and \`SI
 
 ## Avoid
 - Explore-only sub-goals for simple conversions
+`,
+    },
+    {
+        name: 'gui-desktop',
+        description: 'GUI desktop and browser/zip/app in ai-notes-xyz-agent-workspace (human-like) — use only if shell insufficient, screenshot to vision LLM.',
+        body: `# GUI Desktop — SHELL FIRST, GUI ONLY IF REQUIRED
+## Runtime
+- Ubuntu XFCE webtop :3010/:3011, user abc
+- Chromium, ffmpeg, zip, soffice
+
+## Human-like (only when shell cannot verify)
+- Test file in browser: google-chrome-stable --headless --disable-gpu --no-sandbox --screenshot=out.png file:///config/.../file.html, then pass screenshot to vision LLM via image_to_text (e.g., image_to_text with relativePath=out.png)
+- Make zip: zip -r /config/.../out.zip folder/ (shell, not GUI)
+- Use app: soffice --headless --convert-to pdf input.docx
+- Preference: Try shell (execute_script) first for all; use GUI + screenshot→vision only when visual verification required.
+`,
+    },
+    {
+        name: 'progress-tracking',
+        description: 'Multi-message thread progress: compress old messages, key points, goal, done, structure, write progress.md.',
+        body: `# Progress Tracking
+- On new message in thread with multiple prior messages: compress old messages, mention key points, goal, what is done, structure progress, write file progress.md to workspace root.
+- Keep context compact via summaries, human-like.
+`,
+    },
+    {
+        name: 'omniparser',
+        description: 'Desktop-only GUI parsing via Replicate microsoft/omniparser-v2 (requires Replicate key and chat toggle, not for input files).',
+        body: `# Omniparser — Desktop Only
+- Use only for DESKTOP screenshots (e.g., gui.png, screen.png from chrome --headless --screenshot file:///config/...), NOT for input files in uploads/ (use image_to_text for input files).
+- Use only if chat option Use Omniparser is enabled and Replicate key exists (check via tool error messages).
+- Parse desktop screenshot: omniparser_parse with relativePath to desktop screenshot (e.g., out.png) after google-chrome-stable --headless --screenshot, then pass elements to vision LLM if needed
+- Shell-first: try shell first, omniparser desktop-only if required and enabled
 `,
     },
 ];

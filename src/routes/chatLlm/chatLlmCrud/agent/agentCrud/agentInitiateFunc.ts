@@ -175,6 +175,22 @@ const agentInitiateFunc = async ({
             console.error('copyPastAgentRecords failed:', e);
         }
 
+        // Write compressed progress file for multi-message threads (key points, goal, done, structure)
+        try {
+            const msgCount = await ModelChatLlm.countDocuments({ threadId: threadObjectId });
+            if (msgCount > 3) {
+                const { writeProgressFile } = await import('../agentUtils/agentProgress/agentProgressFile');
+                await writeProgressFile({
+                    threadId: threadObjectId,
+                    agentInstanceId: agentInstance._id as mongoose.Types.ObjectId,
+                    userId: thread.userId as mongoose.Types.ObjectId,
+                    logCtx,
+                });
+            }
+        } catch (e) {
+            console.error('writeProgressFile failed:', e);
+        }
+
         const chatWindow = await loadContextChatWindow({
             threadId: threadObjectId,
             actionLimit: contextWindow.actionLimit,
@@ -207,13 +223,13 @@ const agentInitiateFunc = async ({
                     {
                         role: 'system',
                         content:
-                            'Extract concrete goals for an autonomous agent from the conversation. The messages above are the last N thread turns (N = Actions to pass). Older turns are compressed into MESSAGE SUMMARIES (max = Summaries to pass) and one GLOBAL MESSAGE SUMMARY. Treat the latest user turn as a follow-up when prior turns exist — do not redefine a word the user is clarifying. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . Create as many goals as the request truly needs — no fixed minimum or maximum. Prefer one goal when the request is a single deliverable; split into multiple goals only for clearly independent deliverables or distinct sequential outcomes the user asked for. Titles short. Description = full success criteria. Do not invent personal facts. Do not invent micro-steps (e.g. separate “fetch time” vs “create PDF”, or “create the file” vs “print path/size”) unless the user asked for those as separate outcomes — fine-grained sequencing belongs in plan expansion subGoals.',
+                            'You are a planner. Extract concrete deliverable goals for an autonomous agent from the conversation. The messages above are the last N thread turns (N = Actions to pass). Older turns are compressed into MESSAGE SUMMARIES (max = Summaries to pass) and one GLOBAL MESSAGE SUMMARY. Treat the latest user turn as a follow-up when prior turns exist — do not redefine a word the user is clarifying. Return JSON only: {"goals":[{"title":"...","description":"..."}]} . For the vast majority of tasks, divide into 2-4 distinct deliverable goals when the request has multiple files, formats, or phases (e.g. research + creation, create + transform + verify). Each goal = one verifiable outcome (a file, a research synthesis, an edit) not a micro-step like "fetch time" vs "create PDF" or "create the file" vs "print path/size". For a single-deliverable request (e.g. one PDF, one Excel, one image transform), keep ONE top-level goal — plan expansion will split it into 3-5 subGoals (discover → implement → verify). Titles short (<=12 words). Description = full success criteria (what is created, where, how to verify). Do not invent personal facts. Goal count: 1-4, prefer 2-3 when multiple deliverables are implied; 1 is fine when plan expansion will handle the phases.',
                     },
                     chatWindow,
                     {
                         role: 'user',
                         content:
-                            'Extract goals from the conversation above. If the latest user message is a clarification of an earlier request, keep the original task and apply the clarification.',
+                            'Extract goals from the conversation above. If the latest user message is a clarification of an earlier request, keep the original task and apply the clarification. Divide so the vast majority of tasks can be completed reliably.',
                     }
                 );
                 const llmResult = await fetchLlmUnifiedLogged({
