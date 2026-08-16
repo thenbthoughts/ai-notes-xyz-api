@@ -94,6 +94,54 @@ const funcDoesModalSupportImage = async ({
     return resultModelModality?.isInputModalityImage === 'true';
 }
 
+const funcDoesModalSupportVideo = async ({
+    modelProvider,
+    modelName,
+    userId,
+}: {
+    modelProvider: 'groq' | 'openrouter' | 'ollama' | 'localai' | 'openai-compatible';
+    modelName: string;
+    userId: string;
+}) => {
+    if (modelProvider === 'ollama') {
+        const resultOllamaModel = await ModelAiListOllama.findOne({
+            userId: userId,
+            modelName: modelName,
+        });
+        if (resultOllamaModel) {
+            return resultOllamaModel.isInputModalityVideo === 'true';
+        }
+        return false;
+    }
+
+    if (modelProvider === 'openai-compatible') {
+        const resultOpenaiCompatibleModel = await ModelOpenaiCompatibleModel.findOne({
+            userId: userId,
+            modelName: modelName,
+        });
+        if (resultOpenaiCompatibleModel) {
+            return resultOpenaiCompatibleModel.isInputModalityVideo === 'true';
+        }
+        return false;
+    }
+
+    let resultModelModality = await ModelAiModelModality.findOne({
+        provider: modelProvider,
+        modalIdString: modelName,
+    });
+
+    if (resultModelModality && resultModelModality.isInputModalityVideo === 'true') {
+        return true;
+    }
+
+    const lower = (modelName || '').toLowerCase();
+    if (lower.includes('gemini') || lower.includes('qwen-vl') || lower.includes('qwen2.5-vl') || lower.includes('video')) {
+        return true;
+    }
+
+    return false;
+};
+
 const getBase64File = async ({
     fileUrl,
     type,
@@ -101,36 +149,41 @@ const getBase64File = async ({
     userApiKey,
 }: {
     fileUrl: string;
-    type: 'image';
+    type: 'image' | 'video';
     userApiKey: tsUserApiKey;
 }) => {
     let base64File = '';
     try {
-        if (type === 'image') {
-            const s3Config: S3Config = {
-                region: userApiKey.apiKeyS3Region,
-                endpoint: userApiKey.apiKeyS3Endpoint,
-                accessKeyId: userApiKey.apiKeyS3AccessKeyId,
-                secretAccessKey: userApiKey.apiKeyS3SecretAccessKey,
-                bucketName: userApiKey.apiKeyS3BucketName,
-            };
+        const s3Config: S3Config = {
+            region: userApiKey.apiKeyS3Region,
+            endpoint: userApiKey.apiKeyS3Endpoint,
+            accessKeyId: userApiKey.apiKeyS3AccessKeyId,
+            secretAccessKey: userApiKey.apiKeyS3SecretAccessKey,
+            bucketName: userApiKey.apiKeyS3BucketName,
+        };
 
-            const resultImage = await getFile({
-                fileName: fileUrl,
-                storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
-                s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
-            });
+        const resultFile = await getFile({
+            fileName: fileUrl,
+            storageType: userApiKey.fileStorageType === 's3' ? 's3' : 'gridfs',
+            s3Config: userApiKey.fileStorageType === 's3' ? s3Config : undefined,
+        });
 
-            if (resultImage.success && resultImage.content) {
-                const resultImageContentString = resultImage.content.toString('base64');
-                base64File = `data:image/png;base64,${resultImageContentString}`;
+        if (resultFile.success && resultFile.content) {
+            const resultFileContentString = resultFile.content.toString('base64');
+            const ext = (fileUrl.split('.').pop() || '').toLowerCase();
+            if (type === 'image') {
+                const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/png';
+                base64File = `data:${mime};base64,${resultFileContentString}`;
+            } else if (type === 'video') {
+                const mime = ext === 'mp4' ? 'video/mp4' : ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : ext === 'avi' ? 'video/x-msvideo' : ext === 'mkv' ? 'video/x-matroska' : 'video/mp4';
+                base64File = `data:${mime};base64,${resultFileContentString}`;
             }
         }
     } catch (error) {
-        console.error(error);
+        console.error('getBase64File error:', error);
     }
     return base64File;
-}
+};
 
 const getConversationList = async ({
     userId,
@@ -193,16 +246,29 @@ const getConversationList = async ({
     const resultConversations = await ModelChatLlm.aggregate(pipelineGetConversations) as IChatLlmTemp[];
 
     let isContainImages = false;
+    let isContainVideos = false;
     for (let index = 0; index < resultConversations.length; index++) {
         const element = resultConversations[index];
         if (element.type === 'image') {
             isContainImages = true;
+        }
+        if (element.type === 'video') {
+            isContainVideos = true;
         }
     }
 
     let doesModalSupportImage = false;
     if (isContainImages) {
         doesModalSupportImage = await funcDoesModalSupportImage({
+            modelProvider: modelProvider,
+            modelName: modelName,
+            userId: userId,
+        });
+    }
+
+    let doesModalSupportVideo = false;
+    if (isContainVideos) {
+        doesModalSupportVideo = await funcDoesModalSupportVideo({
             modelProvider: modelProvider,
             modelName: modelName,
             userId: userId,
@@ -218,6 +284,13 @@ const getConversationList = async ({
                 userApiKey: userApiKey,
             });
             element.temp_base64_file = base64File;
+        } else if (element.type === 'video') {
+            const base64File = await getBase64File({
+                fileUrl: element.fileUrl,
+                type: 'video',
+                userApiKey: userApiKey,
+            });
+            element.temp_base64_file = base64File;
         } else {
             element.temp_base64_file = '';
         }
@@ -225,11 +298,13 @@ const getConversationList = async ({
 
     for (let index = 0; index < resultConversations.length; index++) {
         const element = resultConversations[index];
+        const role = element.isAi ? 'assistant' : 'user';
+
         if (element.type === 'image') {
             // insert image
-            if (doesModalSupportImage) {
+            if (doesModalSupportImage && element.temp_base64_file) {
                 conversationList.push({
-                    role: 'user',
+                    role: role,
                     content: [
                         {
                             type: 'image_url',
@@ -241,10 +316,42 @@ const getConversationList = async ({
                 });
             } else {
                 // insert file content ai
-                if (element.fileContentAi.length >= 1) {
+                if (element.fileContentAi && element.fileContentAi.length >= 1) {
                     conversationList.push({
-                        role: 'user',
+                        role: role,
                         content: `Image description: ${element.fileContentAi}`,
+                    });
+                } else {
+                    conversationList.push({
+                        role: role,
+                        content: `Image file: ${element.fileUrl.split('/').pop() || element.fileUrl}`,
+                    });
+                }
+            }
+        } else if (element.type === 'video') {
+            // insert video
+            if (doesModalSupportVideo && element.temp_base64_file) {
+                conversationList.push({
+                    role: role,
+                    content: [
+                        {
+                            type: 'video_url',
+                            video_url: {
+                                url: element.temp_base64_file,
+                            },
+                        }
+                    ] as any,
+                });
+            } else {
+                if (element.fileContentAi && element.fileContentAi.length >= 1) {
+                    conversationList.push({
+                        role: role,
+                        content: `Video description: ${element.fileContentAi}`,
+                    });
+                } else {
+                    conversationList.push({
+                        role: role,
+                        content: `Video file: ${element.fileUrl.split('/').pop() || element.fileUrl}`,
                     });
                 }
             }
@@ -253,17 +360,24 @@ const getConversationList = async ({
                 continue;
             }
             conversationList.push({
-                role: 'user',
+                role: role,
                 content: element.content,
             });
         } else if (element.type === 'document') {
            if (element?.fileContentText && element?.fileContentText?.length > 0) {
                 conversationList.push({
-                    role: 'user',
+                    role: role,
                     content: `Document extracted text: ${element.fileContentText}`,
                 });
             }
-        } 
+        } else if (element.type === 'file') {
+            if (element.content) {
+                conversationList.push({
+                    role: role,
+                    content: element.content,
+                });
+            }
+        }
     }
 
     return conversationList;

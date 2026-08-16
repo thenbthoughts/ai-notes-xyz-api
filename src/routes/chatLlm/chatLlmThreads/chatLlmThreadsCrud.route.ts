@@ -48,15 +48,18 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
         tempStage = {
             $match: {
                 userId: res.locals.auth_userId,
-            } as {
-                userId: string;
-                isFavourite?: boolean;
-            }
+            } as any
         }
         if (typeof req.body?.isFavourite === 'string') {
             if (req.body.isFavourite === 'true' || req.body.isFavourite === 'false') {
                 tempStage.$match.isFavourite = req.body.isFavourite === 'true' ? true : false;
             }
+        }
+        if (typeof req.body?.answerEngine === 'string' && req.body.answerEngine.trim()) {
+            tempStage.$match.answerEngine = req.body.answerEngine.trim();
+        }
+        if (typeof req.body?.aiModelProvider === 'string' && req.body.aiModelProvider.trim()) {
+            tempStage.$match.aiModelProvider = req.body.aiModelProvider.trim();
         }
         stateDocument.push(tempStage);
         stateCount.push(tempStage);
@@ -124,13 +127,17 @@ router.post('/threadsGet', middlewareUserAuth, async (req: Request, res: Respons
         }
 
         // stateDocument -> sort
-        tempStage = {
-            $sort: {
-                createdAtUtc: -1,
-            }
+        let sortStage: Record<string, 1 | -1> = { createdAtUtc: -1 };
+        if (req.body?.sort === 'oldest') {
+            sortStage = { createdAtUtc: 1 };
+        } else if (req.body?.sort === 'title') {
+            sortStage = { threadTitle: 1 };
         }
+
+        tempStage = {
+            $sort: sortStage
+        };
         stateDocument.push(tempStage);
-        stateCount.push(tempStage);
 
         // stage -> skip
         tempStage = {
@@ -271,6 +278,8 @@ router.post(
                 executeShell,
                 shellExecuteMinAttempts,
                 shellExecuteMaxAttempts,
+
+                useOmniparser,
             } = req.body;
 
             const addData = {
@@ -307,6 +316,8 @@ router.post(
                 executeShell: false,
                 shellExecuteMinAttempts: 1,
                 shellExecuteMaxAttempts: 1,
+
+                useOmniparser: false,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -358,6 +369,10 @@ router.post(
 
             if (typeof executeShell === 'boolean') {
                 addData.executeShell = executeShell;
+            };
+
+            if (typeof useOmniparser === 'boolean') {
+                addData.useOmniparser = useOmniparser;
             };
             
             // Agent budgets: tokens (1–1M) and iterations (1–100), min <= max
@@ -587,6 +602,8 @@ router.post(
 
                 shellExecuteMinAttempts,
                 shellExecuteMaxAttempts,
+
+                useOmniparser,
             } = req.body;
 
             // Build update object
@@ -666,6 +683,10 @@ router.post(
 
             if (typeof executeShell === 'boolean') {
                 updateData.executeShell = executeShell;
+            };
+
+            if (typeof useOmniparser === 'boolean') {
+                updateData.useOmniparser = useOmniparser;
             };
             
             // Agent budgets: tokens (1–1M) and iterations (1–100)

@@ -21,6 +21,9 @@ export interface tsSchemaAiModelListLocalai extends Document {
     isOutputModalityVideo: string;
     isOutputModalityEmbedding: string;
 
+    contextLength: number;
+    maxCompletionTokens: number;
+
     // raw
     raw: object;
 };

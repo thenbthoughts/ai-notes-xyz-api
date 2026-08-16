@@ -136,6 +136,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: 1,
     },
 
+    /** When true, allow omniparser-v2 via Replicate for GUI parsing (requires Replicate key) */
+    useOmniparser: {
+        type: Boolean,
+        default: false,
+    },
+
     // auth
     userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true, },
 

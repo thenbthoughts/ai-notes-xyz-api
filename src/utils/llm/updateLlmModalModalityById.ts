@@ -114,6 +114,11 @@ const updateLlmModalModalityById = async ({
                     isInputModalityImage: isImage,
                     isInputModalityAudio: isAudio,
                     isInputModalityVideo: isVideo,
+                    isOutputModalityText: isText === 'true' ? 'true' : 'false',
+                    isOutputModalityImage: 'false',
+                    isOutputModalityAudio: 'false',
+                    isOutputModalityVideo: 'false',
+                    isOutputModalityEmbedding: 'false',
                 }
             }
         );

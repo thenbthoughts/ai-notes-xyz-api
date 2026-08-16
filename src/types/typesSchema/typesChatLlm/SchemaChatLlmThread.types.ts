@@ -64,6 +64,9 @@ export interface IChatLlmThread extends Document {
     /** Inclusive attempt index end for each shell todo primary command (default 3; max 10). */
     shellExecuteMaxAttempts?: number;
 
+    /** When true, allow omniparser-v2 via Replicate (requires Replicate key) */
+    useOmniparser?: boolean;
+
     // auth
     userId: mongoose.Types.ObjectId;
 

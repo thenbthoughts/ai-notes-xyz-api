@@ -42,6 +42,8 @@ const agentUpdateSchema = new Schema<IAgentUpdate>({
             'synthesize',
             'skills_loaded',
             'workspace_list',
+            'image_to_text',
+            'omniparser_parse',
         ],
         default: 'status',
         index: true,

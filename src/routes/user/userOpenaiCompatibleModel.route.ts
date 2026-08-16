@@ -146,6 +146,9 @@ router.post('/openaiCompatibleModelAdd', middlewareUserAuth, async (req: Request
         const isOutputModalityImage = req.body.isOutputModalityImage === 'true' ? 'true' : 'false';
         const isOutputModalityAudio = req.body.isOutputModalityAudio === 'true' ? 'true' : 'false';
         const isOutputModalityVideo = req.body.isOutputModalityVideo === 'true' ? 'true' : 'false';
+        const isOutputModalityEmbedding = req.body.isOutputModalityEmbedding === 'true' ? 'true' : 'false';
+        const contextLength = typeof req.body.contextLength === 'number' ? Math.max(0, req.body.contextLength) : (Number(req.body.contextLength) || 0);
+        const maxCompletionTokens = typeof req.body.maxCompletionTokens === 'number' ? Math.max(0, req.body.maxCompletionTokens) : (Number(req.body.maxCompletionTokens) || 0);
 
         const newConfig = await ModelOpenaiCompatibleModel.create({
             userId: res.locals.auth_userId,
@@ -154,6 +157,8 @@ router.post('/openaiCompatibleModelAdd', middlewareUserAuth, async (req: Request
             apiKey: req.body.apiKey.trim(),
             modelName: req.body.modelName || '',
             customHeaders: req.body.customHeaders || '',
+            contextLength,
+            maxCompletionTokens,
             isInputModalityText,
             isInputModalityImage,
             isInputModalityAudio,
@@ -162,6 +167,7 @@ router.post('/openaiCompatibleModelAdd', middlewareUserAuth, async (req: Request
             isOutputModalityImage,
             isOutputModalityAudio,
             isOutputModalityVideo,
+            isOutputModalityEmbedding,
             createdAtUtc: now,
             updatedAtUtc: now,
         });
@@ -248,6 +254,19 @@ router.post('/openaiCompatibleModelEdit', middlewareUserAuth, async (req: Reques
         if (req.body.isOutputModalityVideo !== undefined) {
             updateObj.isOutputModalityVideo = req.body.isOutputModalityVideo === 'true' ? 'true' : 'false';
         }
+        if (req.body.isOutputModalityEmbedding !== undefined) {
+            updateObj.isOutputModalityEmbedding = req.body.isOutputModalityEmbedding === 'true' ? 'true' : 'false';
+        }
+        if (req.body.contextLength !== undefined) {
+            updateObj.contextLength = typeof req.body.contextLength === 'number'
+                ? Math.max(0, req.body.contextLength)
+                : (Number(req.body.contextLength) || 0);
+        }
+        if (req.body.maxCompletionTokens !== undefined) {
+            updateObj.maxCompletionTokens = typeof req.body.maxCompletionTokens === 'number'
+                ? Math.max(0, req.body.maxCompletionTokens)
+                : (Number(req.body.maxCompletionTokens) || 0);
+        }
 
         updateObj.updatedAtUtc = new Date();
 
@@ -315,6 +334,8 @@ router.post('/openaiCompatibleModelCopy', middlewareUserAuth, async (req: Reques
             apiKey: originalConfig.apiKey, // Copy the API key
             modelName: originalConfig.modelName || '',
             customHeaders: originalConfig.customHeaders || '',
+            contextLength: originalConfig.contextLength || 0,
+            maxCompletionTokens: originalConfig.maxCompletionTokens || 0,
             isInputModalityText: originalConfig.isInputModalityText || 'true',
             isInputModalityImage: originalConfig.isInputModalityImage || 'false',
             isInputModalityAudio: originalConfig.isInputModalityAudio || 'false',
@@ -323,6 +344,7 @@ router.post('/openaiCompatibleModelCopy', middlewareUserAuth, async (req: Reques
             isOutputModalityImage: originalConfig.isOutputModalityImage || 'false',
             isOutputModalityAudio: originalConfig.isOutputModalityAudio || 'false',
             isOutputModalityVideo: originalConfig.isOutputModalityVideo || 'false',
+            isOutputModalityEmbedding: originalConfig.isOutputModalityEmbedding || 'false',
             createdAtUtc: now,
             updatedAtUtc: now,
         });

@@ -182,7 +182,7 @@ export const expandAndPersistAgentGoal = async (params: {
         const messages: Message[] = withContextChatMessages(
             {
                 role: 'system',
-                content: `You expand one agent goal into a structured plan. Do NOT hardcode categories; infer from the goal text.
+                content: `You are a senior planner. You divide tasks so the vast majority complete reliably via small, verifiable steps. Do NOT hardcode categories; infer from the goal text.
 Use PLAN CONTEXT (probe/test results) when present — prefer concrete findings over guesses.
 Return JSON ONLY:
 {
@@ -197,17 +197,19 @@ Return JSON ONLY:
   "acceptanceChecks": ["verify checklist items before ready_to_synthesize"],
   "subGoals": [{"title":"...","description":"..."}]
 }
-Rules:
-- If the user wants a created/edited workspace file, set requiresShell true and include acceptanceChecks for a real path. Suggest skills only when clearly useful (shell-environment, code-nodejs, image-media, document-pdf, data-transform, index-data-chat, personal-research).
-- If Done-when mentions workspace outputs or printing paths/sizes of created files, set outputFormat to workspace_file (not chat_update). Write the computed answer to a result file even when no output name is given (result.txt is fine). A number only in chat is not done.
-- If the user wants to index/search/reindex workspace docs (md/txt/pdf/ppt/xlsx/zip) under index-data-{chatId}, set requiresShell true and prefer index-data-chat in suggestedSkills.
-- If the user wants OCR / image-to-text / read text from an uploaded image, prefer suggestedTools: ["image_to_text"] (not Pillow / execute_script).
-- If the user needs grounded personal history/advice from their notes/tasks, set requiresPersonalData true and prefer personal-research in suggestedSkills.
-- Prefer subGoals: [] for simple one-shot requests. Only split when steps are clearly sequential and non-overlapping.
-- Never create a separate "Report file metadata" subGoal — printing path/size belongs in the same script that creates the file.
-- Never split "read/inspect the inputs" from "write the output". One execute_script can read then write.
-- Never create a "locate/find the uploaded file" subGoal. Use list_workspace_files to search. Do not run \`find /\`.
-- ${allowSubGoals ? 'You MAY return subGoals.' : 'You MUST return subGoals: []. Do not split this goal further.'}`,
+Decomposition (harness-style, generic inference — do NOT hardcode file-type or domain categories):
+- For the vast majority of tasks, prefer 3-5 sequential subGoals, each independently executable in 1-2 tool calls and verifiable via acceptanceChecks. Only return [] when the goal is truly trivial (single chat answer, no persistent artifact, no multi-step logic). Infer subGoals solely from the goal text + planContext — do not use hardcoded file-type lists.
+- Each subGoal: short title, description = full success criteria including what artifact/state proves completion and which tool validates it. Order is dependency order — early output is later input. No overlapping work, no duplicate titles. Infer required tools/skills from goal semantics (e.g. creation → execute_script, understanding image text → image_to_text, synthesis → search), not from a fixed mapping.
+- Generic harness shape (infer and adapt, never force): analyze inputs → implement core → verify/polish → finalize. Derive steps from goal: if goal implies exploring workspace/data, include a discover step; if goal implies a persistent artifact, include an implement step and a verify step that checks existence/size/format and prints a grounded path; if goal implies synthesis across personal history, split research by implicit domain and then synthesize. For multi-deliverable goals, one subGoal per deliverable plus a final verify.
+- Large tasks MUST be divided into multiple small tasks based on requirement due to context length limits; each small task is solved and tested before moving to the next, like a human with limited working memory. Do not attempt a large task in one big context/script. Each small task's acceptanceChecks must include an explicit test/verification inferred from its requirement that proves the step succeeded before the next step begins. This keeps the context window compact and mimics human iterative solving. Applies to all large tasks, not only file/terminal access — infer division points from the requirement itself.
+- Rules (all generic inference, no hardcoding):
+- Infer requiresShell from goal: true when goal implies creating/editing a persistent artifact that must be verified on disk; false otherwise. Infer outputFormat from expected deliverable semantics (infer label from goal, e.g. workspace_file vs chat_update), not from a hardcoded extension list. When Done-when implies workspace outputs must be printed, treat that as workspace_file.
+- Infer requiresPersonalData from goal: true when answer must be grounded in the user's own notes/tasks/history; then prefer research-oriented tools.
+- Infer suggestedSkills/suggestedTools from goal semantics and available catalog — suggest only when clearly useful, do not hardcode skill name lists.
+- Never create a separate "Report file metadata" subGoal — printing path/size is part of the same implementation step that creates the artifact.
+- Never create a "locate/find the uploaded file" subGoal when fixtures are already listed in planContext/userRequest. Prefer list_workspace_files only for truly unknown locations inferred from goal; never assume \`find /\` is needed.
+- Keep subGoals lean: 3-5 max, each verifiable. Merge read+write when it does not hide verification; prefer a distinct verify step after the main create for reliability, inferred from goal.
+- ${allowSubGoals ? 'You MAY and SHOULD return 3-5 subGoals for most tasks by inferring from goal; return [] only for trivial single-turn chat answers.' : 'You MUST return subGoals: []. Do not split this goal further.'}`,
             },
             chatWindow,
             {
@@ -235,8 +237,8 @@ Rules:
                     apiEndpoint: llmConfig.apiEndpoint,
                     model: llmConfig.model,
                     messages,
-                    temperature: 0.2,
-                    maxTokens: 2000,
+                    temperature: 0.25,
+                    maxTokens: 2800,
                     responseFormat: 'json_object',
                     headersExtra: llmConfig.customHeaders,
                 },

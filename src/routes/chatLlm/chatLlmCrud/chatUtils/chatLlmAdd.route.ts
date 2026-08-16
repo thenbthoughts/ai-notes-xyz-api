@@ -335,6 +335,41 @@ router.post(
                 return res.status(201).json(result);
             }
 
+            if (type === 'video') {
+                console.log('type is video');
+                // type is video
+                const result = await ModelChatLlm.create({
+                    type,
+                    content,
+                    userId: res.locals.auth_userId,
+                    tags,
+                    fileUrl,
+                    fileUrlArr,
+                    threadId, // Added threadId here
+
+                    ...actionDatetimeObj,
+                });
+
+                return res.status(201).json(result);
+            }
+
+            if (type === 'file') {
+                console.log('type is file');
+                const result = await ModelChatLlm.create({
+                    type,
+                    content,
+                    userId: res.locals.auth_userId,
+                    tags,
+                    fileUrl,
+                    fileUrlArr,
+                    threadId,
+
+                    ...actionDatetimeObj,
+                });
+
+                return res.status(201).json(result);
+            }
+
             if (type === 'text') {
                 const newNote = await ModelChatLlm.create({
                     type,

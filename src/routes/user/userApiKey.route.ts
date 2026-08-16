@@ -398,6 +398,26 @@ router.post(
     }
 );
 
+// Get User Agent Workspace for iframe (read-only desktop)
+router.get(
+    '/getUserApiAgentWorkspace',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId }).lean();
+            if (!doc) return res.json({ agentWorkspaceValid: false, desktopUrl: '', apiUrl: '' });
+            return res.json({
+                agentWorkspaceValid: !!doc.agentWorkspaceValid,
+                desktopUrl: doc.agentWorkspaceDesktopUrl || '',
+                apiUrl: doc.agentWorkspaceApiUrl || '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 // Update User Agent Workspace (ai-notes-xyz-agent-workspace — desktop + API)
 router.post(
     '/updateUserApiAgentWorkspace',

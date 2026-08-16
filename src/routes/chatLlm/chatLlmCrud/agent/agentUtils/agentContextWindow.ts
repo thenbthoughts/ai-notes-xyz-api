@@ -262,6 +262,7 @@ export const formatAgentContextPack = (pack: {
     attachedContext?: string;
     messageGlobalSummary?: string;
     messageSummaries?: AgentContextSummary[];
+    progressFile?: string;
 }): string => {
     const parts: string[] = [
         'Workspace files are NOT listed here. Use list_workspace_files to search.',
@@ -298,6 +299,9 @@ export const formatAgentContextPack = (pack: {
         parts.push(
             `RECENT ACTIONS (last ${pack.actions.length}):\n${pack.actions.map((a) => formatActionLine(a)).join('\n')}`
         );
+    }
+    if (pack.progressFile?.trim()) {
+        parts.push(`PROGRESS FILE (workspace/progress.md, compress old messages, key points, goal, done, structure):\n${pack.progressFile.trim().slice(0, 3000)}`);
     }
     return parts.join('\n\n');
 };
@@ -745,7 +749,7 @@ export const buildAgentContextPack = async (params: {
     const tokenSoftLimit = Math.max(1000, params.tokenSoftLimit ?? AGENT_CONTEXT_TOKEN_SOFT_LIMIT);
     const fetchLimit = actionLimit + summaryCount * messagesPerSummary + messagesPerSummary * 4;
 
-    const [allActions, state, personal, chatWindow] = await Promise.all([
+    const [allActions, state, personal, chatWindow, progressFile] = await Promise.all([
         collectActions({
             agentInstanceId: params.agentInstanceId,
             threadId: params.threadId,
@@ -765,6 +769,15 @@ export const buildAgentContextPack = async (params: {
             userId: params.userId,
             logCtx: params.logCtx,
         }),
+        // Generic progress file: compress old messages, key points, goal, done, structure (multi-message threads)
+        (async () => {
+            try {
+                const { readProgressFile } = await import('./agentProgress/agentProgressReader');
+                return await readProgressFile({ threadId: params.threadId, userId: params.userId, logCtx: params.logCtx });
+            } catch {
+                return '';
+            }
+        })(),
     ]);
 
     let { globalSummary, summaries, cursorUtc } = state;
@@ -836,6 +849,7 @@ export const buildAgentContextPack = async (params: {
         attachedContext: personal.attachedContext,
         messageGlobalSummary: chatWindow.globalSummary,
         messageSummaries: chatWindow.summaries,
+        progressFile: progressFile || undefined,
     });
 
     return {

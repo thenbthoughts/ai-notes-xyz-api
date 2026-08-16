@@ -437,6 +437,18 @@ export const agentTickFinishIfDone = async (
         outcome: 'success',
         reason: summary,
     });
+    // Update progress file for multi-message threads
+    try {
+        const { writeProgressFile } = await import('../agentUtils/agentProgress/agentProgressFile');
+        await writeProgressFile({
+            threadId: agent.threadId,
+            agentInstanceId: id,
+            userId: agent.userId,
+            logCtx: { agentInstanceId: id, userId: agent.userId, threadId: agent.threadId, tickNumber: agent.tickCount || 0 },
+        });
+    } catch (e) {
+        console.error('writeProgressFile on finish failed:', e);
+    }
     return true;
 };
 
@@ -528,11 +540,21 @@ export const agentTickPrepareGoal = async (
         }
 
         const skillBodiesEarly = await listEnabledSkillsForUser(agent.userId);
+        // Generic multi-message and GUI inference (not hardcoded per question)
+        let extraGenericSkills: string[] = [];
+        try {
+            const msgCount = await ModelChatLlm.countDocuments({ threadId: agent.threadId });
+            if (msgCount > 3) extraGenericSkills.push('progress-tracking');
+            const blob = `${currentGoal.title}\n${currentGoal.description || ''}\n${expansion?.suggestedApproach || ''}`.toLowerCase();
+            if (/\b(browser|screenshot|zip|archive|desktop|chrome|soffice)\b/.test(blob)) extraGenericSkills.push('gui-desktop');
+            if (/\b(large|split|chunk|divide file)\b/.test(blob)) extraGenericSkills.push('shell-environment');
+        } catch {}
         const wantedFromExpansion = [
             ...(Array.isArray(agent.activeSkillNames) ? agent.activeSkillNames : []),
             ...(expansion?.suggestedSkills || []),
             ...(expansion?.requiresShell ? ['shell-environment'] : []),
             ...(expansion?.requiresPersonalData ? ['personal-research'] : []),
+            ...extraGenericSkills,
         ];
         const loaded = resolveSkillsToLoad(skillBodiesEarly, wantedFromExpansion);
         if (loaded.length > 0) {
@@ -657,11 +679,31 @@ const loadOrInitWorkspaceBaseline = async (
         const parsed = parseBaselineContent(existing.content);
         const base = new Set(parsed.paths.map((p) => String(p).replace(/\\/g, '/').toLowerCase()));
         // Empty baseline locked before fixture uploads synced — refresh with uploads/ only.
-        // Never absorb agent-created outputs into the baseline (that hides deliverables).
+        // Never absorb agent-created outputs into the baseline (that hides deliverables) for first-turn fixture sync.
+        // For multi-conversation follow-ups, empty baseline with existing non-upload files means prior deliverables exist — treat them as baseline.
         if (base.size === 0 && listingPaths.length > 0) {
             const uploadOnly = listingPaths.filter((p) => /(^|\/)uploads\//i.test(p));
             if (uploadOnly.length === 0) {
-                return { paths: base, sizesByName: sizesMapFromRecord(parsed.sizes) };
+                // Follow-up conversation: prior workspace files exist, set baseline to full listing so new deliverables are correctly detected
+                const nowFollowUp = new Date();
+                await ModelAgentMemory.findOneAndUpdate(
+                    { agentInstanceId: id, key: 'workspace_baseline_files' },
+                    {
+                        $set: {
+                            userId: agent.userId,
+                            threadId: agent.threadId,
+                            content: JSON.stringify({ paths: listingPaths, sizes: listingSizes }).slice(0, 12000),
+                            memoryType: 'fact',
+                            updatedAtUtc: nowFollowUp,
+                        },
+                        $setOnInsert: { createdAtUtc: nowFollowUp },
+                    },
+                    { upsert: true }
+                );
+                return {
+                    paths: new Set(listingPaths.map((p) => p.toLowerCase())),
+                    sizesByName: sizesMapFromRecord(listingSizes),
+                };
             }
             const now = new Date();
             const uploadSizes: Record<string, number> = {};

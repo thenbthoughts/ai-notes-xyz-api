@@ -53,7 +53,7 @@ export const isVerifyOnlyGoal = (title: string, description: string): boolean =>
     return (bare || constraintEcho) && !goalSeedCreates(title, description);
 };
 
-/** Drop print-metadata, inspect-prelude, and verify-only micro-steps when a sibling creates the file. */
+/** Drop print-metadata, inspect-prelude, and verify-only micro-steps when a sibling creates the file. Harness-aware: keeps substantive verify steps that check file existence/size/format. */
 export const dropMicroStepGoalSeeds = (seeds: AgentGoalSeed[]): AgentGoalSeed[] => {
     const withoutMeta = seeds.filter(
         (s) =>
@@ -62,7 +62,25 @@ export const dropMicroStepGoalSeeds = (seeds: AgentGoalSeed[]): AgentGoalSeed[] 
     );
     const hasWork = withoutMeta.some((s) => goalSeedCreates(s.title, s.description));
     if (!hasWork) return withoutMeta;
-    return withoutMeta.filter(
-        (s) => !isInspectOnlyGoal(s.title, s.description) && !isVerifyOnlyGoal(s.title, s.description)
-    );
+    // Harness verify phase is valuable when it mentions concrete file checks (exists, size, format, path). Keep those — generic inference, not hardcoded extensions.
+    const isSubstantiveVerify = (s: AgentGoalSeed): boolean => {
+        const blob = blobOf(s.title, s.description);
+        return (
+            isVerifyOnlyGoal(s.title, s.description) &&
+            (/\b(file|exists|size|format|header|path|artifact|workspace|deliverable)\b/.test(blob) ||
+                /\.[a-z0-9]{1,12}\b/i.test(blob))
+        );
+    };
+    const isSubstantiveInspect = (s: AgentGoalSeed): boolean => {
+        const blob = blobOf(s.title, s.description);
+        return (
+            isInspectOnlyGoal(s.title, s.description) &&
+            /\b(list_workspace|inputs|workspace|structure|format|schema|analyze)\b/i.test(blob)
+        );
+    };
+    return withoutMeta.filter((s) => {
+        if (isInspectOnlyGoal(s.title, s.description) && !isSubstantiveInspect(s)) return false;
+        if (isVerifyOnlyGoal(s.title, s.description) && !isSubstantiveVerify(s)) return false;
+        return true;
+    });
 };

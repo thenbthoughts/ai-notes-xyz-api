@@ -26,7 +26,14 @@ export interface VisionContentPartAudioBase64 {
   };
 }
 
-export type MessageContent = string | Array<VisionContentPartText | VisionContentPartImageUrl | VisionContentPartAudioBase64>;
+export interface VisionContentPartVideoUrl {
+  type: 'video_url';
+  video_url: {
+    url: string; // base64 data url or remote url
+  };
+}
+
+export type MessageContent = string | Array<VisionContentPartText | VisionContentPartImageUrl | VisionContentPartAudioBase64 | VisionContentPartVideoUrl | any>;
 export interface Message {
   role: ChatRole;
   content: MessageContent;
@@ -238,7 +245,7 @@ function convertMessagesForOllama(messages: Message[]): Array<any> {
       return { role: msg.role, content: msg.content };
     }
 
-    // content as array (vision): merge text parts; collect images
+    // content as array (vision): merge text parts; collect images / videos
     const textParts: string[] = [];
     const images: string[] = [];
     for (const part of msg.content) {
@@ -247,6 +254,10 @@ function convertMessagesForOllama(messages: Message[]): Array<any> {
       } else if (part.type === 'image_url' && part.image_url?.url) {
         const imageUrl = part.image_url.url;
         const strippedUrl = imageUrl.replace(/^data:[^,]+,/, '');
+        images.push(strippedUrl);
+      } else if (part.type === 'video_url' && (part as any).video_url?.url) {
+        const videoUrl = (part as any).video_url.url;
+        const strippedUrl = videoUrl.replace(/^data:[^,]+,/, '');
         images.push(strippedUrl);
       }
     }

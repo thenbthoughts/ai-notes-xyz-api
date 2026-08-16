@@ -8,6 +8,8 @@ const openaiCompatibleModelSchema = new Schema<IOpenaiCompatibleModel>({
     apiKey: { type: String, required: true, default: '' },
     modelName: { type: String, default: '' },
     customHeaders: { type: String, default: '' },
+    contextLength: { type: Number, default: 0 },
+    maxCompletionTokens: { type: Number, default: 0 },
     createdAtUtc: { type: Date, default: Date.now },
     updatedAtUtc: { type: Date, default: Date.now },
     // input modalities
@@ -20,6 +22,7 @@ const openaiCompatibleModelSchema = new Schema<IOpenaiCompatibleModel>({
     isOutputModalityImage: { type: String, default: 'false' },
     isOutputModalityAudio: { type: String, default: 'false' },
     isOutputModalityVideo: { type: String, default: 'false' },
+    isOutputModalityEmbedding: { type: String, default: 'false' },
 });
 
 const ModelOpenaiCompatibleModel = mongoose.model<IOpenaiCompatibleModel>(
