@@ -6,25 +6,27 @@ import { ModelLlmPendingTaskCron } from "../../../../schema/schemaFunctionality/
 import { llmPendingTaskTypes } from "../../llmPendingTaskConstants";
 import { ModelAiModelModality } from "../../../../schema/schemaDynamicData/SchemaAiModelModality.schema";
 
-const openRouterModelGet = async () => {
+const openRouterModelGet = async (options?: { force?: boolean }) => {
     try {
-        // Check if task was already completed today
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        if (!options?.force) {
+            // Check if task was already completed today
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-        const existingTask = await ModelLlmPendingTaskCron.findOne({
-            taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
-            taskStatus: {
-                $ne: 'pending'
-            },
-            createdAtUtc: {
-                $gte: today
+            const existingTask = await ModelLlmPendingTaskCron.findOne({
+                taskType: llmPendingTaskTypes.page.settings.openRouterModelGet,
+                taskStatus: {
+                    $ne: 'pending'
+                },
+                createdAtUtc: {
+                    $gte: today
+                }
+            });
+
+            if (existingTask) {
+                console.log('OpenRouter model fetch already completed today, skipping...');
+                return true;
             }
-        });
-
-        if (existingTask) {
-            console.log('OpenRouter model fetch already completed today, skipping...');
-            return true;
         }
 
         const response = await axios.get('https://openrouter.ai/api/v1/models', {
@@ -51,25 +53,63 @@ const openRouterModelGet = async () => {
                 return isValid;
             });
 
-            // delete all and insert new
-            await ModelAiListOpenrouter.deleteMany({});
-            await ModelAiListOpenrouter.insertMany(filterDoc);
+            const processedDocs = filterDoc.map((item: any) => {
+                const inputModalities = item.architecture?.input_modalities || [];
+                const outputModalities = item.architecture?.output_modalities || [];
+                const modalityStr = item.architecture?.modality || '';
 
-            // insert into aiModelModality
-            let filterDocModality = filterDoc.map((item: any) => {
-                let modalIdString = item.id;
-                let isText = item.architecture.input_modalities.includes('text') ? 'true' : 'false';
-                let isImage = item.architecture.input_modalities.includes('image') ? 'true' : 'false';
-                let isAudio = item.architecture.input_modalities.includes('audio') ? 'true' : 'false';
-                let isVideo = item.architecture.input_modalities.includes('video') ? 'true' : 'false';
+                const isInputText = inputModalities.includes('text') ? 'true' : 'false';
+                const isInputImage = inputModalities.includes('image') ? 'true' : 'false';
+                const isInputAudio = inputModalities.includes('audio') ? 'true' : 'false';
+                const isInputVideo = inputModalities.includes('video') ? 'true' : 'false';
+
+                const isOutputText = (outputModalities.includes('text') || modalityStr.includes('->text') || (!outputModalities.length && isInputText === 'true')) ? 'true' : 'false';
+                const isOutputImage = (outputModalities.includes('image') || modalityStr.includes('->image')) ? 'true' : 'false';
+                const isOutputAudio = (outputModalities.includes('audio') || modalityStr.includes('->audio')) ? 'true' : 'false';
+                const isOutputVideo = (outputModalities.includes('video') || modalityStr.includes('->video')) ? 'true' : 'false';
+                const isOutputEmbedding = (outputModalities.includes('embedding') || modalityStr.includes('embeddings')) ? 'true' : 'false';
+
+                const maxCompletionTokens = Number(item.top_provider?.max_completion_tokens || item.max_completion_tokens || item.architecture?.max_completion_tokens) || 0;
 
                 return {
+                    id: item.id,
+                    name: item.name || item.id,
+                    description: item.description || '',
+                    contextLength: Number(item.context_length) || 0,
+                    maxCompletionTokens: maxCompletionTokens,
+                    isInputModalityText: isInputText,
+                    isInputModalityImage: isInputImage,
+                    isInputModalityAudio: isInputAudio,
+                    isInputModalityVideo: isInputVideo,
+                    isOutputModalityText: isOutputText,
+                    isOutputModalityImage: isOutputImage,
+                    isOutputModalityAudio: isOutputAudio,
+                    isOutputModalityVideo: isOutputVideo,
+                    isOutputModalityEmbedding: isOutputEmbedding,
+                    raw: item,
+                };
+            });
+
+            // delete all and insert new
+            await ModelAiListOpenrouter.deleteMany({});
+            await ModelAiListOpenrouter.insertMany(processedDocs);
+
+            // insert into aiModelModality
+            let filterDocModality = processedDocs.map((item: any) => {
+                return {
                     provider: 'openrouter',
-                    modalIdString: modalIdString,
-                    isInputModalityText: isText,
-                    isInputModalityImage: isImage,
-                    isInputModalityAudio: isAudio,
-                    isInputModalityVideo: isVideo,
+                    modalIdString: item.id,
+                    contextLength: item.contextLength,
+                    maxCompletionTokens: item.maxCompletionTokens,
+                    isInputModalityText: item.isInputModalityText,
+                    isInputModalityImage: item.isInputModalityImage,
+                    isInputModalityAudio: item.isInputModalityAudio,
+                    isInputModalityVideo: item.isInputModalityVideo,
+                    isOutputModalityText: item.isOutputModalityText,
+                    isOutputModalityImage: item.isOutputModalityImage,
+                    isOutputModalityAudio: item.isOutputModalityAudio,
+                    isOutputModalityVideo: item.isOutputModalityVideo,
+                    isOutputModalityEmbedding: item.isOutputModalityEmbedding,
                 };
             });
 

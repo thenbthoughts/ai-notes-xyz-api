@@ -40,6 +40,42 @@ const aiModelModalitySchema = new Schema<tsSchemaAiModelModality>({
         enum: ['true', 'false', 'pending'],
         // true or false or pending
     },
+
+    // output modalities
+    isOutputModalityText: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityImage: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityAudio: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityVideo: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityEmbedding: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+
+    contextLength: {
+        type: Number,
+        default: 0,
+    },
+    maxCompletionTokens: {
+        type: Number,
+        default: 0,
+    },
 });
 
 // unique

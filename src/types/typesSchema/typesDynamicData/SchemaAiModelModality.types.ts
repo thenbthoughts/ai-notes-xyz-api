@@ -6,9 +6,19 @@ export interface tsSchemaAiModelModality extends Document {
     provider: string;
     modalIdString: string;
 
-    // ai
+    // input modalities
     isInputModalityText: string;
     isInputModalityImage: string;
     isInputModalityAudio: string;
     isInputModalityVideo: string;
+
+    // output modalities
+    isOutputModalityText: string;
+    isOutputModalityImage: string;
+    isOutputModalityAudio: string;
+    isOutputModalityVideo: string;
+    isOutputModalityEmbedding: string;
+
+    contextLength: number;
+    maxCompletionTokens: number;
 };

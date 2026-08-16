@@ -11,4 +11,22 @@ export interface tsSchemaAiModelListGroq extends Document {
     owned_by: string;
     active: boolean;
     context_window: number;
+    contextLength: number;
+    maxCompletionTokens: number;
+
+    // input modalities
+    isInputModalityText: string;
+    isInputModalityImage: string;
+    isInputModalityAudio: string;
+    isInputModalityVideo: string;
+
+    // output modalities
+    isOutputModalityText: string;
+    isOutputModalityImage: string;
+    isOutputModalityAudio: string;
+    isOutputModalityVideo: string;
+    isOutputModalityEmbedding: string;
+
+    // raw
+    raw?: object;
 };

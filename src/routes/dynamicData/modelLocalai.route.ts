@@ -261,6 +261,8 @@ const localaiPullAllModelsFunc = async ({
             const availableTags = modelTypesByName.get(normalizeText(model.id));
             const modelType: LocalaiModelType = detectLocalaiModelType(model.id, availableTags);
             const modalitySettings = getModalitySettingsByType(modelType);
+            const contextLen = (model as any)?.context_window || (model as any)?.context_length || 0;
+            const maxCompletionTokens = (model as any)?.max_completion_tokens || (model as any)?.max_tokens || 0;
 
             await ModelAiListLocalai.findOneAndUpdate(
                 { userId, modelName: model.id },
@@ -269,6 +271,8 @@ const localaiPullAllModelsFunc = async ({
                     modelLabel,
                     modelName: model.id,
                     modelType,
+                    contextLength: contextLen,
+                    maxCompletionTokens: maxCompletionTokens,
                     ...modalitySettings,
                     raw: model,
                 },
@@ -336,6 +340,7 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
     try {
         const {
             _id,
+            modelLabel,
             modelType,
             isInputModalityText,
             isInputModalityImage,
@@ -346,8 +351,11 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
             isOutputModalityAudio,
             isOutputModalityVideo,
             isOutputModalityEmbedding,
+            contextLength,
+            maxCompletionTokens,
         } = req.body as {
             _id?: string;
+            modelLabel?: string;
             modelType?: LocalaiModelType;
             isInputModalityText?: 'true' | 'false' | 'pending';
             isInputModalityImage?: 'true' | 'false' | 'pending';
@@ -358,6 +366,8 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
             isOutputModalityAudio?: 'true' | 'false' | 'pending';
             isOutputModalityVideo?: 'true' | 'false' | 'pending';
             isOutputModalityEmbedding?: 'true' | 'false' | 'pending';
+            contextLength?: number;
+            maxCompletionTokens?: number;
         };
 
         if (!_id || typeof _id !== 'string') {
@@ -371,6 +381,10 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
 
         const validModalityValues = ['true', 'false', 'pending'] as const;
         const update: Record<string, string> = {};
+
+        if (typeof modelLabel === 'string' && modelLabel.trim()) {
+            update.modelLabel = modelLabel.trim();
+        }
 
         if (modelType !== undefined) {
             update.modelType = modelType;
@@ -428,6 +442,12 @@ router.patch('/modelLocalaiUpdate', middlewareUserAuth, async (req: Request, res
                 return res.status(400).json({ message: 'Invalid value for isOutputModalityEmbedding' });
             }
             update.isOutputModalityEmbedding = isOutputModalityEmbedding;
+        }
+        if (typeof contextLength === 'number') {
+            (update as any).contextLength = Math.max(0, contextLength);
+        }
+        if (typeof maxCompletionTokens === 'number') {
+            (update as any).maxCompletionTokens = Math.max(0, maxCompletionTokens);
         }
 
         if (Object.keys(update).length === 0) {

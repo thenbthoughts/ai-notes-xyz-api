@@ -74,6 +74,15 @@ const aiModelListLocalaiSchema = new Schema<tsSchemaAiModelListLocalai>({
         enum: ['true', 'false', 'pending'],
     },
 
+    contextLength: {
+        type: Number,
+        default: 0,
+    },
+    maxCompletionTokens: {
+        type: Number,
+        default: 0,
+    },
+
     raw: {
         type: Object,
         default: {},

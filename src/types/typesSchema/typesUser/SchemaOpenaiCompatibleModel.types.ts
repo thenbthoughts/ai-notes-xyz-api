@@ -9,6 +9,8 @@ interface IOpenaiCompatibleModel extends Document {
     apiKey: string;
     modelName: string;
     customHeaders?: string;
+    contextLength?: number;
+    maxCompletionTokens?: number;
     createdAtUtc?: Date;
     updatedAtUtc?: Date;
 
@@ -23,6 +25,7 @@ interface IOpenaiCompatibleModel extends Document {
     isOutputModalityImage: string;
     isOutputModalityAudio: string;
     isOutputModalityVideo: string;
+    isOutputModalityEmbedding: string;
 }
 
 export default IOpenaiCompatibleModel;
