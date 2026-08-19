@@ -33,6 +33,10 @@ export const agentOpencodeWorkspacePaths = ({
     outputPrompt: string;
     agentWorkspaceKeep: string;
     promptFileName: string;
+    chatHistory: string;
+    inputChatHistory: string;
+    instructionFile: string;
+    uploadsDir: string;
 } => {
     const root = agentOpencodeThreadRoot(threadId);
     const promptFileName = `prompt-${hexId(instanceId)}.md`;
@@ -48,6 +52,10 @@ export const agentOpencodeWorkspacePaths = ({
         outputPrompt: `${outputDir}/${promptFileName}`,
         agentWorkspaceKeep: `${agentWorkspaceDir}/.gitkeep`,
         promptFileName,
+        chatHistory: `${agentWorkspaceDir}/CHAT.md`,
+        inputChatHistory: `${inputDir}/CHAT.md`,
+        instructionFile: `${agentWorkspaceDir}/INSTRUCTION.md`,
+        uploadsDir: `${agentWorkspaceDir}/uploads`,
     };
 };
 
@@ -189,7 +197,7 @@ export const agentOpencodeListDir = async (params: {
 };
 
 const SKIP_UPLOAD_DIR_NAMES = new Set(['node_modules', '.git', '.xdg-config', '.xdg-data']);
-const SKIP_UPLOAD_FILE_NAMES = new Set(['.env']);
+const SKIP_UPLOAD_FILE_NAMES = new Set(['.env', '.opencode-open-session.sh']);
 const SKIP_UPLOAD_RELATIVE_FILES = new Set([
     'opencode.json',
     '.opencode/opencode.json',
@@ -341,23 +349,72 @@ export const parseOpencodeRunText = (stdout: string): string => {
     return raw;
 };
 
+const SESSION_ID_RE = /^ses_[A-Za-z0-9_-]+$/;
+
+/** First OpenCode session id found in `opencode run --format json` stdout. */
+export const parseOpencodeSessionId = (stdout: string): string => {
+    const raw = stripAnsi(stdout).replace(/\r/g, '');
+    if (!raw) {
+        return '';
+    }
+    for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{')) {
+            continue;
+        }
+        try {
+            const ev = JSON.parse(trimmed) as Record<string, unknown>;
+            const id =
+                typeof ev.sessionID === 'string'
+                    ? ev.sessionID
+                    : typeof ev.sessionId === 'string'
+                      ? ev.sessionId
+                      : '';
+            if (SESSION_ID_RE.test(id)) {
+                return id;
+            }
+        } catch {
+            /* not a JSON event line */
+        }
+    }
+    const match = raw.match(/ses_[A-Za-z0-9_-]+/);
+    return match && SESSION_ID_RE.test(match[0]) ? match[0] : '';
+};
+
+export const isOpencodeSessionId = (value: string): boolean => SESSION_ID_RE.test(String(value || '').trim());
+
 export const agentOpencodeExecute = async (params: {
     shell: AgentOpencodeShellConfig;
     relativeDir: string;
     model: string;
     instruction: string;
     timeoutMs?: number;
-}): Promise<{ stdout: string; stderr: string; ok: boolean; error?: string }> => {
+    sessionId?: string;
+    sessionTitle?: string;
+}): Promise<{ stdout: string; stderr: string; ok: boolean; error?: string; sessionId: string }> => {
     const relativeDir = assertAgentOpencodeRelativePath(params.relativeDir);
     const timeoutMs = Math.min(Math.max(params.timeoutMs ?? 300_000, 1), 600_000);
     const innerTimeoutSec = Math.max(30, Math.floor((timeoutMs - 10_000) / 1000));
     const model = String(params.model || '').trim() || 'openrouter/openai/gpt-oss-20b';
-    const innerRun = [
+    const sessionId = isOpencodeSessionId(params.sessionId || '') ? String(params.sessionId).trim() : '';
+    const sessionTitle = String(params.sessionTitle || '')
+        .replace(/[\r\n"']/g, ' ')
+        .trim()
+        .slice(0, 80);
+
+    const innerParts = [
         'opencode --pure run --auto --format json',
         `--model ${shellSingleQuote(model)}`,
         '--dir "$WORKDIR"',
-        shellSingleQuote(params.instruction),
-    ].join(' ');
+    ];
+    if (sessionId) {
+        innerParts.push(`--session ${shellSingleQuote(sessionId)}`);
+    } else if (sessionTitle) {
+        innerParts.push(`--title ${shellSingleQuote(sessionTitle)}`);
+    }
+    innerParts.push('--');
+    innerParts.push(shellSingleQuote(params.instruction));
+    const innerRun = innerParts.join(' ');
     const command = [
         'export PATH="/root/.opencode/bin:/config/.opencode/bin:/usr/local/bin:$PATH"',
         'ROOT="${FILE_STORAGE_PATH:-/config}"',
@@ -393,8 +450,9 @@ export const agentOpencodeExecute = async (params: {
                 : {};
         const stdout = typeof body.stdout === 'string' ? body.stdout : '';
         const stderr = typeof body.stderr === 'string' ? body.stderr : '';
+        const parsedSessionId = parseOpencodeSessionId(stdout) || sessionId;
         if (stdout.trim()) {
-            return { stdout, stderr, ok: true };
+            return { stdout, stderr, ok: true, sessionId: parsedSessionId };
         }
         const error =
             typeof body.message === 'string'
@@ -402,13 +460,58 @@ export const agentOpencodeExecute = async (params: {
                 : typeof body.error === 'string'
                   ? body.error
                   : `OpenCode execute HTTP ${execRes.status}`;
-        return { stdout, stderr, ok: false, error };
+        return { stdout, stderr, ok: false, error, sessionId: parsedSessionId };
     } catch (err) {
         return {
             stdout: '',
             stderr: '',
             ok: false,
             error: err instanceof Error ? err.message : String(err),
+            sessionId,
+        };
+    }
+};
+
+export const agentOpencodeOpenSessionOnDesktop = async (params: {
+    shell: AgentOpencodeShellConfig;
+    relativeDir: string;
+    sessionId?: string;
+    timeoutMs?: number;
+}): Promise<{ ok: boolean; error?: string; sessionId: string; relativeDir: string }> => {
+    const relativeDir = assertAgentOpencodeRelativePath(params.relativeDir);
+    const sessionId = isOpencodeSessionId(params.sessionId || '') ? String(params.sessionId).trim() : '';
+    const timeoutMs = Math.min(Math.max(params.timeoutMs ?? 20_000, 1), 60_000);
+    const base = params.shell.baseUrl.replace(/\/+$/, '');
+    try {
+        const openRes = await axios.post(
+            `${base}/api/shell-engine/opencode/open-session`,
+            { relativeDir, sessionId },
+            {
+                timeout: timeoutMs,
+                headers: { 'X-API-Token': params.shell.token, 'Content-Type': 'application/json' },
+                validateStatus: () => true,
+            }
+        );
+        if (openRes.status === 200) {
+            return { ok: true, sessionId, relativeDir };
+        }
+        const body =
+            openRes.data && typeof openRes.data === 'object'
+                ? (openRes.data as Record<string, unknown>)
+                : {};
+        const error =
+            typeof body.message === 'string'
+                ? body.message
+                : typeof body.error === 'string'
+                  ? body.error
+                  : `Open session HTTP ${openRes.status}`;
+        return { ok: false, error, sessionId, relativeDir };
+    } catch (err) {
+        return {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+            sessionId,
+            relativeDir,
         };
     }
 };

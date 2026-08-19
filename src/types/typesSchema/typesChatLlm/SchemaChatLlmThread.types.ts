@@ -67,6 +67,9 @@ export interface IChatLlmThread extends Document {
     /** When true, allow omniparser-v2 via Replicate (requires Replicate key) */
     useOmniparser?: boolean;
 
+    /** OpenCode session id for Agent (Opencode). Older documents may omit this. */
+    opencodeSessionId?: string;
+
     // auth
     userId: mongoose.Types.ObjectId;
 

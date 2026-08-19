@@ -142,6 +142,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: false,
     },
 
+    /** OpenCode session id for Agent (Opencode) threads (ses_…). */
+    opencodeSessionId: {
+        type: String,
+        default: '',
+    },
+
     // auth
     userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true, },
 

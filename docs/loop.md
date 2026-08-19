@@ -108,9 +108,13 @@ Folder on Agent Workspace (not Agent-beta’s folder):
 ```
 ai-notes-xyz-agent-workspace/shell/agent-opencode/{thread-id}/
   input/prompt-{instance-id}.md
-  agent-workspace/              ← OpenCode works here
+  input/CHAT.md                 ← full thread transcript
+  agent-workspace/              ← OpenCode works here (one session per thread)
+    CHAT.md
+    uploads/                    ← chat attachments
     opencode.json               ← keys copied from Settings
     .env
+    .xdg-data/                  ← OpenCode session database (HOME is this folder)
   output/prompt-{instance-id}.md
 ```
 
@@ -125,9 +129,11 @@ The UI shows the same label: **input → settings → opencode → output**.
 Code: `agentOpencodeStepInput`
 
 1. Need a valid **Agent Workspace** URL and token (Settings, or env `AM4_SHELL_ENGINE_URL` / `SHELL_ENGINE_URL` plus token). If missing, the run fails.
-2. Write the user prompt to `input/prompt-{id}.md`.
-3. Ensure `agent-workspace/.gitkeep` exists so the folder exists.
-4. Write the start message into `output/prompt-{id}.md` (placeholder until OpenCode finishes).
+2. Write the latest user prompt to `input/prompt-{id}.md`.
+3. Copy chat attachments into `agent-workspace/uploads/` (same files as the thread, not Agent-beta’s folder).
+4. Write the **full thread transcript** to `agent-workspace/CHAT.md` and `input/CHAT.md` (user + assistant turns, file paths, current message). Placeholder “started / settings / running” bubbles are skipped.
+5. Ensure `agent-workspace/.gitkeep` exists so the folder exists.
+6. Write the start message into `output/prompt-{id}.md` (placeholder until OpenCode finishes).
 
 ---
 
@@ -186,7 +192,7 @@ The shell command:
 5. Run:
 
 ```
-opencode --pure run --auto --format json --model <provider/model> --dir "$WORKDIR" "<instruction>"
+opencode --pure run --auto --format json --model <provider/model> --dir "$WORKDIR" [--session <id>] [--title "AI Notes …"] "<instruction>"
 ```
 
 Flags:
@@ -194,10 +200,20 @@ Flags:
 - `--pure` — skip external plugins
 - `--auto` — approve file/shell tools that are not denied
 - `--format json` — one JSON event per line (the last `text` event is the spoken answer)
+- `--session` — continue this thread’s OpenCode session after the first run
+- `--title` — name the session on the first run
+
+The long chat history is written to `INSTRUCTION.md` and `CHAT.md`. The CLI only gets a short prompt (`Read INSTRUCTION.md…`) so OpenCode does not treat the transcript as a `--file` path.
 
 The instruction tells OpenCode to use **relative paths**, complete the user task, write `ANSWER.md`, and print the same Markdown.
 
-OpenCode may create files such as `hello.txt` in that folder.
+**Session per thread**
+
+1. Each thread keeps one OpenCode session id (`ses_…`) on `chatLlmThread.opencodeSessionId` (also copied to the instance `opencodeRunId`).
+2. The first run creates the session (`--title`) and attaches `CHAT.md` so the chat is in the session.
+3. Later runs on the same thread pass `--session <id>` and only the new user message (the transcript stays in `CHAT.md` and in the session).
+4. Session files live under `agent-workspace/.xdg-data/` because `HOME` is that folder.
+5. If `--session` returns no answer, the pipeline retries once without a session and stores the new id.
 
 ### Step 2 — Take the answer
 
@@ -234,6 +250,17 @@ Other status APIs:
 
 - `POST /api/chat-llm/agent-opencode/instance-list`
 - `POST /api/chat-llm/agent-opencode/instance-by-id`
+- `POST /api/chat-llm/agent-opencode/open-session` — launch this thread’s OpenCode TUI on the virtual computer (webtop desktop)
+
+**Open session button**
+
+On the Agent (Opencode) panel, **Open session**:
+
+1. Opens the virtual computer tab (same desktop as LibreOffice, typically `http://localhost:3010`).
+2. Asks Agent Workspace to start `opencode --session <id> --dir agent-workspace` in a desktop terminal (`xfce4-terminal`).
+3. The TUI uses the same `HOME` / session database as the cron runs.
+
+Rebuild the Agent Workspace image after changing the open-session route. The API inside the container is compiled JS.
 
 ---
 
@@ -264,6 +291,7 @@ Common failures:
 4. Cron runs the new row. The same thread folder is reused: `shell/agent-opencode/{thread-id}/`.
 5. New prompt files use the new instance id: `prompt-{new-id}.md`.
 6. Settings files are written again from the current API keys.
+7. `CHAT.md` is rewritten with the full transcript, attachments are re-synced, and OpenCode continues the **same session** (`--session`).
 
 ---
 
@@ -324,7 +352,7 @@ Needs: Mongo user with valid Agent Workspace + at least one LLM key, and a runni
 1. Collection `agentOpencodeInstance` only — never `SchemaAgent*`.
 2. Folder prefix `shell/agent-opencode/` only — never `shell/agent/`.
 3. Cron `agentOpencodeCronTick` only.
-4. Routes under `/api/chat-llm/agent-opencode/`.
+4. Routes under `/api/chat-llm/agent-opencode/` (`/init`, `/status`, `/instance-list`, `/instance-by-id`, `/open-session`).
 5. Worker is OpenCode, not Cursor SDK.
 
 ---

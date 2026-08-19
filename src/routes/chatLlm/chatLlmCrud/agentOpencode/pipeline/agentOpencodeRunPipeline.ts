@@ -1,5 +1,6 @@
 import { ModelUserApiKey } from '../../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelAgentOpencodeInstance } from '../../../../../schema/schemaChatLlm/SchemaAgentOpencode/SchemaAgentOpencodeInstance.schema';
+import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
 import { getApiKeyByObject } from '../../../../../utils/llm/llmCommonFunc';
 import {
     AGENT_OPENCODE_RUNNING_MESSAGE,
@@ -12,6 +13,7 @@ import {
 import {
     agentOpencodeWorkspacePaths,
     getAgentOpencodeShellConfig,
+    isOpencodeSessionId,
 } from '../agentOpencodeWorkspace';
 import type { IAgentOpencodeInstance } from '../../../../../types/typesSchema/typesChatLlm/typesAgentOpencode/SchemaAgentOpencodeInstance.types';
 import { agentOpencodeStepInput } from './agentOpencodeStepInput';
@@ -29,6 +31,60 @@ const setPipelineStep = async (
             pipelineStep,
             updatedAtUtc: new Date(),
             ...extra,
+        },
+    });
+};
+
+const loadThreadSessionId = async (
+    threadId: IAgentOpencodeInstance['threadId']
+): Promise<{ sessionId: string; sessionTitle: string }> => {
+    const thread = await ModelChatLlmThread.findById(threadId)
+        .select('opencodeSessionId threadTitle')
+        .lean();
+    const fromThread =
+        thread && typeof thread.opencodeSessionId === 'string' ? thread.opencodeSessionId.trim() : '';
+    let sessionId = isOpencodeSessionId(fromThread) ? fromThread : '';
+    if (!sessionId) {
+        const prev = await ModelAgentOpencodeInstance.findOne({
+            threadId,
+            opencodeRunId: { $ne: '' },
+        })
+            .sort({ createdAtUtc: -1 })
+            .select('opencodeRunId')
+            .lean();
+        const fromInstance =
+            prev && typeof prev.opencodeRunId === 'string' ? prev.opencodeRunId.trim() : '';
+        sessionId = isOpencodeSessionId(fromInstance) ? fromInstance : '';
+    }
+    const titleRaw =
+        thread && typeof thread.threadTitle === 'string' && thread.threadTitle.trim()
+            ? thread.threadTitle.trim()
+            : String(threadId);
+    const sessionTitle = `AI Notes ${titleRaw}`.slice(0, 80);
+    return { sessionId, sessionTitle };
+};
+
+const persistSessionId = async ({
+    instance,
+    sessionId,
+}: {
+    instance: IAgentOpencodeInstance;
+    sessionId: string;
+}): Promise<void> => {
+    if (!isOpencodeSessionId(sessionId)) {
+        return;
+    }
+    const now = new Date();
+    await ModelChatLlmThread.findByIdAndUpdate(instance.threadId, {
+        $set: {
+            opencodeSessionId: sessionId,
+            updatedAtUtc: now,
+        },
+    });
+    await ModelAgentOpencodeInstance.findByIdAndUpdate(instance._id, {
+        $set: {
+            opencodeRunId: sessionId,
+            updatedAtUtc: now,
         },
     });
 };
@@ -56,6 +112,7 @@ export const agentOpencodeRunPipeline = async (
             threadId: String(instance.threadId),
             instanceId: String(instance._id),
         });
+        const { sessionId: existingSessionId, sessionTitle } = await loadThreadSessionId(instance.threadId);
 
         await setPipelineStep(instance._id, 'input', {
             workspaceRootRelativePath: paths.root,
@@ -64,10 +121,11 @@ export const agentOpencodeRunPipeline = async (
             agentWorkspaceRelativePath: paths.agentWorkspaceDir,
         });
 
-        const { promptText } = await agentOpencodeStepInput({
+        const { promptText, historyMarkdown, uploadedFiles } = await agentOpencodeStepInput({
             instance,
             shell,
             paths,
+            apiKeys,
         });
 
         await setPipelineStep(instance._id, 'settings');
@@ -88,10 +146,15 @@ export const agentOpencodeRunPipeline = async (
         });
         const called = await agentOpencodeStepCall({
             promptText,
+            historyMarkdown,
+            uploadedFiles,
             shell,
             paths,
             cliModel: settings.cliModel,
+            sessionId: existingSessionId,
+            sessionTitle,
         });
+        await persistSessionId({ instance, sessionId: called.sessionId });
 
         await setPipelineStep(instance._id, 'output');
         const { outputContent } = await agentOpencodeStepOutput({
@@ -111,6 +174,9 @@ export const agentOpencodeRunPipeline = async (
                 inputPromptRelativePath: paths.inputPrompt,
                 outputPromptRelativePath: paths.outputPrompt,
                 agentWorkspaceRelativePath: paths.agentWorkspaceDir,
+                opencodeRunId: isOpencodeSessionId(called.sessionId)
+                    ? called.sessionId
+                    : existingSessionId,
                 filesInitializedAtUtc: now,
                 updatedAtUtc: now,
             },
