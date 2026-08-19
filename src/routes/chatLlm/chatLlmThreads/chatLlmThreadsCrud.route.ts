@@ -301,7 +301,7 @@ router.post(
                 isFavourite: false,
 
                 // answer type
-                answerEngine: 'conciseAnswer',
+                answerEngine: 'conciseAnswer' as 'conciseAnswer' | 'agent' | 'agentOpencode',
 
                 // agent budgets
                 agentMinBudgetTokens: 1,
@@ -362,7 +362,11 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'agent') {
+                if (
+                    answerEngine === 'conciseAnswer' ||
+                    answerEngine === 'agent' ||
+                    answerEngine === 'agentOpencode'
+                ) {
                     addData.answerEngine = answerEngine;
                 }
             };
@@ -676,7 +680,11 @@ router.post(
             };
 
             if (typeof answerEngine === 'string') {
-                if (answerEngine === 'conciseAnswer' || answerEngine === 'agent') {
+                if (
+                    answerEngine === 'conciseAnswer' ||
+                    answerEngine === 'agent' ||
+                    answerEngine === 'agentOpencode'
+                ) {
                     updateData.answerEngine = answerEngine;
                 }
             };

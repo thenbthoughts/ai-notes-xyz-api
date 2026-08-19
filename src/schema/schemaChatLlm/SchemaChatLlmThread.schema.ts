@@ -83,7 +83,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     // answer engine
     answerEngine: {
         type: String,
-        enum: ['conciseAnswer', 'agent'],
+        enum: ['conciseAnswer', 'agent', 'agentOpencode'],
         default: 'conciseAnswer',
     },
 

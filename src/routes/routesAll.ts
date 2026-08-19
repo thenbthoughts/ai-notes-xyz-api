@@ -29,6 +29,7 @@ import routesChatLlmTts from './chatLlm/chatLlmCrud/chatUtils/chatLlmTts.route';
 import routesShellFilesExplorer from './chatLlm/chatLlmCrud/agent/agentUtils/agentShell/shellFilesExplorer.route';
 import routesLibreOffice from './chatLlm/libreOffice/libreOffice.route';
 import routesAgentSkills from './chatLlm/chatLlmCrud/agentSkills/agentSkills.route';
+import routesAgentOpencode from './chatLlm/chatLlmCrud/agentOpencode/agentOpencode.route';
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
@@ -127,6 +128,7 @@ router.use('/chat-llm/tts', routesChatLlmTts);
 router.use('/chat-llm/shell-files', routesShellFilesExplorer);
 router.use('/chat-llm/libreoffice', routesLibreOffice);
 router.use('/chat-llm/agent-skills', routesAgentSkills);
+router.use('/chat-llm/agent-opencode', routesAgentOpencode);
 
 // routes -> task
 router.use('/task/crud', routesTaskCrud);

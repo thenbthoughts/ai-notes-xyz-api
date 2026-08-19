@@ -19,6 +19,7 @@ import {
     shellDeleteRelativePath,
 } from '../../chatLlmCrud/agent/agentUtils/agentShell/agentShellWorkspace';
 import { AGENT_WORKSPACE_SHELL_PREFIX } from '../../../../utils/agentWorkspace/agentWorkspacePaths';
+import cleanupAgentOpencodeForThread from '../../chatLlmCrud/agentOpencode/agentOpencodeCleanup';
 
 /** Concise / chat-shell workspace for a thread. */
 const shellThreadWorkspaceRelativeDir = (threadId: mongoose.Types.ObjectId): string =>
@@ -51,6 +52,12 @@ const cleanupThreadOnDelete = async ({
     if (agentIds.length > 0) {
         await cancelPendingAgentTickTasks({ agentInstanceId: agentIds });
     }
+
+    await cleanupAgentOpencodeForThread({
+        threadId,
+        userId: userObjectId,
+        apiKey,
+    });
 
     await Promise.all([
         ModelAgentMemory.deleteMany({ threadId }),

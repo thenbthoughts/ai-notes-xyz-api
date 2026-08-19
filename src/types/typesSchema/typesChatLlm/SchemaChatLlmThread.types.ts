@@ -43,7 +43,7 @@ export interface IChatLlmThread extends Document {
     isMemoryEnabled: boolean;
 
     // answer type
-    answerEngine: 'conciseAnswer' | 'agent';
+    answerEngine: 'conciseAnswer' | 'agent' | 'agentOpencode';
 
     // answerEngine -> agent budgets (tokens + loop iterations)
     agentMinBudgetTokens: number;
