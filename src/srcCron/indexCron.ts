@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 
 import agentCronTick from '../routes/chatLlm/chatLlmCrud/agent/agentCron/agentCron';
+import agentOpencodeCronTick from '../routes/chatLlm/chatLlmCrud/agentOpencode/agentOpencodeCron';
 import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
 import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
 import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
@@ -66,6 +67,16 @@ const initCron = () => {
         '*/2 * * * * *',
         async () => {
             await agentCronTick();
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/5 * * * * *',
+        async () => {
+            await agentOpencodeCronTick();
         },
         {
             noOverlap: true,

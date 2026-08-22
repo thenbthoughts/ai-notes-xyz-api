@@ -29,6 +29,7 @@ import routesChatLlmTts from './chatLlm/chatLlmCrud/chatUtils/chatLlmTts.route';
 import routesShellFilesExplorer from './chatLlm/chatLlmCrud/agent/agentUtils/agentShell/shellFilesExplorer.route';
 import routesLibreOffice from './chatLlm/libreOffice/libreOffice.route';
 import routesAgentSkills from './chatLlm/chatLlmCrud/agentSkills/agentSkills.route';
+import routesAgentOpencode from './chatLlm/chatLlmCrud/agentOpencode/agentOpencode.route';
 
 // dynamic data
 import routesDynamicDataModelOpenrouter from './dynamicData/modelOpenrouter.route';
@@ -96,6 +97,8 @@ import routesAiContextFaq from './aiContext/aiContextFaq';
 // timeline
 import routesTimeline from './timeline/timeline.route';
 import routesTimelineFiles from './timeline/timelineFiles.route';
+import routesWebhook from './webhook/webhook.route';
+import routesMcp from './mcp/mcp.route';
 
 const router = Router();
 
@@ -127,6 +130,7 @@ router.use('/chat-llm/tts', routesChatLlmTts);
 router.use('/chat-llm/shell-files', routesShellFilesExplorer);
 router.use('/chat-llm/libreoffice', routesLibreOffice);
 router.use('/chat-llm/agent-skills', routesAgentSkills);
+router.use('/chat-llm/agent-opencode', routesAgentOpencode);
 
 // routes -> task
 router.use('/task/crud', routesTaskCrud);
@@ -202,6 +206,9 @@ router.use('/ai-context/faq', routesAiContextFaq);
 // routes -> timeline
 router.use('/timeline/crud', routesTimeline);
 router.use('/timeline/files', routesTimelineFiles);
+
+router.use('/webhook', routesWebhook);
+router.use('/mcp', routesMcp);
 
 /*
 Example:

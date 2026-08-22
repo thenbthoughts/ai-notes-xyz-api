@@ -51,6 +51,13 @@ export interface tsUserApiKey {
     agentWorkspaceDesktopPassword: string;
     agentWorkspaceApiUrl: string;
     agentWorkspaceApiToken: string;
+
+    clientFrontendUrl: string;
+    webhookTokenValid: boolean;
+    webhookToken: string;
+    mcpBearerTokenValid: boolean;
+    mcpBearerToken: string;
+    mcpBaseUrl: string;
 }
 
 export const getApiKeyByObject = (apiKeyObject: any) => {
@@ -107,6 +114,13 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         agentWorkspaceDesktopPassword: '',
         agentWorkspaceApiUrl: '',
         agentWorkspaceApiToken: '',
+
+        clientFrontendUrl: '',
+        webhookTokenValid: false,
+        webhookToken: '',
+        mcpBearerTokenValid: false,
+        mcpBearerToken: '',
+        mcpBaseUrl: '',
     } as tsUserApiKey;
 
     try {
@@ -247,6 +261,24 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.agentWorkspaceApiToken === 'string') {
                 apiKey.agentWorkspaceApiToken = apiKeyObject.agentWorkspaceApiToken;
+            }
+            if (typeof apiKeyObject.clientFrontendUrl === 'string') {
+                apiKey.clientFrontendUrl = apiKeyObject.clientFrontendUrl.trim();
+            }
+            if (typeof apiKeyObject.webhookTokenValid === 'boolean' && apiKeyObject.webhookTokenValid) {
+                apiKey.webhookTokenValid = true;
+            }
+            if (typeof apiKeyObject.webhookToken === 'string') {
+                apiKey.webhookToken = apiKeyObject.webhookToken;
+            }
+            if (typeof apiKeyObject.mcpBearerTokenValid === 'boolean' && apiKeyObject.mcpBearerTokenValid) {
+                apiKey.mcpBearerTokenValid = true;
+            }
+            if (typeof apiKeyObject.mcpBearerToken === 'string') {
+                apiKey.mcpBearerToken = apiKeyObject.mcpBearerToken;
+            }
+            if (typeof apiKeyObject.mcpBaseUrl === 'string') {
+                apiKey.mcpBaseUrl = apiKeyObject.mcpBaseUrl.trim();
             }
         }
         return apiKey;

@@ -13,6 +13,9 @@ import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
+import { generateWebhookToken, isWebhookTokenShape } from '../../utils/webhook/generateWebhookToken';
+import { webhookPublicBaseUrl } from '../../utils/webhook/webhookBaseUrl';
+import { mcpPublicBaseUrl, mcpPublicBaseUrlAuto, normalizeMcpUrl } from '../../utils/mcp/mcpBaseUrl';
 
 // Router
 const router = Router();
@@ -1651,7 +1654,7 @@ router.post(
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
-                'agentWorkspace',
+                'agentWorkspace', 'webhook', 'mcp',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1727,6 +1730,14 @@ router.post(
                     agentWorkspaceApiUrl: '',
                     agentWorkspaceApiToken: '',
                 },
+                webhook: {
+                    webhookTokenValid: false,
+                    webhookToken: '',
+                },
+                mcp: {
+                    mcpBearerTokenValid: false,
+                    mcpBearerToken: '',
+                },
             };
 
             const updateFields = clearOperations[apiKeyType];
@@ -1765,6 +1776,168 @@ router.post(
                 success: '',
                 error: 'Server error while clearing API key',
             });
+        }
+    }
+);
+
+// Get per-user webhook token for `/api/webhook/*`
+router.get(
+    '/getWebhookToken',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
+                .select('clientFrontendUrl webhookToken webhookTokenValid')
+                .lean();
+            const token =
+                doc && typeof doc.webhookToken === 'string' ? doc.webhookToken.trim() : '';
+            const valid = Boolean(doc?.webhookTokenValid && isWebhookTokenShape(token));
+            const clientFrontendUrl =
+                doc && typeof doc.clientFrontendUrl === 'string' ? doc.clientFrontendUrl : '';
+            return res.json({
+                success: true,
+                webhookTokenValid: valid,
+                webhookToken: valid ? token : '',
+                clientFrontendUrl,
+                webhookBaseUrl: webhookPublicBaseUrl(clientFrontendUrl),
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Generate a new per-user webhook token (replaces the previous one)
+router.post(
+    '/generateWebhookToken',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const token = generateWebhookToken(48);
+            await ModelUserApiKey.findOneAndUpdate(
+                { userId: res.locals.auth_userId },
+                {
+                    $set: {
+                        webhookToken: token,
+                        webhookTokenValid: true,
+                    },
+                },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
+                .select('clientFrontendUrl')
+                .lean();
+            const clientFrontendUrl =
+                doc && typeof doc.clientFrontendUrl === 'string' ? doc.clientFrontendUrl : '';
+            return res.json({
+                success: 'Updated',
+                error: '',
+                webhookTokenValid: true,
+                webhookToken: token,
+                clientFrontendUrl,
+                webhookBaseUrl: webhookPublicBaseUrl(clientFrontendUrl),
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Get per-user MCP bearer token for `/api/mcp`
+router.get(
+    '/getMcpBearerToken',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
+                .select('mcpBearerToken mcpBearerTokenValid mcpBaseUrl')
+                .lean();
+            const token =
+                doc && typeof doc.mcpBearerToken === 'string' ? doc.mcpBearerToken.trim() : '';
+            const valid = Boolean(doc?.mcpBearerTokenValid && isWebhookTokenShape(token));
+            const stored = doc && typeof doc.mcpBaseUrl === 'string' ? doc.mcpBaseUrl : '';
+            return res.json({
+                success: true,
+                mcpBearerTokenValid: valid,
+                mcpBearerToken: valid ? token : '',
+                mcpBaseUrl: mcpPublicBaseUrl(stored),
+                mcpBaseUrlAuto: mcpPublicBaseUrlAuto(),
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Generate a new per-user MCP bearer token (replaces the previous one)
+router.post(
+    '/generateMcpBearerToken',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const token = generateWebhookToken(48);
+            await ModelUserApiKey.findOneAndUpdate(
+                { userId: res.locals.auth_userId },
+                {
+                    $set: {
+                        mcpBearerToken: token,
+                        mcpBearerTokenValid: true,
+                    },
+                },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
+                .select('mcpBaseUrl')
+                .lean();
+            const stored = doc && typeof doc.mcpBaseUrl === 'string' ? doc.mcpBaseUrl : '';
+            return res.json({
+                success: 'Updated',
+                error: '',
+                mcpBearerTokenValid: true,
+                mcpBearerToken: token,
+                mcpBaseUrl: mcpPublicBaseUrl(stored),
+                mcpBaseUrlAuto: mcpPublicBaseUrlAuto(),
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Save or auto-fetch the public MCP URL used in Settings and OpenCode
+router.post(
+    '/updateMcpBaseUrl',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const fetchAuto = Boolean(req.body?.fetchAuto);
+            const nextUrl = fetchAuto
+                ? mcpPublicBaseUrlAuto()
+                : normalizeMcpUrl(typeof req.body?.mcpBaseUrl === 'string' ? req.body.mcpBaseUrl : '');
+            if (!nextUrl) {
+                return res.status(400).json({
+                    success: '',
+                    error: 'Invalid MCP URL',
+                });
+            }
+            await ModelUserApiKey.findOneAndUpdate(
+                { userId: res.locals.auth_userId },
+                { $set: { mcpBaseUrl: nextUrl } },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
+            return res.json({
+                success: 'Updated',
+                error: '',
+                mcpBaseUrl: nextUrl,
+                mcpBaseUrlAuto: mcpPublicBaseUrlAuto(),
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
         }
     }
 );

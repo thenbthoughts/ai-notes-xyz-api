@@ -83,7 +83,7 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     // answer engine
     answerEngine: {
         type: String,
-        enum: ['conciseAnswer', 'agent'],
+        enum: ['conciseAnswer', 'agent', 'agentOpencode'],
         default: 'conciseAnswer',
     },
 
@@ -140,6 +140,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
     useOmniparser: {
         type: Boolean,
         default: false,
+    },
+
+    /** OpenCode session id for Agent (Opencode) threads (ses_…). */
+    opencodeSessionId: {
+        type: String,
+        default: '',
     },
 
     // auth

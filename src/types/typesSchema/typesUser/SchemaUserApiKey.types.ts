@@ -97,6 +97,15 @@ interface IUserApiKey extends Document {
     agentWorkspaceApiUrl: string;
     agentWorkspaceApiToken: string;
 
+    /** Per-user token for `/api/webhook/*`. */
+    webhookTokenValid: boolean;
+    webhookToken: string;
+
+    /** Per-user token for `/api/mcp`. */
+    mcpBearerTokenValid: boolean;
+    mcpBearerToken: string;
+    mcpBaseUrl: string;
+
     // user-email-verify
     userEmailVerifyOtp: number;
     userEmailVerifyEmail: string;

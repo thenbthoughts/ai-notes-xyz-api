@@ -43,7 +43,7 @@ export interface IChatLlmThread extends Document {
     isMemoryEnabled: boolean;
 
     // answer type
-    answerEngine: 'conciseAnswer' | 'agent';
+    answerEngine: 'conciseAnswer' | 'agent' | 'agentOpencode';
 
     // answerEngine -> agent budgets (tokens + loop iterations)
     agentMinBudgetTokens: number;
@@ -66,6 +66,9 @@ export interface IChatLlmThread extends Document {
 
     /** When true, allow omniparser-v2 via Replicate (requires Replicate key) */
     useOmniparser?: boolean;
+
+    /** OpenCode session id for Agent (Opencode). Older documents may omit this. */
+    opencodeSessionId?: string;
 
     // auth
     userId: mongoose.Types.ObjectId;

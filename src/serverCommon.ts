@@ -11,7 +11,7 @@ import migrateUsernameToUserId from './migrations/migrateUsernameToUserId';
 
 const app = express();
 app.use(express.json({
-    limit: '10mb',
+    limit: '16mb',
 }));
 app.use(cookieParser());
 
@@ -40,7 +40,17 @@ app.use(cors({
         callback(null, false);
     },
     methods: 'GET,POST,PUT,DELETE,PATCH',
-    allowedHeaders: ['Content-Type', 'Set-Cookie', 'Authorization', 'Range'],
+    allowedHeaders: [
+        'Content-Type',
+        'Set-Cookie',
+        'Authorization',
+        'Range',
+        'X-Webhook-Token',
+        'X-MCP-Bearer',
+        'X-Chat-Message-Id',
+        'Mcp-Session-Id',
+        'MCP-Protocol-Version',
+    ],
     exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'Content-Type'],
     credentials: true,
 }));
@@ -77,6 +87,10 @@ app.use((req, res, next) => {
 
 // set Bearer token from cookie
 app.use((req: Request, res: Response, next) => {   
+    if (req.path.startsWith('/api/webhook') || req.path.startsWith('/api/mcp')) {
+        next();
+        return;
+    }
     // randomDeviceId
     if (typeof req?.cookies?.randomDeviceId === 'string') {
         req.headers.authorization = `Bearer ${req.cookies.randomDeviceId}`;
