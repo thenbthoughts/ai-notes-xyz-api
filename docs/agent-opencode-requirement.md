@@ -271,3 +271,4 @@ When a thread is deleted:
 6. `executeShell` is still not used as the Opencode worker switch.
 7. No Cursor API key field, route, or Settings screen.
 8. Groq / OpenRouter / etc. from Settings are copied into `opencode.json` before `opencode run`.
+9. **Dynamic execution only** — no hardcoding per task (see `agent-dynamic-execution.md`). Agent must figure out what to do, may `write` Node/Python scripts, `npm/pip install` any library, and run via `bash`; if it cannot solve, it must reject, not fallback to a wrong format.

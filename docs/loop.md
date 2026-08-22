@@ -438,3 +438,14 @@ Each settings step writes `agent-workspace/opencode.json` with:
 
 Agent Workspace compose includes `extra_hosts: ["host.docker.internal:host-gateway"]`. No image rebuild is required for MCP API or client changes.
 
+---
+
+## 19. Dynamic execution (no hardcoding)
+
+Agent (Opencode) must **dynamically figure out what work to do** for each user request. See `agent-dynamic-execution.md`.
+
+- The `noReply` context tells the model it is inside `ai-notes-xyz-agent-workspace` with full `bash` access and may `write` Node.js/Python scripts, `npm/pip install` any library, and run any shell command (`convert`, `ffmpeg`, `soffice`, `pip`, `npm`, `node`, `python3`, etc.).
+- For any request (image rotate, Excel with 100 passwords, PDF, etc.) the agent must decide which libraries/scripts/commands are needed and execute them. No `if prompt.contains("rotate")` or `if prompt.contains("excel")` branches exist in the API.
+- If a required library is missing, the agent must install it dynamically (e.g., `pip install -q pandas openpyxl` for `.xlsx`) and then generate the correct output. It must **not** fallback to a wrong format (e.g., CSV when Excel was requested).
+- If after attempting it still cannot solve, it must **clearly reject** the request with an explanation. The API does not perform hardcoded fallback generation — it only returns the agent's `text` parts or `Agent (Opencode) failed.` on `isUsableAnswer` failure.
+

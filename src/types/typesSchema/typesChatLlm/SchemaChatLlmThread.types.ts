@@ -67,6 +67,9 @@ export interface IChatLlmThread extends Document {
     /** When true, allow omniparser-v2 via Replicate (requires Replicate key) */
     useOmniparser?: boolean;
 
+    /** When false, MCP tools are not registered for Agent (Opencode). */
+    opencodeMcpEnabled?: boolean;
+
     /** OpenCode session id for Agent (Opencode). Older documents may omit this. */
     opencodeSessionId?: string;
 

@@ -94,26 +94,40 @@ export const hasAgentOpencodeLlmProvider = (apiKeys: tsUserApiKey): boolean =>
     listConfiguredOpencodeLlmProviders(apiKeys).length > 0;
 
 export const pickAgentOpencodeModel = (
-    providers: AgentOpencodeProviderRuntime[]
+    providers: AgentOpencodeProviderRuntime[],
+    threadProviderId?: string,
+    threadModelName?: string
 ): { providerID: string; modelID: string; cliModel: string } => {
-    const preferred =
-        providers.find((p) => p.id === 'openrouter') ||
-        providers.find((p) => p.id === 'groq') ||
-        providers.find((p) => p.id === 'openai') ||
-        providers[0];
+    const prefId = (threadProviderId || '').trim().toLowerCase();
+    let preferred: AgentOpencodeProviderRuntime | undefined;
+    if (prefId) {
+        // try exact match for provider, also handle openai-compatible
+        const mapped = prefId === 'openai-compatible' ? 'openai' : prefId;
+        preferred = providers.find((p) => p.id === mapped);
+    }
+    if (!preferred) {
+        preferred =
+            providers.find((p) => p.id === 'openrouter') ||
+            providers.find((p) => p.id === 'groq') ||
+            providers.find((p) => p.id === 'openai') ||
+            providers[0];
+    }
     if (!preferred) {
         throw new Error(
             'No LLM API key is set. Add Groq, OpenRouter, OpenAI, Ollama, or LocalAI in Settings → API Keys.'
         );
     }
+    const customModel = (threadModelName || '').trim();
+    const modelId = customModel || preferred.defaultModel;
     return {
         providerID: preferred.id,
-        modelID: preferred.defaultModel,
-        cliModel: `${preferred.id}/${preferred.defaultModel.replace(new RegExp(`^${preferred.id}/`), '')}`,
+        modelID: modelId,
+        cliModel: `${preferred.id}/${modelId.replace(new RegExp(`^${preferred.id}/`), '')}`,
     };
 };
 
-const openaiCompatibleProvider = (p: AgentOpencodeProviderRuntime): Record<string, unknown> => {
+const openaiCompatibleProvider = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
+    const mid = (modelId || p.defaultModel).trim() || p.defaultModel;
     const options: Record<string, unknown> = {
         baseURL: p.endpoint,
     };
@@ -123,18 +137,21 @@ const openaiCompatibleProvider = (p: AgentOpencodeProviderRuntime): Record<strin
     if (p.extraHeaders) {
         options.headers = p.extraHeaders;
     }
+    const models: Record<string, unknown> = {
+        [p.defaultModel]: { name: p.defaultModel },
+    };
+    if (mid !== p.defaultModel) models[mid] = { name: mid };
     return {
         npm: '@ai-sdk/openai-compatible',
         name: p.label,
         options,
-        models: {
-            [p.defaultModel]: { name: p.defaultModel },
-        },
+        models,
     };
 };
 
 /** Groq / OpenRouter / OpenAI are built into OpenCode; skip the npm plugin so `opencode run --pure` works. */
-const builtinProvider = (p: AgentOpencodeProviderRuntime): Record<string, unknown> => {
+const builtinProvider = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
+    const mid = (modelId || p.defaultModel).trim() || p.defaultModel;
     const options: Record<string, unknown> = {};
     if (p.apiKey) {
         options.apiKey = p.apiKey;
@@ -142,34 +159,37 @@ const builtinProvider = (p: AgentOpencodeProviderRuntime): Record<string, unknow
     if (p.extraHeaders) {
         options.headers = p.extraHeaders;
     }
+    const models: Record<string, unknown> = {
+        [p.defaultModel]: {},
+    };
+    if (mid !== p.defaultModel) models[mid] = {};
     return {
         name: p.label,
         options,
-        models: {
-            [p.defaultModel]: {},
-        },
+        models,
     };
 };
 
-const providerConfig = (p: AgentOpencodeProviderRuntime): Record<string, unknown> => {
+const providerConfig = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
     if (p.id === 'ollama' || p.id === 'localai') {
-        return openaiCompatibleProvider(p);
+        return openaiCompatibleProvider(p, modelId);
     }
-    return builtinProvider(p);
+    return builtinProvider(p, modelId);
 };
 
 export const buildAgentOpencodeConfig = (
     apiKeys: tsUserApiKey,
-    options?: { chatMessageId?: string }
+    options?: { chatMessageId?: string; mcpEnabled?: boolean; threadProviderId?: string; threadModelName?: string }
 ): Record<string, unknown> => {
     const providers = listConfiguredOpencodeLlmProviders(apiKeys);
-    const model = pickAgentOpencodeModel(providers);
+    const model = pickAgentOpencodeModel(providers, options?.threadProviderId, options?.threadModelName);
     const selected = providers.find((p) => p.id === model.providerID);
     const provider: Record<string, unknown> = {};
     // Only the chosen provider — extra endpoints (Ollama/LocalAI) can hang OpenCode startup.
     if (selected) {
-        provider[selected.id] = providerConfig(selected);
+        provider[selected.id] = providerConfig(selected, model.modelID);
     }
+    const mcpEnabled = options?.mcpEnabled !== undefined ? Boolean(options.mcpEnabled) : true;
     const mcpToken = (apiKeys.mcpBearerToken || '').trim();
     const chatMessageId = (options?.chatMessageId || '').trim();
     const mcpHeaders: Record<string, string> = {
@@ -191,9 +211,11 @@ export const buildAgentOpencodeConfig = (
             grep: 'allow',
             webfetch: 'allow',
             question: 'deny',
+            external_directory: 'allow',
+            doom_loop: 'allow',
         },
         provider,
-        ...(mcpToken
+        ...(mcpEnabled && mcpToken
             ? {
                   mcp: {
                       'ai-notes-xyz': {
@@ -255,13 +277,19 @@ export const writeAgentOpencodeSettingsFiles = async ({
     apiKeys,
     userId,
     chatMessageId,
+    mcpEnabled,
+    threadProviderId,
+    threadModelName,
 }: {
     shell: AgentOpencodeShellConfig;
     paths: AgentOpencodePipelinePaths;
     apiKeys: tsUserApiKey;
     userId?: string;
     chatMessageId?: string;
-}): Promise<{ cliModel: string; providerNames: string[] }> => {
+    mcpEnabled?: boolean;
+    threadProviderId?: string;
+    threadModelName?: string;
+}): Promise<{ cliModel: string; providerNames: string[]; model: { providerID: string; modelID: string; cliModel: string } }> => {
     const providers = listConfiguredOpencodeLlmProviders(apiKeys);
     if (providers.length < 1) {
         throw new Error(
@@ -274,13 +302,13 @@ export const writeAgentOpencodeSettingsFiles = async ({
         keys = { ...apiKeys, mcpBearerToken: token, mcpBearerTokenValid: true };
     }
     const messageId = (chatMessageId || '').trim();
-    const config = buildAgentOpencodeConfig(keys, { chatMessageId: messageId });
+    const config = buildAgentOpencodeConfig(keys, { chatMessageId: messageId, mcpEnabled, threadProviderId, threadModelName });
     const configJson = `${JSON.stringify(config, null, 2)}\n`;
     let envBody = buildAgentOpencodeEnvFile(keys);
     if (messageId) {
         envBody = `${envBody}${envBody && !envBody.endsWith('\n') ? '\n' : ''}CHAT_MESSAGE_ID=${envQuote(messageId)}\n`;
     }
-    const model = pickAgentOpencodeModel(providers);
+    const model = pickAgentOpencodeModel(providers, threadProviderId, threadModelName);
 
     await agentOpencodeWriteFile({
         shell,
@@ -300,5 +328,6 @@ export const writeAgentOpencodeSettingsFiles = async ({
     return {
         cliModel: model.cliModel,
         providerNames: providers.map((p) => p.label),
+        model,
     };
 };

@@ -142,6 +142,12 @@ const chatLlmThreadSchema = new Schema<IChatLlmThread>({
         default: false,
     },
 
+    /** When false, MCP tools are not registered for Agent (Opencode) opencode.json. */
+    opencodeMcpEnabled: {
+        type: Boolean,
+        default: true,
+    },
+
     /** OpenCode session id for Agent (Opencode) threads (ses_…). */
     opencodeSessionId: {
         type: String,

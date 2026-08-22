@@ -288,6 +288,16 @@ router.post(
                   })
                 : '';
 
+            // Build Opencode web URL for browser: http://localhost:4096/server/<base64>/session/<id>
+            // aHR0cDovL2xvY2FsaG9zdDo0MDk2 is base64 of http://localhost:4096 (no padding)
+            const opencodeHost = process.env.OPENCODE_PORT ? `http://localhost:${process.env.OPENCODE_PORT}` : 'http://localhost:4096';
+            const base64Server = Buffer.from(opencodeHost).toString('base64').replace(/=+$/, '');
+            const opencodeWebUrl =
+                (opened as any).webUrl ||
+                (sessionId
+                    ? `${opencodeHost}/server/${base64Server}/session/${sessionId}`
+                    : `${opencodeHost}/`);
+
             return res.status(200).json({
                 success: true,
                 message: sessionId
@@ -297,6 +307,8 @@ router.post(
                 relativeDir,
                 desktopUrl,
                 desktopAuthUrl,
+                opencodeWebUrl,
+                webUrl: (opened as any).webUrl || opencodeWebUrl,
             });
         } catch (error) {
             console.error(error);

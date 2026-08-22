@@ -478,7 +478,7 @@ export const agentOpencodeOpenSessionOnDesktop = async (params: {
     relativeDir: string;
     sessionId?: string;
     timeoutMs?: number;
-}): Promise<{ ok: boolean; error?: string; sessionId: string; relativeDir: string }> => {
+}): Promise<{ ok: boolean; error?: string; sessionId: string; relativeDir: string; webUrl?: string }> => {
     const relativeDir = assertAgentOpencodeRelativePath(params.relativeDir);
     const sessionId = isOpencodeSessionId(params.sessionId || '') ? String(params.sessionId).trim() : '';
     const timeoutMs = Math.min(Math.max(params.timeoutMs ?? 20_000, 1), 60_000);
@@ -493,13 +493,14 @@ export const agentOpencodeOpenSessionOnDesktop = async (params: {
                 validateStatus: () => true,
             }
         );
-        if (openRes.status === 200) {
-            return { ok: true, sessionId, relativeDir };
-        }
         const body =
             openRes.data && typeof openRes.data === 'object'
                 ? (openRes.data as Record<string, unknown>)
                 : {};
+        if (openRes.status === 200) {
+            const webUrl = typeof body.webUrl === 'string' ? body.webUrl : undefined;
+            return { ok: true, sessionId, relativeDir, webUrl };
+        }
         const error =
             typeof body.message === 'string'
                 ? body.message

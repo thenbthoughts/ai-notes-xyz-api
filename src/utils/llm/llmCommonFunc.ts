@@ -44,6 +44,14 @@ export interface tsUserApiKey {
     apiKeyLocalaiEndpoint: string;
     apiKeyLocalai: string;
 
+    // opencode server (port 4096, Basic auth)
+    opencodeUsername: string;
+    opencodePassword: string;
+    opencodeUrl: string;
+    apiKeyOpencodeWithShellValid: boolean;
+    opencodeWithCustomShellUrl: string;
+    opencodeWithCustomShellToken: string;
+
     // ai-notes-xyz-agent-workspace
     agentWorkspaceValid: boolean;
     agentWorkspaceDesktopUrl: string;
@@ -112,6 +120,14 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         agentWorkspaceDesktopPassword: '',
         agentWorkspaceApiUrl: '',
         agentWorkspaceApiToken: '',
+
+        // opencode server
+        opencodeUsername: '',
+        opencodePassword: '',
+        opencodeUrl: '',
+        apiKeyOpencodeWithShellValid: false,
+        opencodeWithCustomShellUrl: '',
+        opencodeWithCustomShellToken: '',
 
         clientFrontendUrl: '',
         mcpBearerTokenValid: false,
@@ -257,6 +273,25 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.agentWorkspaceApiToken === 'string') {
                 apiKey.agentWorkspaceApiToken = apiKeyObject.agentWorkspaceApiToken;
+            }
+            if (typeof apiKeyObject.opencodeUsername === 'string') {
+                apiKey.opencodeUsername = apiKeyObject.opencodeUsername;
+            }
+            if (typeof apiKeyObject.opencodePassword === 'string') {
+                apiKey.opencodePassword = apiKeyObject.opencodePassword;
+            }
+            if (typeof apiKeyObject.opencodeUrl === 'string') {
+                let u = apiKeyObject.opencodeUrl.trim().replace(/\/+$/, '');
+                apiKey.opencodeUrl = u;
+            }
+            if (typeof apiKeyObject.apiKeyOpencodeWithShellValid === 'boolean' && apiKeyObject.apiKeyOpencodeWithShellValid) {
+                apiKey.apiKeyOpencodeWithShellValid = true;
+            }
+            if (typeof apiKeyObject.opencodeWithCustomShellUrl === 'string') {
+                apiKey.opencodeWithCustomShellUrl = apiKeyObject.opencodeWithCustomShellUrl.trim();
+            }
+            if (typeof apiKeyObject.opencodeWithCustomShellToken === 'string') {
+                apiKey.opencodeWithCustomShellToken = apiKeyObject.opencodeWithCustomShellToken;
             }
             if (typeof apiKeyObject.clientFrontendUrl === 'string') {
                 apiKey.clientFrontendUrl = apiKeyObject.clientFrontendUrl.trim();

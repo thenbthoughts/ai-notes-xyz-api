@@ -9,12 +9,18 @@ export const agentOpencodeStepSettings = async ({
     apiKeys,
     userId,
     chatMessageId,
+    mcpEnabled,
+    threadProviderId,
+    threadModelName,
 }: {
     shell: AgentOpencodeShellConfig;
     paths: AgentOpencodePipelinePaths;
     apiKeys: tsUserApiKey;
     userId?: string;
     chatMessageId?: string;
-}): Promise<{ cliModel: string; providerNames: string[] }> => {
-    return writeAgentOpencodeSettingsFiles({ shell, paths, apiKeys, userId, chatMessageId });
+    mcpEnabled?: boolean;
+    threadProviderId?: string;
+    threadModelName?: string;
+}): Promise<{ cliModel: string; providerNames: string[]; model: { providerID: string; modelID: string; cliModel: string } }> => {
+    return writeAgentOpencodeSettingsFiles({ shell, paths, apiKeys, userId, chatMessageId, mcpEnabled, threadProviderId, threadModelName });
 };

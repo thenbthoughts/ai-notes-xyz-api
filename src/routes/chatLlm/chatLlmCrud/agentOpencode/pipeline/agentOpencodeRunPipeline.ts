@@ -39,12 +39,18 @@ const setPipelineStep = async (
 
 const loadThreadSessionId = async (
     threadId: IAgentOpencodeInstance['threadId']
-): Promise<{ sessionId: string; sessionTitle: string }> => {
+): Promise<{
+    sessionId: string;
+    sessionTitle: string;
+    aiModelProvider: string;
+    aiModelName: string;
+    opencodeMcpEnabled: boolean;
+}> => {
     const thread = await ModelChatLlmThread.findById(threadId)
-        .select('opencodeSessionId threadTitle')
-        .lean();
+        .select('opencodeSessionId threadTitle aiModelProvider aiModelName opencodeMcpEnabled')
+        .lean() as Record<string, unknown> | null;
     const fromThread =
-        thread && typeof thread.opencodeSessionId === 'string' ? thread.opencodeSessionId.trim() : '';
+        thread && typeof thread.opencodeSessionId === 'string' ? (thread.opencodeSessionId as string).trim() : '';
     let sessionId = isOpencodeSessionId(fromThread) ? fromThread : '';
     if (!sessionId) {
         const prev = await ModelAgentOpencodeInstance.findOne({
@@ -59,11 +65,14 @@ const loadThreadSessionId = async (
         sessionId = isOpencodeSessionId(fromInstance) ? fromInstance : '';
     }
     const titleRaw =
-        thread && typeof thread.threadTitle === 'string' && thread.threadTitle.trim()
-            ? thread.threadTitle.trim()
+        thread && typeof thread.threadTitle === 'string' && (thread.threadTitle as string).trim()
+            ? (thread.threadTitle as string).trim()
             : String(threadId);
     const sessionTitle = `AI Notes ${titleRaw}`.slice(0, 80);
-    return { sessionId, sessionTitle };
+    const aiModelProvider = thread && typeof thread.aiModelProvider === 'string' ? (thread.aiModelProvider as string).trim() : '';
+    const aiModelName = thread && typeof thread.aiModelName === 'string' ? (thread.aiModelName as string).trim() : '';
+    const opencodeMcpEnabled = thread && typeof thread.opencodeMcpEnabled === 'boolean' ? (thread.opencodeMcpEnabled as boolean) : true;
+    return { sessionId, sessionTitle, aiModelProvider, aiModelName, opencodeMcpEnabled };
 };
 
 const persistSessionId = async ({
@@ -114,7 +123,8 @@ export const agentOpencodeRunPipeline = async (
             threadId: String(instance.threadId),
             instanceId: String(instance._id),
         });
-        const { sessionId: existingSessionId, sessionTitle } = await loadThreadSessionId(instance.threadId);
+        const { sessionId: existingSessionId, sessionTitle, aiModelProvider, aiModelName, opencodeMcpEnabled } =
+            await loadThreadSessionId(instance.threadId);
 
         await setPipelineStep(instance._id, 'input', {
             workspaceRootRelativePath: paths.root,
@@ -141,6 +151,9 @@ export const agentOpencodeRunPipeline = async (
             apiKeys,
             userId: String(instance.userId),
             chatMessageId: instance.chatMessageId ? String(instance.chatMessageId) : '',
+            mcpEnabled: opencodeMcpEnabled,
+            threadProviderId: aiModelProvider,
+            threadModelName: aiModelName,
         });
 
         await setPipelineStep(instance._id, 'opencode');
@@ -169,7 +182,8 @@ export const agentOpencodeRunPipeline = async (
             uploadedFiles,
             shell,
             paths,
-            cliModel: settings.cliModel,
+            apiKeys,
+            model: settings.model,
             sessionId: existingSessionId,
             sessionTitle,
             libraryCounts,

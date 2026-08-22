@@ -9,6 +9,8 @@ import { ModelUserTelegramConversationCache } from '../../schema/schemaUser/Sche
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
 import { validateAgentWorkspaceEndpoints } from '../../utils/agentWorkspace/validateAgentWorkspace';
+import { validateOpencodeHealth } from '../../utils/opencode/validateOpencodeHealth';
+import { parseOpenCodeServiceOrigin } from '../../utils/shell/validateShellEngine';
 import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
@@ -477,6 +479,60 @@ router.post(
                 success: 'Updated',
                 error: '',
             });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User Opencode (server URL + Basic auth) - used by Agent (Opencode) session API
+router.post(
+    '/updateUserApiOpencode',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const {
+                opencodeUrl,
+                opencodeUsername,
+                opencodePassword,
+            } = req.body as {
+                opencodeUrl?: string;
+                opencodeUsername?: string;
+                opencodePassword?: string;
+            };
+
+            const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl.trim() : '';
+            const usernameRaw = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : 'opencode';
+            const passwordRaw = typeof opencodePassword === 'string' ? opencodePassword.trim() : '';
+
+            // Allow empty URL to mean "derive from Agent Workspace host:4096"
+            let normalizedUrl = '';
+            if (urlRaw) {
+                const parsed = parseOpenCodeServiceOrigin(urlRaw);
+                if ('error' in parsed) {
+                    return res.status(400).json({ success: '', error: parsed.error });
+                }
+                normalizedUrl = parsed.origin;
+
+                // Validate health via SDK (HTTP Basic)
+                const health = await validateOpencodeHealth(normalizedUrl, usernameRaw || 'opencode', passwordRaw);
+                if (!health.ok) {
+                    return res.status(400).json({ success: '', error: health.error });
+                }
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { userId: res.locals.auth_userId },
+                {
+                    opencodeUrl: normalizedUrl,
+                    opencodeUsername: usernameRaw || 'opencode',
+                    opencodePassword: passwordRaw,
+                },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            return res.json({ success: 'Updated', error: '' });
         } catch (error) {
             console.error(error);
             return res.status(500).json({ message: 'Server error' });
@@ -1653,7 +1709,7 @@ router.post(
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
-                'agentWorkspace', 'mcp',
+                'agentWorkspace', 'mcp', 'opencode',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1732,6 +1788,11 @@ router.post(
                 mcp: {
                     mcpBearerTokenValid: false,
                     mcpBearerToken: '',
+                },
+                opencode: {
+                    opencodeUrl: '',
+                    opencodeUsername: 'opencode',
+                    opencodePassword: '',
                 },
             };
 

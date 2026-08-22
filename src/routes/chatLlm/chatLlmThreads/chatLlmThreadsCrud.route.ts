@@ -280,6 +280,8 @@ router.post(
                 shellExecuteMaxAttempts,
 
                 useOmniparser,
+
+                opencodeMcpEnabled,
             } = req.body;
 
             const addData = {
@@ -318,6 +320,8 @@ router.post(
                 shellExecuteMaxAttempts: 1,
 
                 useOmniparser: false,
+
+                opencodeMcpEnabled: true,
             };
 
             if (typeof isAutoAiContextSelectEnabled === 'boolean') {
@@ -378,6 +382,10 @@ router.post(
             if (typeof useOmniparser === 'boolean') {
                 addData.useOmniparser = useOmniparser;
             };
+
+            if (typeof opencodeMcpEnabled === 'boolean') {
+                addData.opencodeMcpEnabled = opencodeMcpEnabled;
+            }
             
             // Agent budgets: tokens (1–1M) and iterations (1–100), min <= max
             let minBudgetTokens: number | undefined = undefined;
@@ -608,6 +616,8 @@ router.post(
                 shellExecuteMaxAttempts,
 
                 useOmniparser,
+
+                opencodeMcpEnabled,
             } = req.body;
 
             // Build update object
@@ -696,6 +706,10 @@ router.post(
             if (typeof useOmniparser === 'boolean') {
                 updateData.useOmniparser = useOmniparser;
             };
+
+            if (typeof opencodeMcpEnabled === 'boolean') {
+                updateData.opencodeMcpEnabled = opencodeMcpEnabled;
+            }
             
             // Agent budgets: tokens (1–1M) and iterations (1–100)
             let minBudgetTokens: number | undefined = undefined;
