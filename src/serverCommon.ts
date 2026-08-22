@@ -45,7 +45,6 @@ app.use(cors({
         'Set-Cookie',
         'Authorization',
         'Range',
-        'X-Webhook-Token',
         'X-MCP-Bearer',
         'X-Chat-Message-Id',
         'Mcp-Session-Id',
@@ -87,7 +86,7 @@ app.use((req, res, next) => {
 
 // set Bearer token from cookie
 app.use((req: Request, res: Response, next) => {   
-    if (req.path.startsWith('/api/webhook') || req.path.startsWith('/api/mcp')) {
+    if (req.path.startsWith('/api/mcp')) {
         next();
         return;
     }

@@ -345,7 +345,7 @@ export const parseOpencodeRunText = (stdout: string): string => {
         }
     }
     if (texts.length > 0) {
-        return texts.join('');
+        return texts[texts.length - 1];
     }
     return raw;
 };

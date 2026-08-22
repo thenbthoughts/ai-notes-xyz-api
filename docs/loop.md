@@ -166,8 +166,8 @@ Only **that one** provider is written into `opencode.json`. Extra endpoints (for
 
 Into `agent-workspace/`:
 
-1. `opencode.json` — model, permissions (`allow` for files/shell), the chosen provider key, and the remote MCP server (`search` / `add_chat_file`; see section 19)
-2. `.env` — `OPENROUTER_API_KEY`, `GROQ_API_KEY`, and so on. No `WEBHOOK_TOKEN`. `CHAT_MESSAGE_ID` may be set; the MCP header is the source of truth for attach-file.
+1. `opencode.json` — model, permissions (`allow` for files/shell), the chosen provider key, and the remote MCP server (`search` / `add_chat_file`; see section 18)
+2. `.env` — `OPENROUTER_API_KEY`, `GROQ_API_KEY`, and so on. `CHAT_MESSAGE_ID` may be set; the MCP header is the source of truth for attach-file.
 
 Permissions include `bash`, `edit`, `write`, `read`. `question` is denied so OpenCode does not wait for a human prompt.
 
@@ -391,44 +391,16 @@ status = filesInitialized  (or failed)
 
 ---
 
-## 18. User webhooks (`/api/webhook/*`)
+## 18. MCP for OpenCode (`/api/mcp`)
 
-HTTP search and attach-file remain available for non-OpenCode callers. This does not use cookie or device login. There are no webhook routes to create or update notes or tasks. **Agent (Opencode) does not use these routes** — it calls MCP tools instead (section 19).
-
-### Token
-
-1. Each user has one alphanumeric token (48 characters) stored on `userApiKey.webhookToken`.
-2. Generate or rotate it in **Settings → API Keys → Webhooks**.
-3. Routes: `GET /api/user/api-keys/getWebhookToken` and `POST /api/user/api-keys/generateWebhookToken` in `userApiKey.route.ts`.
-4. Send header `X-Webhook-Token` (or `Authorization: Bearer …`).
-
-### Endpoints
-
-Mounted at `/api/webhook` (`webhook.route.ts`):
-
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| GET | `/about` | catalog |
-| POST | `/search` | notes, tasks, life events, memos, info vault |
-| POST | `/notes/search`, `/notes/get` | notes (read only) |
-| POST | `/tasks/search`, `/tasks/get` | tasks (read only) |
-| POST | `/life-events/search`, `/memo/search`, `/info-vault/search` | other domains |
-| POST | `/files/add`, `/files/list` | attach a file to a chat message (`messageId` required, JSON + base64, max 8MB) |
-
-On the host, the public URL is `http://localhost:3000/api/webhook/*`. Vite proxies `/api` to the API (port 2000).
-
----
-
-## 19. MCP for OpenCode (`/api/mcp`)
-
-OpenCode searches notes/tasks and attaches files through **MCP tools**, not `WEBHOOK.md` or webhook env vars.
+OpenCode searches notes/tasks and attaches files through **MCP tools**.
 
 ### Token
 
 1. Each user has one alphanumeric token (48 characters) stored on `userApiKey.mcpBearerToken`.
 2. Generate or rotate it in **Settings → API Keys → MCP**. Agent (Opencode) also creates one automatically when it writes `opencode.json`.
 3. Routes: `GET /api/user/api-keys/getMcpBearerToken` and `POST /api/user/api-keys/generateMcpBearerToken`. Refresh-token returns `mcpBearerTokenValid` only (never the secret).
-4. Auth header: `Authorization: Bearer <mcpBearerToken>` (or `X-MCP-Bearer`). Cookie/device auth is not used. Cookie middleware skips `/api/mcp` the same way it skips `/api/webhook`.
+4. Auth header: `Authorization: Bearer <mcpBearerToken>` (or `X-MCP-Bearer`). Cookie/device auth is not used. Cookie middleware skips `/api/mcp`.
 
 ### Server
 

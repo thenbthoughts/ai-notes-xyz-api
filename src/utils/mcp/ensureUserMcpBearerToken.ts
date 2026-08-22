@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
-import { generateWebhookToken, isWebhookTokenShape } from '../webhook/generateWebhookToken';
+import { generateAlphanumericToken, isAlphanumericTokenShape } from '../common/generateAlphanumericToken';
 
 export const ensureUserMcpBearerToken = async (
     userId: mongoose.Types.ObjectId | string
@@ -12,7 +12,7 @@ export const ensureUserMcpBearerToken = async (
         .lean();
     const current =
         existing && typeof existing.mcpBearerToken === 'string' ? existing.mcpBearerToken.trim() : '';
-    if (isWebhookTokenShape(current)) {
+    if (isAlphanumericTokenShape(current)) {
         if (!existing?.mcpBearerTokenValid) {
             await ModelUserApiKey.updateOne(
                 { userId: uid },
@@ -21,7 +21,7 @@ export const ensureUserMcpBearerToken = async (
         }
         return current;
     }
-    const token = generateWebhookToken(48);
+    const token = generateAlphanumericToken(48);
     await ModelUserApiKey.findOneAndUpdate(
         { userId: uid },
         {

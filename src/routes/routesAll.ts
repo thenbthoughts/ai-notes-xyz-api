@@ -97,7 +97,6 @@ import routesAiContextFaq from './aiContext/aiContextFaq';
 // timeline
 import routesTimeline from './timeline/timeline.route';
 import routesTimelineFiles from './timeline/timelineFiles.route';
-import routesWebhook from './webhook/webhook.route';
 import routesMcp from './mcp/mcp.route';
 
 const router = Router();
@@ -207,7 +206,6 @@ router.use('/ai-context/faq', routesAiContextFaq);
 router.use('/timeline/crud', routesTimeline);
 router.use('/timeline/files', routesTimelineFiles);
 
-router.use('/webhook', routesWebhook);
 router.use('/mcp', routesMcp);
 
 /*

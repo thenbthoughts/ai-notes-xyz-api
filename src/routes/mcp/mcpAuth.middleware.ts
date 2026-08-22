@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 import { ModelUserApiKey } from '../../schema/schemaUser/SchemaUserApiKey.schema';
 import { getApiKeyByObject } from '../../utils/llm/llmCommonFunc';
-import { isWebhookTokenShape } from '../../utils/webhook/generateWebhookToken';
+import { isAlphanumericTokenShape } from '../../utils/common/generateAlphanumericToken';
 
 const readToken = (req: Request): string => {
     const header = req.headers['x-mcp-bearer'];
@@ -21,7 +21,7 @@ const readToken = (req: Request): string => {
 const middlewareMcpAuth = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const token = readToken(req);
-        if (!isWebhookTokenShape(token)) {
+        if (!isAlphanumericTokenShape(token)) {
             return res.status(401).json({ message: 'MCP bearer token required (Authorization: Bearer)' });
         }
         const doc = await ModelUserApiKey.findOne({

@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import {
-    parseWebhookSearchSource,
-    webhookSearchAll,
-    webhookSearchSource,
-} from '../webhook/webhookSearch';
+    parseMcpSearchSource,
+    mcpSearchAll,
+    mcpSearchSource,
+} from '../../utils/mcp/mcpSearch';
 import { attachFileToChatMessage } from '../../utils/chat/attachFileToChatMessage';
 import { formatUserLibraryCountsLine, getUserLibraryCounts } from '../../utils/mcp/userLibraryCounts';
 import type { tsUserApiKey } from '../../utils/llm/llmCommonFunc';
@@ -41,11 +41,11 @@ export const createAiNotesMcpServer = async ({
             },
         },
         async ({ query, source }) => {
-            const parsed = parseWebhookSearchSource(source ?? 'all');
+            const parsed = parseMcpSearchSource(source ?? 'all');
             const items =
                 parsed === 'all'
-                    ? await webhookSearchAll({ userId, query: query || '' })
-                    : await webhookSearchSource({ userId, source: parsed, query: query || '' });
+                    ? await mcpSearchAll({ userId, query: query || '' })
+                    : await mcpSearchSource({ userId, source: parsed, query: query || '' });
             return {
                 content: [
                     {

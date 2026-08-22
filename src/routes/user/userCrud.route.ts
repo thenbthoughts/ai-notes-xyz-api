@@ -37,7 +37,6 @@ router.post(
                 smtpValid: false,
                 telegramValid: false,
                 agentWorkspaceValid: false,
-                webhookTokenValid: false,
                 mcpBearerTokenValid: false,
 
                 // timezone
@@ -74,7 +73,6 @@ router.post(
                             smtpValid: false,
                             telegramValid: false,
                             agentWorkspaceValid: false,
-                            webhookTokenValid: false,
                             mcpBearerTokenValid: false,
                         }
                     },
@@ -167,13 +165,6 @@ router.post(
                 if (typeof resultUserInfoApi?.agentWorkspaceValid === 'boolean') {
                     resultApiKey.agentWorkspaceValid = resultUserInfoApi.agentWorkspaceValid;
                 }
-            }
-
-            // per-user webhook token (do not return the secret)
-            if (resultUserInfoApi) {
-                resultApiKey.webhookTokenValid = Boolean(
-                    resultUserInfoApi.webhookTokenValid && resultUserInfoApi.webhookToken
-                );
             }
 
             // per-user MCP bearer token (do not return the secret)

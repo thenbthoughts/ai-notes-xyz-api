@@ -1,6 +1,7 @@
 import { ModelUserApiKey } from '../../../../../schema/schemaUser/SchemaUserApiKey.schema';
 import { ModelAgentOpencodeInstance } from '../../../../../schema/schemaChatLlm/SchemaAgentOpencode/SchemaAgentOpencodeInstance.schema';
 import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
+import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
 import { getApiKeyByObject } from '../../../../../utils/llm/llmCommonFunc';
 import {
     AGENT_OPENCODE_RUNNING_MESSAGE,
@@ -147,6 +148,20 @@ export const agentOpencodeRunPipeline = async (
             instance,
             content: AGENT_OPENCODE_RUNNING_MESSAGE,
         });
+        const priorAi = await ModelChatLlm.find({
+            threadId: instance.threadId,
+            userId: instance.userId,
+            isAi: true,
+            ...(instance.chatMessageId ? { _id: { $ne: instance.chatMessageId } } : {}),
+        })
+            .sort({ createdAtUtc: -1 })
+            .limit(8)
+            .select('content')
+            .lean();
+        const previousAnswerText =
+            priorAi
+                .map((row) => (typeof row.content === 'string' ? row.content.trim() : ''))
+                .find((content) => content && !content.startsWith('Agent (Opencode)')) || '';
         const libraryCounts = await getUserLibraryCounts(instance.userId);
         const called = await agentOpencodeStepCall({
             promptText,
@@ -158,6 +173,7 @@ export const agentOpencodeRunPipeline = async (
             sessionId: existingSessionId,
             sessionTitle,
             libraryCounts,
+            previousAnswerText,
         });
         await persistSessionId({ instance, sessionId: called.sessionId });
 

@@ -6,10 +6,10 @@ import { ModelLifeEvents } from '../../schema/schemaLifeEvents/SchemaLifeEvents.
 import { ModelInfoVault } from '../../schema/schemaInfoVault/SchemaInfoVault.schema';
 import { ModelMemoNote } from '../../schema/schemaMemo/SchemaMemoNote.schema';
 
-export type WebhookSearchSource = 'notes' | 'tasks' | 'lifeEvents' | 'infoVault' | 'memo';
+export type McpSearchSource = 'notes' | 'tasks' | 'lifeEvents' | 'infoVault' | 'memo';
 
-export type WebhookSearchHit = {
-    source: WebhookSearchSource;
+export type McpSearchHit = {
+    source: McpSearchSource;
     id: string;
     title: string;
     summary: string;
@@ -52,9 +52,9 @@ const orFilters = (fields: string[], query: string): Record<string, unknown>[] =
     return filters;
 };
 
-const ALL_SOURCES: WebhookSearchSource[] = ['notes', 'tasks', 'lifeEvents', 'infoVault', 'memo'];
+const ALL_SOURCES: McpSearchSource[] = ['notes', 'tasks', 'lifeEvents', 'infoVault', 'memo'];
 
-export const parseWebhookSearchSource = (raw: unknown): WebhookSearchSource | 'all' => {
+export const parseMcpSearchSource = (raw: unknown): McpSearchSource | 'all' => {
     const value = typeof raw === 'string' ? raw.trim() : 'all';
     if (value === 'notes' || value === 'tasks' || value === 'lifeEvents' || value === 'infoVault' || value === 'memo') {
         return value;
@@ -62,17 +62,17 @@ export const parseWebhookSearchSource = (raw: unknown): WebhookSearchSource | 'a
     return 'all';
 };
 
-export const webhookSearchSource = async ({
+export const mcpSearchSource = async ({
     userId,
     source,
     query,
     limit = 8,
 }: {
     userId: mongoose.Types.ObjectId | string;
-    source: WebhookSearchSource;
+    source: McpSearchSource;
     query: string;
     limit?: number;
-}): Promise<WebhookSearchHit[]> => {
+}): Promise<McpSearchHit[]> => {
     const uid = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
     const q = (query || '').trim();
     const fetchLimit = Math.min(Math.max(limit, 1), 40);
@@ -160,7 +160,7 @@ export const webhookSearchSource = async ({
     }));
 };
 
-export const webhookSearchAll = async ({
+export const mcpSearchAll = async ({
     userId,
     query,
     limitPerSource = 6,
@@ -168,10 +168,10 @@ export const webhookSearchAll = async ({
     userId: mongoose.Types.ObjectId | string;
     query: string;
     limitPerSource?: number;
-}): Promise<WebhookSearchHit[]> => {
+}): Promise<McpSearchHit[]> => {
     const results = await Promise.all(
         ALL_SOURCES.map((source) =>
-            webhookSearchSource({
+            mcpSearchSource({
                 userId,
                 source,
                 query,
@@ -180,7 +180,7 @@ export const webhookSearchAll = async ({
         )
     );
     const seen = new Set<string>();
-    const hits: WebhookSearchHit[] = [];
+    const hits: McpSearchHit[] = [];
     for (const hit of results.flat()) {
         const key = `${hit.source}:${hit.id}`;
         if (seen.has(key)) continue;

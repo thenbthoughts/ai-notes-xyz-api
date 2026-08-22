@@ -53,8 +53,6 @@ export interface tsUserApiKey {
     agentWorkspaceApiToken: string;
 
     clientFrontendUrl: string;
-    webhookTokenValid: boolean;
-    webhookToken: string;
     mcpBearerTokenValid: boolean;
     mcpBearerToken: string;
     mcpBaseUrl: string;
@@ -116,8 +114,6 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         agentWorkspaceApiToken: '',
 
         clientFrontendUrl: '',
-        webhookTokenValid: false,
-        webhookToken: '',
         mcpBearerTokenValid: false,
         mcpBearerToken: '',
         mcpBaseUrl: '',
@@ -264,12 +260,6 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.clientFrontendUrl === 'string') {
                 apiKey.clientFrontendUrl = apiKeyObject.clientFrontendUrl.trim();
-            }
-            if (typeof apiKeyObject.webhookTokenValid === 'boolean' && apiKeyObject.webhookTokenValid) {
-                apiKey.webhookTokenValid = true;
-            }
-            if (typeof apiKeyObject.webhookToken === 'string') {
-                apiKey.webhookToken = apiKeyObject.webhookToken;
             }
             if (typeof apiKeyObject.mcpBearerTokenValid === 'boolean' && apiKeyObject.mcpBearerTokenValid) {
                 apiKey.mcpBearerTokenValid = true;

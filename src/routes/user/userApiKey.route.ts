@@ -13,8 +13,7 @@ import { putFile, getFile, S3Config } from '../../utils/upload/uploadFunc';
 import openrouterMarketing from '../../config/openrouterMarketing';
 import { ModelUser } from '../../schema/schemaUser/SchemaUser.schema';
 import { funcSendMail } from '../../utils/files/funcSendMail';
-import { generateWebhookToken, isWebhookTokenShape } from '../../utils/webhook/generateWebhookToken';
-import { webhookPublicBaseUrl } from '../../utils/webhook/webhookBaseUrl';
+import { generateAlphanumericToken, isAlphanumericTokenShape } from '../../utils/common/generateAlphanumericToken';
 import { mcpPublicBaseUrl, mcpPublicBaseUrlAuto, normalizeMcpUrl } from '../../utils/mcp/mcpBaseUrl';
 
 // Router
@@ -1654,7 +1653,7 @@ router.post(
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
-                'agentWorkspace', 'webhook', 'mcp',
+                'agentWorkspace', 'mcp',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1730,10 +1729,6 @@ router.post(
                     agentWorkspaceApiUrl: '',
                     agentWorkspaceApiToken: '',
                 },
-                webhook: {
-                    webhookTokenValid: false,
-                    webhookToken: '',
-                },
                 mcp: {
                     mcpBearerTokenValid: false,
                     mcpBearerToken: '',
@@ -1780,71 +1775,6 @@ router.post(
     }
 );
 
-// Get per-user webhook token for `/api/webhook/*`
-router.get(
-    '/getWebhookToken',
-    middlewareUserAuth,
-    async (req: Request, res: Response) => {
-        try {
-            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
-                .select('clientFrontendUrl webhookToken webhookTokenValid')
-                .lean();
-            const token =
-                doc && typeof doc.webhookToken === 'string' ? doc.webhookToken.trim() : '';
-            const valid = Boolean(doc?.webhookTokenValid && isWebhookTokenShape(token));
-            const clientFrontendUrl =
-                doc && typeof doc.clientFrontendUrl === 'string' ? doc.clientFrontendUrl : '';
-            return res.json({
-                success: true,
-                webhookTokenValid: valid,
-                webhookToken: valid ? token : '',
-                clientFrontendUrl,
-                webhookBaseUrl: webhookPublicBaseUrl(clientFrontendUrl),
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
-// Generate a new per-user webhook token (replaces the previous one)
-router.post(
-    '/generateWebhookToken',
-    middlewareUserAuth,
-    async (req: Request, res: Response) => {
-        try {
-            const token = generateWebhookToken(48);
-            await ModelUserApiKey.findOneAndUpdate(
-                { userId: res.locals.auth_userId },
-                {
-                    $set: {
-                        webhookToken: token,
-                        webhookTokenValid: true,
-                    },
-                },
-                { upsert: true, setDefaultsOnInsert: true }
-            );
-            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId })
-                .select('clientFrontendUrl')
-                .lean();
-            const clientFrontendUrl =
-                doc && typeof doc.clientFrontendUrl === 'string' ? doc.clientFrontendUrl : '';
-            return res.json({
-                success: 'Updated',
-                error: '',
-                webhookTokenValid: true,
-                webhookToken: token,
-                clientFrontendUrl,
-                webhookBaseUrl: webhookPublicBaseUrl(clientFrontendUrl),
-            });
-        } catch (error) {
-            console.error(error);
-            return res.status(500).json({ message: 'Server error' });
-        }
-    }
-);
-
 // Get per-user MCP bearer token for `/api/mcp`
 router.get(
     '/getMcpBearerToken',
@@ -1856,7 +1786,7 @@ router.get(
                 .lean();
             const token =
                 doc && typeof doc.mcpBearerToken === 'string' ? doc.mcpBearerToken.trim() : '';
-            const valid = Boolean(doc?.mcpBearerTokenValid && isWebhookTokenShape(token));
+            const valid = Boolean(doc?.mcpBearerTokenValid && isAlphanumericTokenShape(token));
             const stored = doc && typeof doc.mcpBaseUrl === 'string' ? doc.mcpBaseUrl : '';
             return res.json({
                 success: true,
@@ -1878,7 +1808,7 @@ router.post(
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
-            const token = generateWebhookToken(48);
+            const token = generateAlphanumericToken(48);
             await ModelUserApiKey.findOneAndUpdate(
                 { userId: res.locals.auth_userId },
                 {
