@@ -199,6 +199,7 @@ export const agentOpencodeListDir = async (params: {
 const SKIP_UPLOAD_DIR_NAMES = new Set(['node_modules', '.git', '.xdg-config', '.xdg-data']);
 const SKIP_UPLOAD_FILE_NAMES = new Set(['.env', '.opencode-open-session.sh']);
 const SKIP_UPLOAD_RELATIVE_FILES = new Set([
+    'WEBHOOK.md',
     'opencode.json',
     '.opencode/opencode.json',
     '.opencode-stdout.json',

@@ -7,10 +7,14 @@ export const agentOpencodeStepSettings = async ({
     shell,
     paths,
     apiKeys,
+    userId,
+    chatMessageId,
 }: {
     shell: AgentOpencodeShellConfig;
     paths: AgentOpencodePipelinePaths;
     apiKeys: tsUserApiKey;
+    userId?: string;
+    chatMessageId?: string;
 }): Promise<{ cliModel: string; providerNames: string[] }> => {
-    return writeAgentOpencodeSettingsFiles({ shell, paths, apiKeys });
+    return writeAgentOpencodeSettingsFiles({ shell, paths, apiKeys, userId, chatMessageId });
 };

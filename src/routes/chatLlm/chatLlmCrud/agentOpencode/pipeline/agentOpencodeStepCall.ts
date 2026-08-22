@@ -13,17 +13,20 @@ import {
     type AgentOpencodeShellConfig,
 } from '../agentOpencodeWorkspace';
 import type { AgentOpencodePipelinePaths } from './agentOpencodeStepInput';
+import { buildUserLibraryMcpContext, type UserLibraryCounts } from '../../../../../utils/mcp/userLibraryCounts';
 
 const buildInstruction = ({
     promptText,
     historyMarkdown,
     uploadedFiles,
     hasSession,
+    libraryContext,
 }: {
     promptText: string;
     historyMarkdown: string;
     uploadedFiles: string[];
     hasSession: boolean;
+    libraryContext: string;
 }): string => {
     const fileLines =
         uploadedFiles.length > 0
@@ -39,6 +42,7 @@ const buildInstruction = ({
             'Use relative paths only. Do not write to / or other absolute roots.',
             `When finished, write the complete final user-facing answer in Markdown to ${AGENT_OPENCODE_ANSWER_FILE} (overwrite if it exists).`,
             'Also print that same Markdown as your last message.',
+            libraryContext,
             '',
             '--- NEW USER MESSAGE ---',
             promptText,
@@ -52,9 +56,10 @@ const buildInstruction = ({
         `The same transcript is in ${AGENT_OPENCODE_CHAT_FILE}. Attached files:`,
         fileLines,
         'Complete the latest user message. Create or edit files in this directory if the task needs them.',
-        'Use relative paths only (example: hello.txt or ANSWER.md). Do not write to / or other absolute roots.',
-        `When finished, write the complete final user-facing answer in Markdown to ${AGENT_OPENCODE_ANSWER_FILE} in this directory (overwrite if it exists).`,
-        'Also print that same Markdown as your last message.',
+            'Use relative paths only (example: hello.txt or ANSWER.md). Do not write to / or other absolute roots.',
+            `When finished, write the complete final user-facing answer in Markdown to ${AGENT_OPENCODE_ANSWER_FILE} in this directory (overwrite if it exists).`,
+            'Also print that same Markdown as your last message.',
+            libraryContext,
         '',
         '--- CHAT HISTORY ---',
         historyMarkdown,
@@ -101,6 +106,7 @@ export const agentOpencodeStepCall = async ({
     cliModel,
     sessionId,
     sessionTitle,
+    libraryCounts,
 }: {
     promptText: string;
     historyMarkdown: string;
@@ -110,8 +116,10 @@ export const agentOpencodeStepCall = async ({
     cliModel: string;
     sessionId?: string;
     sessionTitle?: string;
+    libraryCounts: UserLibraryCounts;
 }): Promise<{ text: string; sessionId: string }> => {
     const existingSessionId = String(sessionId || '').trim();
+    const libraryContext = buildUserLibraryMcpContext(libraryCounts);
     const run = async (nextSessionId: string) => {
         const hasSession = Boolean(nextSessionId);
         const instruction = buildInstruction({
@@ -119,6 +127,7 @@ export const agentOpencodeStepCall = async ({
             historyMarkdown,
             uploadedFiles,
             hasSession,
+            libraryContext,
         });
         await agentOpencodeWriteFile({
             shell,

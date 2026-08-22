@@ -99,6 +99,16 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     agentWorkspaceApiUrl: { type: String, default: '' },
     agentWorkspaceApiToken: { type: String, default: '' },
 
+    /** Per-user token for `/api/webhook/*` (non-OpenCode callers). */
+    webhookTokenValid: { type: Boolean, default: false },
+    webhookToken: { type: String, default: '', index: true },
+
+    /** Per-user token for `/api/mcp` (OpenCode MCP tools). */
+    mcpBearerTokenValid: { type: Boolean, default: false },
+    mcpBearerToken: { type: String, default: '', index: true },
+    /** Public MCP URL the user saved (OpenCode rewrites localhost → host.docker.internal). */
+    mcpBaseUrl: { type: String, default: '' },
+
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },
     userEmailVerifyEmail: { type: String, default: '' },

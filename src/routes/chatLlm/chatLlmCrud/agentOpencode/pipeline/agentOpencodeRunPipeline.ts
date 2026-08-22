@@ -20,6 +20,7 @@ import { agentOpencodeStepInput } from './agentOpencodeStepInput';
 import { agentOpencodeStepSettings } from './agentOpencodeStepSettings';
 import { agentOpencodeStepCall } from './agentOpencodeStepCall';
 import { agentOpencodeStepOutput } from './agentOpencodeStepOutput';
+import { getUserLibraryCounts } from '../../../../../utils/mcp/userLibraryCounts';
 
 const setPipelineStep = async (
     instanceId: IAgentOpencodeInstance['_id'],
@@ -137,6 +138,8 @@ export const agentOpencodeRunPipeline = async (
             shell,
             paths,
             apiKeys,
+            userId: String(instance.userId),
+            chatMessageId: instance.chatMessageId ? String(instance.chatMessageId) : '',
         });
 
         await setPipelineStep(instance._id, 'opencode');
@@ -144,6 +147,7 @@ export const agentOpencodeRunPipeline = async (
             instance,
             content: AGENT_OPENCODE_RUNNING_MESSAGE,
         });
+        const libraryCounts = await getUserLibraryCounts(instance.userId);
         const called = await agentOpencodeStepCall({
             promptText,
             historyMarkdown,
@@ -153,6 +157,7 @@ export const agentOpencodeRunPipeline = async (
             cliModel: settings.cliModel,
             sessionId: existingSessionId,
             sessionTitle,
+            libraryCounts,
         });
         await persistSessionId({ instance, sessionId: called.sessionId });
 

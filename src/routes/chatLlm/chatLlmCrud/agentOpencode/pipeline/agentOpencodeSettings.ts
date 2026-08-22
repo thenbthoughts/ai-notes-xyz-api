@@ -1,4 +1,6 @@
 import openrouterMarketing from '../../../../../config/openrouterMarketing';
+import { ensureUserMcpBearerToken } from '../../../../../utils/mcp/ensureUserMcpBearerToken';
+import { mcpAgentBaseUrl } from '../../../../../utils/mcp/mcpBaseUrl';
 import type { tsUserApiKey } from '../../../../../utils/llm/llmCommonFunc';
 import {
     agentOpencodeWriteFile,
@@ -156,7 +158,10 @@ const providerConfig = (p: AgentOpencodeProviderRuntime): Record<string, unknown
     return builtinProvider(p);
 };
 
-export const buildAgentOpencodeConfig = (apiKeys: tsUserApiKey): Record<string, unknown> => {
+export const buildAgentOpencodeConfig = (
+    apiKeys: tsUserApiKey,
+    options?: { chatMessageId?: string }
+): Record<string, unknown> => {
     const providers = listConfiguredOpencodeLlmProviders(apiKeys);
     const model = pickAgentOpencodeModel(providers);
     const selected = providers.find((p) => p.id === model.providerID);
@@ -164,6 +169,14 @@ export const buildAgentOpencodeConfig = (apiKeys: tsUserApiKey): Record<string, 
     // Only the chosen provider — extra endpoints (Ollama/LocalAI) can hang OpenCode startup.
     if (selected) {
         provider[selected.id] = providerConfig(selected);
+    }
+    const mcpToken = (apiKeys.mcpBearerToken || '').trim();
+    const chatMessageId = (options?.chatMessageId || '').trim();
+    const mcpHeaders: Record<string, string> = {
+        Authorization: `Bearer ${mcpToken}`,
+    };
+    if (chatMessageId) {
+        mcpHeaders['X-Chat-Message-Id'] = chatMessageId;
     }
     return {
         $schema: 'https://opencode.ai/config.json',
@@ -180,6 +193,19 @@ export const buildAgentOpencodeConfig = (apiKeys: tsUserApiKey): Record<string, 
             question: 'deny',
         },
         provider,
+        ...(mcpToken
+            ? {
+                  mcp: {
+                      'ai-notes-xyz': {
+                          type: 'remote',
+                          url: mcpAgentBaseUrl(apiKeys.mcpBaseUrl),
+                          enabled: true,
+                          oauth: false,
+                          headers: mcpHeaders,
+                      },
+                  },
+              }
+            : {}),
     };
 };
 
@@ -227,10 +253,14 @@ export const writeAgentOpencodeSettingsFiles = async ({
     shell,
     paths,
     apiKeys,
+    userId,
+    chatMessageId,
 }: {
     shell: AgentOpencodeShellConfig;
     paths: AgentOpencodePipelinePaths;
     apiKeys: tsUserApiKey;
+    userId?: string;
+    chatMessageId?: string;
 }): Promise<{ cliModel: string; providerNames: string[] }> => {
     const providers = listConfiguredOpencodeLlmProviders(apiKeys);
     if (providers.length < 1) {
@@ -238,9 +268,18 @@ export const writeAgentOpencodeSettingsFiles = async ({
             'No LLM API key is set. Add Groq, OpenRouter, OpenAI, Ollama, or LocalAI in Settings → API Keys.'
         );
     }
-    const config = buildAgentOpencodeConfig(apiKeys);
+    let keys = apiKeys;
+    if (userId) {
+        const token = await ensureUserMcpBearerToken(userId);
+        keys = { ...apiKeys, mcpBearerToken: token, mcpBearerTokenValid: true };
+    }
+    const messageId = (chatMessageId || '').trim();
+    const config = buildAgentOpencodeConfig(keys, { chatMessageId: messageId });
     const configJson = `${JSON.stringify(config, null, 2)}\n`;
-    const envBody = buildAgentOpencodeEnvFile(apiKeys);
+    let envBody = buildAgentOpencodeEnvFile(keys);
+    if (messageId) {
+        envBody = `${envBody}${envBody && !envBody.endsWith('\n') ? '\n' : ''}CHAT_MESSAGE_ID=${envQuote(messageId)}\n`;
+    }
     const model = pickAgentOpencodeModel(providers);
 
     await agentOpencodeWriteFile({
