@@ -1,0 +1,72 @@
+import mongoose, { Schema } from 'mongoose';
+
+import { IAgentUpdate } from '../../../types/typesSchema/typesChatLlm/typesAgent/SchemaAgentUpdate.types';
+
+const agentUpdateSchema = new Schema<IAgentUpdate>({
+    agentInstanceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        ref: 'agentInstance',
+    },
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        required: true,
+        index: true,
+    },
+    threadId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        index: true,
+        ref: 'chatLlmThread',
+    },
+    updateType: {
+        type: String,
+        enum: [
+            'status',
+            'goal_started',
+            'goal_completed',
+            'goal_failed',
+            'memory_written',
+            'domain_search',
+            'message',
+            'error',
+            'tick',
+            'excel_created',
+            'script_executed',
+            'tool_result',
+            'plan',
+            'plan_probe',
+            'verify',
+            'synthesize',
+            'skills_loaded',
+            'workspace_list',
+            'image_to_text',
+            'omniparser_parse',
+        ],
+        default: 'status',
+        index: true,
+    },
+    message: { type: String, default: '' },
+    payload: { type: Schema.Types.Mixed, default: {} },
+    goalId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+        ref: 'agentGoal',
+    },
+    tickNumber: { type: Number, default: 0 },
+    past: { type: Boolean, default: false, index: true },
+    createdAtUtc: { type: Date, default: () => new Date(), index: true },
+});
+
+agentUpdateSchema.index({ agentInstanceId: 1, createdAtUtc: -1 });
+agentUpdateSchema.index({ threadId: 1, createdAtUtc: -1 });
+
+const ModelAgentUpdate = mongoose.model<IAgentUpdate>(
+    'agentUpdate',
+    agentUpdateSchema,
+    'agentUpdate'
+);
+
+export { ModelAgentUpdate };

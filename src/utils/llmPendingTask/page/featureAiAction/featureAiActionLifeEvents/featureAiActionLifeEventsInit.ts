@@ -1,0 +1,116 @@
+import generateFaqBySourceId from "../featureAiActionAll/faq/generateFaqBySourceId";
+import generateKeywordsBySourceId from "../featureAiActionAll/keyword/generateKeywordsBySourceId";
+import generateLifeEventAiSummaryById from "./generateLifeEventAiSummaryById";
+import generateLifeEventAiTagsById from "./generateLifeEventAiTagsById";
+import generateLifeEventAiCategoryById from "./generateLifeEventAiCategoryById";
+import generateEmbeddingByLifeEventsId from "./generateEmbeddingByLifeEventsId";
+import { ModelLifeEvents } from "../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
+import { reindexDocument } from "../../../../search/reindexGlobalSearch";
+
+const featureAiActionLifeEventsInit = async ({
+    targetRecordId,
+}: {
+    targetRecordId: string | null;
+}) => {
+    try {
+        if (!targetRecordId) {
+            return true;
+        }
+
+        console.log('targetRecordId', targetRecordId);
+
+        // Check if Life Events AI is enabled for this user
+        const lifeEventForUserCheck = await ModelLifeEvents.findById(targetRecordId).select('userId').lean();
+        if (!lifeEventForUserCheck) {
+            return true;
+        }
+
+        const user = await ModelUser.findOne({
+            _id: lifeEventForUserCheck.userId,
+            featureAiActionsEnabled: true,
+            featureAiActionsLifeEvents: true
+        });
+
+        if (!user) {
+            console.log('Life Events AI not enabled for user:', lifeEventForUserCheck.userId);
+            return true; // Skip AI processing if Life Events AI is not enabled
+        }
+
+        // 1. common - generate faq by source id
+        const resultFaq = await generateFaqBySourceId({
+            targetRecordId,
+            sourceType: 'lifeEvents',
+        });
+
+        // 2. lifeEvents - generate life events ai summary by id
+        const resultLifeEventsAiSummary = await generateLifeEventAiSummaryById({
+            targetRecordId,
+        });
+        console.log('resultLifeEventsAiSummary', resultLifeEventsAiSummary);
+
+        // 3. lifeEvents - generate life events ai tags by id
+        const resultLifeEventsAiTags = await generateLifeEventAiTagsById({
+            targetRecordId,
+        });
+        console.log('resultLifeEventsAiTags', resultLifeEventsAiTags);
+
+        // 4. lifeEvents - generate life events ai category by id
+        const resultLifeEventsAiCategory = await generateLifeEventAiCategoryById({
+            targetRecordId,
+        });
+        console.log('resultLifeEventsAiCategory', resultLifeEventsAiCategory);
+
+        // 5. lifeEvents - generate embedding by life events id
+        const resultEmbedding = await generateEmbeddingByLifeEventsId({
+            targetRecordId,
+        });
+        console.log('resultEmbedding', resultEmbedding);
+
+        // 6. common - generate keywords by source id
+        const resultKeywords = await generateKeywordsBySourceId({
+            targetRecordId,
+        });
+        console.log('resultKeywords', resultKeywords);
+
+        // reindex the document in global search after all AI actions are complete
+        const lifeEventRecord = await ModelLifeEvents.findById(targetRecordId).select('userId').lean();
+        if (lifeEventRecord) {
+            await reindexDocument({
+                reindexDocumentArr: [{
+                    collectionName: 'lifeEvents',
+                    documentId: targetRecordId,
+                }],
+            });
+        }
+
+        // return result of all feature ai actions
+        let finalReturn = true;
+        if (!resultFaq) {
+            finalReturn = false;
+        }
+        if (!resultLifeEventsAiSummary) {
+            finalReturn = false;
+        }
+        if (!resultLifeEventsAiTags) {
+            finalReturn = false;
+        }
+        if (!resultLifeEventsAiCategory) {
+            finalReturn = false;
+        }
+        if (!resultEmbedding) {
+            finalReturn = false;
+        }
+        if (!resultKeywords) {
+            finalReturn = false;
+        }
+
+        return finalReturn;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
+export default featureAiActionLifeEventsInit;
+

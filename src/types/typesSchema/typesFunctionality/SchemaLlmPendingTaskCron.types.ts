@@ -1,0 +1,31 @@
+import { Document, Types } from 'mongoose';
+
+// Chat Interface
+export interface ILlmPendingTaskCron extends Document {
+    // identification
+    userId: Types.ObjectId;
+
+    // task info
+    taskType: string;
+    aiModelName: string;
+    aiModelProvider: string;
+    targetRecordId: string | null;
+
+    // taskOutput
+    taskOutputStr: string;
+    taskOutputJson: object;
+
+    // task status
+    taskStatus: 'pending' | 'success' | 'failed';
+    taskRetryCount: number;
+    taskStatusSuccess: string;
+    taskStatusFailed: string;
+    taskTimeTakenInMills: number;
+
+    // tags
+    tags: string[];
+
+    // auto
+    createdAtUtc: Date | null;
+    updatedAtUtc: Date | null;
+};

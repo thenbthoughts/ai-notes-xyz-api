@@ -1,0 +1,50 @@
+import mongoose, { Document } from 'mongoose';
+
+import type { IShellRunArtifactV1 } from './SchemaShellRunArtifactV1.types';
+
+// Chat Interface
+export interface IChatLlm extends Document {
+    // identification
+    _id: mongoose.Types.ObjectId;
+    threadId: mongoose.Schema.Types.ObjectId | null;
+
+    // ai
+    type: string,
+    content: string;
+    reasoningContent: string;
+    userId: mongoose.Types.ObjectId;
+    tags: string[];
+    visibility: string;
+    fileUrlArr: string[];
+
+    // model info
+    isAi: boolean;
+    aiModelName: string;
+    aiModelProvider: string;
+
+    // file
+    fileUrl: string;
+    fileContentText: string;
+    fileContentAi: string;
+
+    /** Embedded shell run summary (when tags include `shell-run`). */
+    shellRunArtifactV1?: IShellRunArtifactV1;
+
+    // auto
+    createdAtUtc: Date;
+    createdAtIpAddress: string;
+    createdAtUserAgent: string;
+    updatedAtUtc: Date;
+    updatedAtIpAddress: string;
+    updatedAtUserAgent: string;
+
+    // auto ai
+    tagsAutoAi: string[];
+
+    // stats
+    promptTokens: number;
+    completionTokens: number;
+    reasoningTokens: number;
+    totalTokens: number;
+    costInUsd: number;
+};

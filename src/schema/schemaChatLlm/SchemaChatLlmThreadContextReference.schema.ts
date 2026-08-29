@@ -1,0 +1,65 @@
+import mongoose, { Schema } from 'mongoose';
+
+import { IChatLlmThreadContextReference } from '../../types/typesSchema/typesChatLlm/SchemaChatLlmThreadContextReference.types';
+
+// Chat Schema
+const chatLlmThreadContextReferenceSchema = new Schema<IChatLlmThreadContextReference>({
+    // fields
+    threadId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
+    referenceFrom: {
+        type: String,
+        default: '',
+        enum: ['notes', 'tasks', 'chatLlm', 'lifeEvents', 'infoVault', 'memo'],
+    },
+    referenceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
+    isAddedByAi: {
+        type: Boolean,
+        default: false,
+    },
+
+    // auth
+    userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true, },
+
+    // auto
+    createdAtUtc: {
+        type: Date,
+        default: null,
+    },
+    createdAtIpAddress: {
+        type: String,
+        default: '',
+    },
+    createdAtUserAgent: {
+        type: String,
+        default: '',
+    },
+    updatedAtUtc: {
+        type: Date,
+        default: null,
+    },
+    updatedAtIpAddress: {
+        type: String,
+        default: '',
+    },
+    updatedAtUserAgent: {
+        type: String,
+        default: '',
+    },
+});
+
+// Chat Model
+const ModelChatLlmThreadContextReference = mongoose.model<IChatLlmThreadContextReference>(
+    'chatLlmThreadContextReference',
+    chatLlmThreadContextReferenceSchema,
+    'chatLlmThreadContextReference'
+);
+
+export {
+    ModelChatLlmThreadContextReference  
+};

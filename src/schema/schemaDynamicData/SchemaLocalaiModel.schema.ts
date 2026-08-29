@@ -1,0 +1,101 @@
+import mongoose, { Schema } from 'mongoose';
+
+import type { tsSchemaAiModelListLocalai } from '../../types/typesSchema/typesDynamicData/SchemaLocalaiModel.types';
+
+// AI Model Schema
+const aiModelListLocalaiSchema = new Schema<tsSchemaAiModelListLocalai>({
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
+        required: true,
+        index: true,
+    },
+    modelLabel: {
+        type: String,
+        default: '',
+    },
+    modelName: {
+        type: String,
+        default: '',
+    },
+    modelType: {
+        type: String,
+        default: '',
+        enum: ['', 'llm', 'stt', 'tts', 'embedding', 'image-generation'],
+        // llm | stt | tts | embedding | image-generation | '' (empty = not specified)
+    },
+
+    // input modalities
+    isInputModalityText: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isInputModalityImage: {
+        type: String,
+        default: 'pending',
+        enum: ['true', 'false', 'pending'],
+    },
+    isInputModalityAudio: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isInputModalityVideo: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+
+    // output modalities
+    isOutputModalityText: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityImage: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityAudio: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityVideo: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+    isOutputModalityEmbedding: {
+        type: String,
+        default: 'false',
+        enum: ['true', 'false', 'pending'],
+    },
+
+    contextLength: {
+        type: Number,
+        default: 0,
+    },
+    maxCompletionTokens: {
+        type: Number,
+        default: 0,
+    },
+
+    raw: {
+        type: Object,
+        default: {},
+    },
+});
+
+// AI Model
+const ModelAiListLocalai = mongoose.model<tsSchemaAiModelListLocalai>(
+    'aiModelListLocalai',
+    aiModelListLocalaiSchema,
+    'aiModelListLocalai'
+);
+
+export {
+    ModelAiListLocalai
+};

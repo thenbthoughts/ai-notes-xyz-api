@@ -1,0 +1,558 @@
+import mongoose from 'mongoose';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
+
+import { ModelUserApiKey } from "../../../../../schema/schemaUser/SchemaUserApiKey.schema";
+import { ModelUser } from "../../../../../schema/schemaUser/SchemaUser.schema";
+import IUser from "../../../../../types/typesSchema/typesUser/SchemaUser.types";
+
+import { ModelNotes } from "../../../../../schema/schemaNotes/SchemaNotes.schema";
+import { INotes } from '../../../../../types/typesSchema/typesSchemaNotes/SchemaNotes.types';
+import { ModelNotesWorkspace } from "../../../../../schema/schemaNotes/SchemaNotesWorkspace.schema";
+import { INotesWorkspace } from "../../../../../types/typesSchema/typesSchemaNotes/SchemaNotesWorkspace.types";
+
+import { ModelTask } from "../../../../../schema/schemaTask/SchemaTask.schema";
+import { tsTaskList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskList2.types";
+import { ITaskWorkspace } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskWorkspace.types";
+import { tsTaskStatusList } from "../../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types";
+
+import { ModelTaskSchedule } from '../../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
+import { tsTaskListSchedule } from '../../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
+
+import { ModelLifeEvents } from '../../../../../schema/schemaLifeEvents/SchemaLifeEvents.schema';
+import { ILifeEvents } from '../../../../../types/typesSchema/typesLifeEvents/SchemaLifeEvents.types';
+
+import { ModelChatLlm } from '../../../../../schema/schemaChatLlm/SchemaChatLlm.schema';
+import { IChatLlm } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types';
+import { ModelChatLlmThread } from '../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema';
+import { IChatLlmThread } from '../../../../../types/typesSchema/typesChatLlm/SchemaChatLlmThread.types';
+
+import fetchLlmUnified from "../../../utils/fetchLlmUnified";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
+
+const getDataNotesStr = async ({
+    userId,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    userId: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        interface INotesAggregate extends INotes {
+            notesWorkspace: INotesWorkspace[];
+        }
+
+        const notesRecords = await ModelNotes.aggregate([
+            {
+                $match: {
+                    userId,
+                    $or: [
+                        {
+                            createdAtUtc: {
+                                $gte: dateUtcStart,
+                                $lte: dateUtcEnd,
+                            },
+                        },
+                        {
+                            updatedAtUtc: {
+                                $gte: dateUtcStart,
+                                $lte: dateUtcEnd,
+                            },
+                        },
+                    ]
+                },
+            },
+            {
+                $project: {
+                    _id: 1,
+                    userId: 1,
+                    title: 1,
+                    description: 1,
+                    isStar: 1,
+                    tags: 1,
+                    notesWorkspaceId: 1,
+                    createdAtUtc: 1,
+                    updatedAtUtc: 1,
+                },
+            },
+            {
+                $lookup: {
+                    from: 'notesWorkspace',
+                    localField: 'notesWorkspaceId',
+                    foreignField: '_id',
+                    as: 'notesWorkspace',
+                },
+            },
+            {
+                $sort: {
+                    createdAtUtc: -1,
+                },
+            },
+        ]) as INotesAggregate[];
+
+        if (!notesRecords || notesRecords.length === 0) {
+            return '';
+        }
+
+        let argContent = `Below are the notes added by the user:\n\n`;
+        for (let index = 0; index < notesRecords.length; index++) {
+            const element = notesRecords[index];
+
+            argContent += `Note ${index + 1} -> title: ${element.title}.\n`;
+            if (element.description.length >= 1) {
+                const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                argContent += `Note ${index + 1} -> description: ${markdownContent}.\n`;
+            }
+            if (element.isStar) {
+                argContent += `Note ${index + 1} -> isStar: Starred life event.\n`;
+            }
+            if (element.tags.length >= 1) {
+                argContent += `Note ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
+            }
+            if (element.notesWorkspaceId) {
+                const notesWorkspace = await ModelNotesWorkspace.findOne({
+                    _id: element.notesWorkspaceId,
+                }) as INotesWorkspace;
+                if (notesWorkspace) {
+                    argContent += `Note ${index + 1} -> workspace: ${notesWorkspace.title}.\n`;
+                }
+            }
+
+            if (element.createdAtUtc) {
+                argContent += `Note ${index + 1} -> createdAtUtc: ${element.createdAtUtc}.\n`;
+            }
+            if (element.updatedAtUtc) {
+                argContent += `Note ${index + 1} -> updatedAtUtc: ${element.updatedAtUtc}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+        return argContent;
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
+
+const getDataTaskStr = async ({
+    userId,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    userId: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        interface tsTaskListAggregate extends tsTaskList {
+            taskWorkspace: ITaskWorkspace[];
+            taskStatusList: tsTaskStatusList[];
+        }
+
+        const taskRecords = await ModelTask.aggregate([
+            {
+                $match: {
+                    userId,
+                    $or: [
+                        {
+                            createdAtUtc: {
+                                $gte: dateUtcStart,
+                                $lte: dateUtcEnd,
+                            },
+                        },
+                        {
+                            updatedAtUtc: {
+                                $gte: dateUtcStart,
+                                $lte: dateUtcEnd,
+                            },
+                        },
+                    ]
+                },
+            },
+            {
+                $lookup: {
+                    from: 'taskWorkspace',
+                    localField: 'taskWorkspaceId',
+                    foreignField: '_id',
+                    as: 'taskWorkspace',
+                },
+            },
+            {
+                $lookup: {
+                    from: 'taskStatusList',
+                    localField: 'taskStatusId',
+                    foreignField: '_id',
+                    as: 'taskStatusList',
+                },
+            },
+            {
+                $sort: {
+                    createdAtUtc: -1,
+                },
+            },
+        ]) as tsTaskListAggregate[];
+
+        if (!taskRecords || taskRecords.length === 0) {
+            return '';
+        }
+
+        let argContent = `Below are the tasks added by the user:\n\n`;
+        for (let index = 0; index < taskRecords.length; index++) {
+            const element = taskRecords[index];
+
+            argContent += `Task ${index + 1} -> title: ${element.title}.\n`;
+            if (element.description.length >= 1) {
+                const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                argContent += `Task ${index + 1} -> description: ${markdownContent}.\n`;
+            }
+            if (element.taskWorkspace.length >= 1) {
+                argContent += `Task ${index + 1} -> workspace: ${element.taskWorkspace[0].title}.\n (Workspace of the task)`;
+            }
+            if (element.taskStatusList.length >= 1) {
+                argContent += `Task ${index + 1} -> status: ${element.taskStatusList[0].statusTitle}.\n (Status of the task)`;
+            }
+            if (element.isArchived) {
+                argContent += `Task ${index + 1} -> isArchived: ${element.isArchived ? 'Yes' : 'No'}.\n`;
+            }
+            if (element.isCompleted) {
+                argContent += `Task ${index + 1} -> isCompleted: ${element.isCompleted ? 'Yes' : 'No'}.\n`;
+            }
+            if (element.priority.length >= 1) {
+                argContent += `Task ${index + 1} -> priority: ${element.priority}.\n`;
+            }
+            if (element.dueDate) {
+                argContent += `Task ${index + 1} -> dueDate: ${element.dueDate}.\n`;
+            }
+            if (element.comments?.length >= 1) {
+                argContent += `Task ${index + 1} -> comments: ${element.comments.join(', ')}.\n`;
+            }
+            if (element.labels.length >= 1) {
+                argContent += `Task ${index + 1} -> labels: ${element.labels.join(', ')}.\n`;
+            }
+            if (element.labelsAi.length >= 1) {
+                argContent += `Task ${index + 1} -> labelsAi: ${element.labelsAi.join(', ')}.\n`;
+            }
+            if (element.isTaskPinned) {
+                argContent += `Task ${index + 1} -> isTaskPinned: ${element.isTaskPinned ? 'Yes' : 'No'}.\n`;
+            }
+
+            if (element.createdAtUtc) {
+                argContent += `Task ${index + 1} -> createdAtUtc: ${element.createdAtUtc}.\n`;
+            }
+            if (element.updatedAtUtc) {
+                argContent += `Task ${index + 1} -> updatedAtUtc: ${element.updatedAtUtc}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+        return argContent;
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
+
+const getLifeEventsStr = async ({
+    userId,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    userId: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        const lifeEventsRecords = await ModelLifeEvents.find({
+            userId,
+            $or: [
+                {
+                    eventDateUtc: {
+                        $gte: dateUtcStart,
+                        $lte: dateUtcEnd,
+                    },
+                },
+            ]
+        }) as ILifeEvents[];
+
+        if (!lifeEventsRecords || lifeEventsRecords.length === 0) {
+            return '';
+        }
+
+        let argContent = `Below are the life events added by the user:\n\n`;
+        for (let index = 0; index < lifeEventsRecords.length; index++) {
+            const element = lifeEventsRecords[index];
+
+            argContent += `Life Event ${index + 1} -> title: ${element.title}.\n`;
+            if (element.description.length >= 1) {
+                const markdownContent = NodeHtmlMarkdown.translate(element.description);
+                argContent += `Life Event ${index + 1} -> description: ${markdownContent}.\n`;
+            }
+            if (element.isStar) {
+                argContent += `Life Event ${index + 1} -> isStar: Starred life event.\n`;
+            }
+            if (element.tags.length >= 1) {
+                argContent += `Life Event ${index + 1} -> tags: ${element.tags.join(', ')}.\n`;
+            }
+            if (element.eventImpact) {
+                argContent += `Life Event ${index + 1} -> eventImpact: ${element.eventImpact}.\n`;
+            }
+            if (element.eventDateUtc) {
+                argContent += `Life Event ${index + 1} -> eventDateUtc: ${element.eventDateUtc}.\n`;
+            }
+            if (element.aiSummary) {
+                argContent += `Life Event ${index + 1} -> aiSummary: ${element.aiSummary}.\n`;
+            }
+            if (element.aiTags.length >= 1) {
+                argContent += `Life Event ${index + 1} -> aiTags: ${element.aiTags.join(', ')}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+        return argContent;
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+};
+
+const getChatStr = async ({
+    userId,
+    dateUtcStart,
+    dateUtcEnd,
+}: {
+    userId: string;
+    dateUtcStart: Date;
+    dateUtcEnd: Date;
+}) => {
+    try {
+        const chatThreadRecords = await ModelChatLlmThread.find({
+            userId,
+            updatedAtUtc: {
+                $gte: dateUtcStart,
+                $lte: dateUtcEnd,
+            },
+        }) as IChatLlmThread[];
+
+        let argContent = `Below are the chat messages added by the user:\n\n`;
+        for (let index = 0; index < chatThreadRecords.length; index++) {
+            const element = chatThreadRecords[index];
+            const chatRecords = await ModelChatLlm.find({
+                threadId: element._id,
+            }) as IChatLlm[];
+
+            if (!chatRecords || chatRecords.length === 0) {
+                continue;
+            }
+
+            for (let index = 0; index < chatRecords.length; index++) {
+                const element = chatRecords[index];
+                argContent += `Chat ${index + 1} -> content: ${element.content}.\n`;
+            }
+
+            argContent += '\n';
+        }
+
+
+        return argContent.trim();
+    } catch (error) {
+        console.error(error);
+        return '';
+    }
+}
+
+const generateDailySummaryByUserId = async ({
+    userId,
+    summaryDate,
+}: {
+    userId: string;
+    summaryDate: Date;
+}) => {
+    try {
+        console.log('generateDailySummaryByUserId: ', userId, summaryDate);
+        const userRecords = await ModelUser.find({
+            _id: userId,
+        }) as IUser[];
+        if (!userRecords || userRecords.length !== 1) {
+            return true;
+        }
+
+        const userFirst = userRecords[0];
+
+        // construct current date
+        const summaryDateUtc = new Date(summaryDate);
+        const summaryDateOnly = summaryDateUtc.toISOString().split('T')[0];
+        let dateUtcStart = new Date(summaryDateUtc.setHours(0, 0, 0, 0));
+        let dateUtcEnd = new Date(summaryDateUtc.setHours(23, 59, 59, 999));
+
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(userFirst._id);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
+        }
+
+        const notesStr = await getDataNotesStr({
+            userId: userFirst._id.toString(),
+            dateUtcStart,
+            dateUtcEnd,
+        });
+        const taskStr = await getDataTaskStr({
+            userId: userFirst._id.toString(),
+            dateUtcStart,
+            dateUtcEnd,
+        });
+        const lifeEventsStr = await getLifeEventsStr({
+            userId: userFirst._id.toString(),
+            dateUtcStart,
+            dateUtcEnd,
+        });
+        const chatStr = await getChatStr({
+            userId: userFirst._id.toString(),
+            dateUtcStart,
+            dateUtcEnd,
+        });
+
+        let argContent = `Below are the notes and tasks added by the user:\n\n`;
+        argContent += `Notes:\n${notesStr}\n`;
+        argContent += `Tasks:\n${taskStr}\n`;
+        argContent += `Life Events:\n${lifeEventsStr}\n`;
+        argContent += `Chat:\n${chatStr}\n`;
+
+        let systemPrompt = `You create compact daily summaries from user data.
+
+Analyze notes, tasks, life events, and chat messages. Write a concise summary focusing only on important information.
+
+What to include:
+- Key accomplishments
+- Important decisions
+- Significant problems and solutions
+- Notable learnings or insights
+- Meaningful patterns
+
+What to exclude:
+- Simple greetings (hello, hi, good morning, etc.)
+- Small talk or casual pleasantries
+- Trivial or routine interactions without substance
+
+Format rules:
+- Use bullet points starting with a dash (-)
+- NO markdown formatting (no **, ##, or *italics*)
+- Group by topic or time with clear headings
+- Each bullet must be unique and relevant - avoid repetition
+- Keep it brief and professional
+
+Structure:
+- One sentence overview of the day
+- Group by topic (Work, Personal, etc.) or chronologically
+- Only include significant items
+- End with key takeaways or next steps if important
+
+Be selective. Only include what matters for future reference.`;
+
+        const llmResult = await fetchLlmUnified({
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: argContent },
+            ],
+        });
+
+        // delete notes with title 'Daily Summary - summaryDateOnly'
+        let dailyNotesTitle = `Daily Summary by AI - ${summaryDateOnly}`;
+        await ModelLifeEvents.deleteMany({
+            userId: userFirst._id.toString(),
+            title: dailyNotesTitle,
+        });
+
+        const now = new Date();
+        // update in life events record
+        await ModelLifeEvents.create({
+            userId: userFirst._id.toString(),
+
+            // identification - pagination
+            eventDateUtc: summaryDateUtc,
+            eventDateYearStr: (summaryDateUtc).getFullYear().toString(),
+            eventDateYearMonthStr: (summaryDateUtc).getFullYear().toString() + '-' + (summaryDateUtc).getMonth().toString().padStart(2, '0'),
+
+            // fields
+            title: dailyNotesTitle,
+            description: llmResult.content,
+            isStar: false,
+            eventImpact: 'very-low',
+            tags: [],
+            aiSummary: llmResult.content,
+            aiTags: [],
+            aiSuggestions: '',
+            aiCategory: 'Other',
+            aiSubCategory: 'Other',
+
+            // auto
+            createdAtUtc: now,
+            createdAtIpAddress: '',
+            createdAtUserAgent: '',
+            updatedAtUtc: now,
+            updatedAtIpAddress: '',
+            updatedAtUserAgent: '',
+        });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
+const executeDailySummaryByUserId = async ({
+    targetRecordId,
+}: {
+    targetRecordId: string | null;
+}) => {
+    try {
+        // get task schedule record
+        const taskScheduleRecord = await ModelTaskSchedule.findOne({
+            _id: targetRecordId,
+        }) as tsTaskListSchedule;
+        if (!taskScheduleRecord) {
+            return true;
+        }
+
+        const userRecords = await ModelUser.find({
+            _id: taskScheduleRecord._id,
+        }) as IUser[];
+
+        if (!userRecords || userRecords.length !== 1) {
+            return true;
+        }
+
+        const userFirst = userRecords[0];
+
+        const ONE_DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
+
+        const currentDate = new Date(
+            new Date().valueOf() + userFirst.timeZoneUtcOffset * 60 * 1000 - ONE_DAY_IN_MILLISECONDS
+        );
+        const currentDateOnly = currentDate.toISOString().split('T')[0];
+
+        // generate daily summary by user id
+        await generateDailySummaryByUserId({
+            userId: taskScheduleRecord._id.toString(),
+            summaryDate: new Date(currentDateOnly + 'T00:00:00.000Z'),
+        });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+}
+
+export {
+    generateDailySummaryByUserId,
+};
+export default executeDailySummaryByUserId;

@@ -1,0 +1,128 @@
+import { DateTime } from 'luxon';
+
+import { ModelTask } from "../../../../schema/schemaTask/SchemaTask.schema";
+import { ModelTaskSchedule } from '../../../../schema/schemaTaskSchedule/SchemaTaskSchedule.schema';
+import { ModelUser } from '../../../../schema/schemaUser/SchemaUser.schema';
+
+import { tsTaskListSchedule } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListSchedule.types';
+import { tsTaskListScheduleAddTask } from '../../../../types/typesSchema/typesSchemaTaskSchedule/SchemaTaskListScheduleAddTask.types';
+
+import { funcSendMail } from '../../../files/funcSendMail';
+import { ModelTaskScheduleAddTask } from '../../../../schema/schemaTaskSchedule/SchemaTaskScheduleTaskAdd.schema';
+import { ModelTaskWorkspace } from '../../../../schema/schemaTask/SchemaTaskWorkspace.schema';
+import { ModelTaskStatusList } from '../../../../schema/schemaTask/SchemaTaskStatusList.schema';
+import { tsTaskStatusList } from '../../../../types/typesSchema/typesSchemaTask/SchemaTaskStatusList.types';
+import { ModelTaskSubList } from '../../../../schema/schemaTask/SchemaTaskSub.schema';
+
+const taskScheduleAddTask = async ({
+    targetRecordId,
+}: {
+    targetRecordId: string | null;
+}) => {
+    try {
+        // Step 1: Find and validate task record
+        const taskInfo = await ModelTaskSchedule.findOne({
+            _id: targetRecordId,
+        }) as tsTaskListSchedule;
+        if (!taskInfo) {
+            return true;
+        }
+
+        // step 2: get task add
+        const taskAddObj = await ModelTaskScheduleAddTask.findOne({
+            taskScheduleId: taskInfo._id,
+        }) as tsTaskListScheduleAddTask;
+        if (!taskAddObj) {
+            return true;
+        }
+
+        // step 3: get task workspace
+        const taskWorkspaceObj = await ModelTaskWorkspace.findOne({
+            _id: taskAddObj.taskWorkspaceId,
+            userId: taskInfo.userId,
+        }) as tsTaskListSchedule;
+        if (!taskWorkspaceObj) {
+            return true;
+        }
+
+        // step 4: get task status
+        const taskStatusObj = await ModelTaskStatusList.findOne({
+            _id: taskAddObj.taskStatusId,
+            userId: taskInfo.userId,
+        }) as tsTaskStatusList;
+        if (!taskStatusObj) {
+            return true;
+        }
+
+        let taskTitle = taskAddObj.taskTitle;
+        if (taskAddObj.taskDatePrefix) {
+            const currentDateInUserTz = DateTime.now().setZone(taskInfo.timezoneName);
+            const dateStr = currentDateInUserTz.toFormat('yyyy-MM-dd');
+            taskTitle = `${dateStr} - ${taskTitle}`;
+        }
+        if (taskAddObj?.taskDateTimePrefix) {
+            const currentDateTimeInUserTz = DateTime.now().setZone(taskInfo.timezoneName);
+            const dateTimeStr = currentDateTimeInUserTz.toFormat('yyyy-MM-dd HH:mm:ss');
+            taskTitle = `${dateTimeStr} - ${taskTitle}`;
+        }
+
+        // insert task
+        const taskInsert = await ModelTask.create({
+            userId: taskInfo.userId,
+            taskWorkspaceId: taskWorkspaceObj?._id || null,
+            taskStatusId: taskStatusObj?._id || null,
+            title: taskTitle,
+            description: taskAddObj.taskAiContext,
+
+            isCompleted: false,
+            isArchived: false,
+            isTaskPinned: false,
+            priority: 'very-low',
+            dueDate: null,
+            labels: [],
+        });
+
+        // create subtasks
+        for (const subtask of taskAddObj.subtaskArr) {
+            const newSubtask = await ModelTaskSubList.create({
+                title: subtask,
+                parentTaskId: taskInsert._id,
+                taskPosition: 0,
+                userId: taskInfo.userId,
+            });
+            console.log('newSubtask: ', newSubtask);
+        }
+
+        // create a mail
+        const userInfo = await ModelUser.findById(taskInfo.userId);
+        if (!userInfo) {
+            return true;
+        }
+
+        // generate mail content
+        const mailContent = `
+        <h1>Task schedule - ${taskTitle}</h1>
+        <p>${taskAddObj.taskAiContext}</p>
+        <p>Task ID: ${taskInsert._id}</p>
+        <p>Task Workspace: ${taskWorkspaceObj.title}</p>
+        <p>Task Status: ${taskStatusObj.statusTitle}</p>
+        <p><a href="https://demo.ai-notes.xyz/user/task?workspace=${taskWorkspaceObj._id}&edit-task-id=${taskInsert._id}">View Task in Workspace</a></p>
+        `;
+
+        // send mail
+        await funcSendMail({
+            userId: taskInfo.userId,
+            smtpTo: userInfo.email,
+            subject: `Task schedule - ${taskTitle} | AI Notes XYZ`,
+            text: '',
+            html: mailContent,
+        });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
+export default taskScheduleAddTask;

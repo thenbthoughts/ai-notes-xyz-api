@@ -1,0 +1,7 @@
+node_modules
+build
+.env
+.env.prod
+uploadsData
+srcTest/2026-08-09-make-agent-better
+scripts/agent-eval

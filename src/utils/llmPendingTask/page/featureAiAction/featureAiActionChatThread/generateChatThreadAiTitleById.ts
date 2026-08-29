@@ -1,0 +1,125 @@
+import { ModelChatLlmThread } from "../../../../../schema/schemaChatLlm/SchemaChatLlmThread.schema";
+import { ModelChatLlm } from "../../../../../schema/schemaChatLlm/SchemaChatLlm.schema";
+import { IChatLlm } from "../../../../../types/typesSchema/typesChatLlm/SchemaChatLlm.types";
+import { getDefaultLlmModel } from '../../../utils/getDefaultLlmModel';
+import fetchLlmUnified, { Message } from '../../../utils/fetchLlmUnified';
+
+
+const  generateChatThreadAiTitleById = async ({
+    targetRecordId,
+}: {
+    targetRecordId: string | null;
+}) => {
+    try {
+        const messages = await ModelChatLlm.find({
+            threadId: targetRecordId,
+        }) as IChatLlm[];
+
+        if (!messages || messages.length === 0) {
+            return true;
+        }
+
+        const messageFirst = messages[0];
+
+        // Get LLM config using centralized function
+        const llmConfig = await getDefaultLlmModel(messageFirst.userId);
+        if (!llmConfig.featureAiActionsEnabled || !llmConfig.provider) {
+            return true; // Skip if no LLM available
+        }
+
+        const updateObj = {
+        } as {
+            threadTitle?: string;
+        };
+
+        // Step 1: Generate summary
+        const summaryMessages: Message[] = [];
+        let systemPrompt = '';
+        systemPrompt += `You are an AI thread summarizer specialized in summarizing multi-message discussion threads. `;
+        systemPrompt += `Given a series of messages labeled as either user or assistant contributions, generate a concise and clear summary that captures the main points, key ideas, and important information shared across the entire thread. `;
+        systemPrompt += `The summary should be brief, easy to understand, and free of added opinions or new information. `;
+        systemPrompt += `Respond only with the summary text.`;
+
+        summaryMessages.push({
+            role: "system",
+            content: systemPrompt,
+        });
+
+        for (let index = 0; index < messages.length; index++) {
+            const element = messages[index];
+
+            if (element.content.includes("AI:")) {
+                summaryMessages.push({
+                    role: "assistant",
+                    content: `AI -> Conversation ${index + 1}: ${element.content.replace("AI:", "").trim()}`,
+                });
+            } else {
+                summaryMessages.push({
+                    role: "user",
+                    content: `User -> Conversation ${index + 1}: ${element.content.replace('Text to audio:', '')}`,
+                });
+            }
+        }
+
+        summaryMessages.push({
+            role: "user",
+            content: "Summarize",
+        });
+
+        const summaryResult = await fetchLlmUnified({
+            provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
+            apiKey: llmConfig.apiKey,
+            apiEndpoint: llmConfig.apiEndpoint,
+            model: llmConfig.modelName,
+            messages: summaryMessages,
+            temperature: 0,
+            maxTokens: 1024,
+            topP: 1,
+        });
+
+        if (summaryResult.success && summaryResult.content && summaryResult.content.length >= 1) {
+            // Step 2: Generate title from summary
+            let titleSystemPrompt = '';
+            titleSystemPrompt += `You are an AI assistant specialized in creating concise and descriptive titles based on user notes. `;
+            titleSystemPrompt += `Your task is to generate a clear and meaningful title that captures the main idea or theme of the content provided by the user. `;
+            titleSystemPrompt += `The title should be brief, relevant, and informative. Respond only with the title text, without any additional formatting or explanation. `;
+
+            const titleResult = await fetchLlmUnified({
+                provider: llmConfig.provider as 'openrouter' | 'groq' | 'ollama' | 'localai' | 'openai-compatible',
+                apiKey: llmConfig.apiKey,
+                apiEndpoint: llmConfig.apiEndpoint,
+                model: llmConfig.modelName,
+                messages: [
+                    { role: "system", content: titleSystemPrompt },
+                    { role: "user", content: summaryResult.content },
+                ],
+                temperature: 0,
+                maxTokens: 1024,
+                topP: 1,
+            });
+
+            if (titleResult.success && titleResult.content && titleResult.content.length >= 1) {
+                updateObj.threadTitle = titleResult.content;
+            }
+        }
+
+        if (Object.keys(updateObj).length >= 1) {
+            await ModelChatLlmThread.updateOne(
+                { _id: targetRecordId },
+                {
+                    $set: {
+                        ...updateObj,
+                    },
+                }
+            );
+        }
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
+export default generateChatThreadAiTitleById;
+

@@ -1,0 +1,333 @@
+import openrouterMarketing from '../../../../../config/openrouterMarketing';
+import { ensureUserMcpBearerToken } from '../../../../../utils/mcp/ensureUserMcpBearerToken';
+import { mcpAgentBaseUrl } from '../../../../../utils/mcp/mcpBaseUrl';
+import type { tsUserApiKey } from '../../../../../utils/llm/llmCommonFunc';
+import {
+    agentOpencodeWriteFile,
+    type AgentOpencodeShellConfig,
+} from '../agentOpencodeWorkspace';
+import type { AgentOpencodePipelinePaths } from './agentOpencodeStepInput';
+
+export type AgentOpencodeProviderId =
+    | 'groq'
+    | 'openrouter'
+    | 'openai'
+    | 'ollama'
+    | 'localai';
+
+export type AgentOpencodeProviderRuntime = {
+    id: AgentOpencodeProviderId;
+    label: string;
+    endpoint: string;
+    apiKey: string;
+    defaultModel: string;
+    extraHeaders?: Record<string, string>;
+};
+
+const envQuote = (value: string): string => {
+    const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
+    return `"${escaped}"`;
+};
+
+export const listConfiguredOpencodeLlmProviders = (
+    apiKeys: tsUserApiKey
+): AgentOpencodeProviderRuntime[] => {
+    const out: AgentOpencodeProviderRuntime[] = [];
+
+    if (apiKeys.apiKeyGroqValid && apiKeys.apiKeyGroq.trim()) {
+        out.push({
+            id: 'groq',
+            label: 'Groq',
+            endpoint: 'https://api.groq.com/openai/v1',
+            apiKey: apiKeys.apiKeyGroq.trim(),
+            defaultModel: 'openai/gpt-oss-20b',
+        });
+    }
+
+    if (apiKeys.apiKeyOpenrouterValid && apiKeys.apiKeyOpenrouter.trim()) {
+        out.push({
+            id: 'openrouter',
+            label: 'OpenRouter',
+            endpoint: 'https://openrouter.ai/api/v1',
+            apiKey: apiKeys.apiKeyOpenrouter.trim(),
+            defaultModel: 'openai/gpt-oss-20b',
+            extraHeaders: openrouterMarketing,
+        });
+    }
+
+    if (apiKeys.apiKeyOpenaiValid && apiKeys.apiKeyOpenai.trim()) {
+        out.push({
+            id: 'openai',
+            label: 'OpenAI',
+            endpoint: 'https://api.openai.com/v1',
+            apiKey: apiKeys.apiKeyOpenai.trim(),
+            defaultModel: 'gpt-4o-mini',
+        });
+    }
+
+    if (apiKeys.apiKeyOllamaValid && apiKeys.apiKeyOllamaEndpoint.trim()) {
+        const host = apiKeys.apiKeyOllamaEndpoint.trim().replace(/\/+$/, '');
+        out.push({
+            id: 'ollama',
+            label: 'Ollama',
+            endpoint: `${host}/v1`,
+            apiKey: '',
+            defaultModel: 'llama3.2',
+        });
+    }
+
+    if (apiKeys.apiKeyLocalaiValid && apiKeys.apiKeyLocalaiEndpoint.trim()) {
+        const host = apiKeys.apiKeyLocalaiEndpoint.trim().replace(/\/+$/, '');
+        out.push({
+            id: 'localai',
+            label: 'LocalAI',
+            endpoint: `${host}/v1`,
+            apiKey: apiKeys.apiKeyLocalai.trim(),
+            defaultModel: 'gemma-3-1b-it',
+        });
+    }
+
+    return out;
+};
+
+export const hasAgentOpencodeLlmProvider = (apiKeys: tsUserApiKey): boolean =>
+    listConfiguredOpencodeLlmProviders(apiKeys).length > 0;
+
+export const pickAgentOpencodeModel = (
+    providers: AgentOpencodeProviderRuntime[],
+    threadProviderId?: string,
+    threadModelName?: string
+): { providerID: string; modelID: string; cliModel: string } => {
+    const prefId = (threadProviderId || '').trim().toLowerCase();
+    let preferred: AgentOpencodeProviderRuntime | undefined;
+    if (prefId) {
+        // try exact match for provider, also handle openai-compatible
+        const mapped = prefId === 'openai-compatible' ? 'openai' : prefId;
+        preferred = providers.find((p) => p.id === mapped);
+    }
+    if (!preferred) {
+        preferred =
+            providers.find((p) => p.id === 'openrouter') ||
+            providers.find((p) => p.id === 'groq') ||
+            providers.find((p) => p.id === 'openai') ||
+            providers[0];
+    }
+    if (!preferred) {
+        throw new Error(
+            'No LLM API key is set. Add Groq, OpenRouter, OpenAI, Ollama, or LocalAI in Settings → API Keys.'
+        );
+    }
+    const customModel = (threadModelName || '').trim();
+    const modelId = customModel || preferred.defaultModel;
+    return {
+        providerID: preferred.id,
+        modelID: modelId,
+        cliModel: `${preferred.id}/${modelId.replace(new RegExp(`^${preferred.id}/`), '')}`,
+    };
+};
+
+const openaiCompatibleProvider = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
+    const mid = (modelId || p.defaultModel).trim() || p.defaultModel;
+    const options: Record<string, unknown> = {
+        baseURL: p.endpoint,
+    };
+    if (p.apiKey) {
+        options.apiKey = p.apiKey;
+    }
+    if (p.extraHeaders) {
+        options.headers = p.extraHeaders;
+    }
+    const models: Record<string, unknown> = {
+        [p.defaultModel]: { name: p.defaultModel },
+    };
+    if (mid !== p.defaultModel) models[mid] = { name: mid };
+    return {
+        npm: '@ai-sdk/openai-compatible',
+        name: p.label,
+        options,
+        models,
+    };
+};
+
+/** Groq / OpenRouter / OpenAI are built into OpenCode; skip the npm plugin so `opencode run --pure` works. */
+const builtinProvider = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
+    const mid = (modelId || p.defaultModel).trim() || p.defaultModel;
+    const options: Record<string, unknown> = {};
+    if (p.apiKey) {
+        options.apiKey = p.apiKey;
+    }
+    if (p.extraHeaders) {
+        options.headers = p.extraHeaders;
+    }
+    const models: Record<string, unknown> = {
+        [p.defaultModel]: {},
+    };
+    if (mid !== p.defaultModel) models[mid] = {};
+    return {
+        name: p.label,
+        options,
+        models,
+    };
+};
+
+const providerConfig = (p: AgentOpencodeProviderRuntime, modelId?: string): Record<string, unknown> => {
+    if (p.id === 'ollama' || p.id === 'localai') {
+        return openaiCompatibleProvider(p, modelId);
+    }
+    return builtinProvider(p, modelId);
+};
+
+export const buildAgentOpencodeConfig = (
+    apiKeys: tsUserApiKey,
+    options?: { chatMessageId?: string; mcpEnabled?: boolean; threadProviderId?: string; threadModelName?: string }
+): Record<string, unknown> => {
+    const providers = listConfiguredOpencodeLlmProviders(apiKeys);
+    const model = pickAgentOpencodeModel(providers, options?.threadProviderId, options?.threadModelName);
+    const selected = providers.find((p) => p.id === model.providerID);
+    const provider: Record<string, unknown> = {};
+    // Only the chosen provider — extra endpoints (Ollama/LocalAI) can hang OpenCode startup.
+    if (selected) {
+        provider[selected.id] = providerConfig(selected, model.modelID);
+    }
+    const mcpEnabled = options?.mcpEnabled !== undefined ? Boolean(options.mcpEnabled) : true;
+    const mcpToken = (apiKeys.mcpBearerToken || '').trim();
+    const chatMessageId = (options?.chatMessageId || '').trim();
+    const mcpHeaders: Record<string, string> = {
+        Authorization: `Bearer ${mcpToken}`,
+    };
+    if (chatMessageId) {
+        mcpHeaders['X-Chat-Message-Id'] = chatMessageId;
+    }
+    return {
+        $schema: 'https://opencode.ai/config.json',
+        model: model.cliModel,
+        permission: {
+            '*': 'allow',
+            bash: 'allow',
+            edit: 'allow',
+            write: 'allow',
+            read: 'allow',
+            glob: 'allow',
+            grep: 'allow',
+            webfetch: 'allow',
+            question: 'deny',
+            external_directory: 'allow',
+            doom_loop: 'allow',
+        },
+        provider,
+        ...(mcpEnabled && mcpToken
+            ? {
+                  mcp: {
+                      'ai-notes-xyz': {
+                          type: 'remote',
+                          url: mcpAgentBaseUrl(apiKeys.mcpBaseUrl),
+                          enabled: true,
+                          oauth: false,
+                          headers: mcpHeaders,
+                      },
+                  },
+              }
+            : {}),
+    };
+};
+
+export const buildAgentOpencodeEnvFile = (apiKeys: tsUserApiKey): string => {
+    const providers = listConfiguredOpencodeLlmProviders(apiKeys);
+    const lines: string[] = [];
+    const groq = providers.find((p) => p.id === 'groq');
+    const openrouter = providers.find((p) => p.id === 'openrouter');
+    const openai = providers.find((p) => p.id === 'openai');
+    const ollama = providers.find((p) => p.id === 'ollama');
+    const localai = providers.find((p) => p.id === 'localai');
+
+    if (openrouter?.apiKey) {
+        lines.push(`OPENROUTER_API_KEY=${envQuote(openrouter.apiKey)}`);
+    }
+    if (groq?.apiKey) {
+        lines.push(`GROQ_API_KEY=${envQuote(groq.apiKey)}`);
+    }
+    if (openai?.apiKey) {
+        lines.push(`OPENAI_API_KEY=${envQuote(openai.apiKey)}`);
+    }
+    if (ollama) {
+        const host = apiKeys.apiKeyOllamaEndpoint.trim().replace(/\/+$/, '');
+        lines.push(`OLLAMA_HOST=${envQuote(host)}`);
+        lines.push(`OLLAMA_BASE_URL=${envQuote(host)}`);
+    }
+    if (localai) {
+        lines.push(
+            `LOCALAI_BASE_URL=${envQuote(apiKeys.apiKeyLocalaiEndpoint.trim().replace(/\/+$/, ''))}`
+        );
+        if (localai.apiKey) {
+            lines.push(`LOCALAI_API_KEY=${envQuote(localai.apiKey)}`);
+        }
+    }
+    if (apiKeys.apiKeyReplicateValid && apiKeys.apiKeyReplicate.trim()) {
+        lines.push(`REPLICATE_API_TOKEN=${envQuote(apiKeys.apiKeyReplicate.trim())}`);
+    }
+    if (apiKeys.apiKeyRunpodValid && apiKeys.apiKeyRunpod.trim()) {
+        lines.push(`RUNPOD_API_KEY=${envQuote(apiKeys.apiKeyRunpod.trim())}`);
+    }
+    return lines.length ? `${lines.join('\n')}\n` : '';
+};
+
+export const writeAgentOpencodeSettingsFiles = async ({
+    shell,
+    paths,
+    apiKeys,
+    userId,
+    chatMessageId,
+    mcpEnabled,
+    threadProviderId,
+    threadModelName,
+}: {
+    shell: AgentOpencodeShellConfig;
+    paths: AgentOpencodePipelinePaths;
+    apiKeys: tsUserApiKey;
+    userId?: string;
+    chatMessageId?: string;
+    mcpEnabled?: boolean;
+    threadProviderId?: string;
+    threadModelName?: string;
+}): Promise<{ cliModel: string; providerNames: string[]; model: { providerID: string; modelID: string; cliModel: string } }> => {
+    const providers = listConfiguredOpencodeLlmProviders(apiKeys);
+    if (providers.length < 1) {
+        throw new Error(
+            'No LLM API key is set. Add Groq, OpenRouter, OpenAI, Ollama, or LocalAI in Settings → API Keys.'
+        );
+    }
+    let keys = apiKeys;
+    if (userId) {
+        const token = await ensureUserMcpBearerToken(userId);
+        keys = { ...apiKeys, mcpBearerToken: token, mcpBearerTokenValid: true };
+    }
+    const messageId = (chatMessageId || '').trim();
+    const config = buildAgentOpencodeConfig(keys, { chatMessageId: messageId, mcpEnabled, threadProviderId, threadModelName });
+    const configJson = `${JSON.stringify(config, null, 2)}\n`;
+    let envBody = buildAgentOpencodeEnvFile(keys);
+    if (messageId) {
+        envBody = `${envBody}${envBody && !envBody.endsWith('\n') ? '\n' : ''}CHAT_MESSAGE_ID=${envQuote(messageId)}\n`;
+    }
+    const model = pickAgentOpencodeModel(providers, threadProviderId, threadModelName);
+
+    await agentOpencodeWriteFile({
+        shell,
+        relativePath: `${paths.agentWorkspaceDir}/opencode.json`,
+        buffer: Buffer.from(configJson, 'utf8'),
+        mimeType: 'application/json',
+    });
+    if (envBody) {
+        await agentOpencodeWriteFile({
+            shell,
+            relativePath: `${paths.agentWorkspaceDir}/.env`,
+            buffer: Buffer.from(envBody, 'utf8'),
+            mimeType: 'text/plain',
+        });
+    }
+
+    return {
+        cliModel: model.cliModel,
+        providerNames: providers.map((p) => p.label),
+        model,
+    };
+};

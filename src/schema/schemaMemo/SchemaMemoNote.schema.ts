@@ -1,0 +1,31 @@
+import mongoose, { Schema } from 'mongoose';
+
+import { IMemoNote } from '../../types/typesSchema/typesSchemaMemo/SchemaMemoNote.types';
+
+const memoNoteSchema = new Schema<IMemoNote>({
+  userId: { type: Schema.Types.ObjectId, ref: 'user', required: true, index: true },
+  title: { type: String, default: '' },
+  body: { type: String, default: '' },
+  labelIds: [{ type: Schema.Types.ObjectId, ref: 'memoLabels' }],
+  pinned: { type: Boolean, default: false },
+  archived: { type: Boolean, default: false },
+  trashed: { type: Boolean, default: false },
+  /** Higher = earlier in grid (left/top). Defaults to 0; new notes use Date.now(). */
+  sortOrder: { type: Number, default: 0 },
+  /** Keep-style palette key: '', coral, orange, yellow, green, teal, blue, purple, pink, brown, gray */
+  noteColor: { type: String, default: '' },
+  reminderTime: { type: Date, default: null },
+  createdAtUtc: { type: Date, default: null },
+  createdAtIpAddress: { type: String, default: '' },
+  createdAtUserAgent: { type: String, default: '' },
+  updatedAtUtc: { type: Date, default: null },
+  updatedAtIpAddress: { type: String, default: '' },
+  updatedAtUserAgent: { type: String, default: '' },
+});
+
+memoNoteSchema.index({ userId: 1, labelIds: 1 });
+memoNoteSchema.index({ userId: 1, reminderTime: 1 });
+
+const ModelMemoNote = mongoose.model<IMemoNote>('memoNotes', memoNoteSchema, 'memoNotes');
+
+export { ModelMemoNote };

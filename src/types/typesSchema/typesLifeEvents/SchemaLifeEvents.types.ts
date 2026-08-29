@@ -1,0 +1,42 @@
+import mongoose, { Document } from 'mongoose';
+
+// LifeEvents
+export interface ILifeEvents extends Document {
+    // identification
+    userId: mongoose.Types.ObjectId;
+
+    // fields
+    title: string;
+    description: string;
+    categoryId: mongoose.Schema.Types.ObjectId | null;
+    categorySubId: mongoose.Schema.Types.ObjectId | null;
+    isStar: boolean;
+    eventImpact: string;
+    tags: string[];
+
+    // identification - pagination
+    eventDateUtc: Date;
+    eventDateYearStr: string;
+    eventDateYearMonthStr: string;
+
+    // ai
+    aiSummary: string;
+    aiTags: string[];
+    aiSuggestions: string;
+    aiCategory: string;
+    aiSubCategory: string;
+
+    placeName: string;
+    address: string;
+    lat: number | null;
+    lng: number | null;
+    isArchived: boolean;
+
+    // auto
+    createdAtUtc: Date;
+    createdAtIpAddress: string;
+    createdAtUserAgent: string;
+    updatedAtUtc: Date;
+    updatedAtIpAddress: string;
+    updatedAtUserAgent: string;
+};

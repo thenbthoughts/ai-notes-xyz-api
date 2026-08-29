@@ -1,0 +1,108 @@
+import cron from 'node-cron';
+
+import agentCronTick from '../routes/chatLlm/chatLlmCrud/agent/agentCron/agentCron';
+import agentOpencodeCronTick from '../routes/chatLlm/chatLlmCrud/agentOpencode/agentOpencodeCron';
+import { executeTaskScheduleForAllUsers } from '../routes/taskSchedule/taskSchedule.route';
+import { ModelLlmPendingTaskCron } from '../schema/schemaFunctionality/SchemaLlmPendingTaskCron.schema';
+import llmPendingTaskProcessFunc from '../utils/llmPendingTask/llmPendingTaskProcessFunc';
+import { cronTaskSendRemainder } from '../routes/task/cron/taskSendRemainder';
+import cronCommonTaskExecuteEverydayForAllUsers from './cronCommonTaskExecuteEverydayForAllUsers/cronCommonTaskExecuteEverydayForAllUsers';
+
+const initCron = () => {
+    cron.schedule(
+        '* * * * *',
+        async () => {
+            try {
+                console.log('running a task every minute');
+                await executeTaskScheduleForAllUsers();
+            } catch (error) {
+                console.log('error in cron: ', error);
+            }
+        },
+        {
+            timezone: 'UTC',
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/10 * * * * *',
+        async () => {
+            try {
+                console.log('running a task every 10 seconds');
+                const results = await ModelLlmPendingTaskCron.aggregate([
+                    {
+                        $match: {
+                            taskStatus: 'pending',
+                        }
+                    },
+                    {
+                        $sort: {
+                            _id: -1
+                        }
+                    },
+                    {
+                        $sample: {
+                            size: 1
+                        }
+                    },
+                ]);
+
+                if (results.length === 1) {
+                    const result = await llmPendingTaskProcessFunc({
+                        _id: results[0]._id
+                    });
+                    console.log(result);
+                }
+            } catch (error) {
+                console.log('error in cron: ', error);
+            }
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/2 * * * * *',
+        async () => {
+            await agentCronTick();
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '*/5 * * * * *',
+        async () => {
+            await agentOpencodeCronTick();
+        },
+        {
+            noOverlap: true,
+        }
+    );
+
+    cron.schedule(
+        '* * * * *',
+        async () => {
+            console.log('running a task every 5 minutes - taskSendRemainder');
+            await cronTaskSendRemainder();
+        },
+    );
+
+    // execute every day for all users
+    cron.schedule(
+        '0 0 * * *',
+        async () => {
+            console.log('running a task every day for all users');
+            await cronCommonTaskExecuteEverydayForAllUsers();
+        },
+        {
+            timezone: 'UTC',
+            noOverlap: true,
+        }
+    );
+};
+
+export default initCron;
