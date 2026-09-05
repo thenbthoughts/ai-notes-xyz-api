@@ -70,20 +70,11 @@ export type McpSearchOptions = {
     offset?: number;
     sortBy?: 'updatedAt' | 'createdAt' | 'relevance';
     order?: 'asc' | 'desc';
-    fromDate?: Date;
-    toDate?: Date;
-    createdAtGte?: Date;
-    createdAtLte?: Date;
-    createdAtGt?: Date;
-    createdAtLt?: Date;
-    updatedAtGte?: Date;
-    updatedAtLte?: Date;
-    updatedAtGt?: Date;
-    updatedAtLt?: Date;
     tags?: string[];
-    isCompleted?: boolean;
-    isArchived?: boolean;
-    pinned?: boolean;
+    createdAfter?: Date;
+    createdBefore?: Date;
+    updatedAfter?: Date;
+    updatedBefore?: Date;
     prefixed?: Record<string, unknown>;
 };
 
@@ -112,20 +103,11 @@ export const mcpSearchSource = async ({
     offset = 0,
     sortBy = 'updatedAt',
     order = 'desc',
-    fromDate,
-    toDate,
-    createdAtGte,
-    createdAtLte,
-    createdAtGt,
-    createdAtLt,
-    updatedAtGte,
-    updatedAtLte,
-    updatedAtGt,
-    updatedAtLt,
     tags,
-    isCompleted,
-    isArchived,
-    pinned,
+    createdAfter,
+    createdBefore,
+    updatedAfter,
+    updatedBefore,
     prefixed = {},
 }: {
     userId: mongoose.Types.ObjectId | string;
@@ -139,20 +121,15 @@ export const mcpSearchSource = async ({
     const filter: Record<string, unknown> = { userId: uid };
     const andClauses: Record<string, unknown>[] = [];
 
-    // common date ranges with gte/lte strategy
-    const addDateRange = (field: string, gte?: Date, lte?: Date, gt?: Date, lt?: Date) => {
+    // lean date ranges: single gte/lte per field
+    const addDateRange = (field: string, gte?: Date, lte?: Date) => {
         const range: Record<string, unknown> = {};
         if (gte) range.$gte = gte;
         if (lte) range.$lte = lte;
-        if (gt) range.$gt = gt;
-        if (lt) range.$lt = lt;
         if (Object.keys(range).length) andClauses.push({ [field]: range });
     };
-    // fromDate/toDate are deprecated aliases for updatedAt
-    const effUpdatedGte = updatedAtGte ?? fromDate;
-    const effUpdatedLte = updatedAtLte ?? toDate;
-    addDateRange('createdAtUtc', createdAtGte, createdAtLte, createdAtGt, createdAtLt);
-    addDateRange('updatedAtUtc', effUpdatedGte, effUpdatedLte, updatedAtGt, updatedAtLt);
+    addDateRange('createdAtUtc', createdAfter, createdBefore);
+    addDateRange('updatedAtUtc', updatedAfter, updatedBefore);
 
     // tags filter (common)
     const tagFilter = (tags && tags.length ? tags.map((t) => new RegExp(`^${escapeRegex(t)}$`, 'i')) : null);
@@ -283,8 +260,6 @@ export const mcpSearchSource = async ({
                 if (f) andClauses.push({ dueDate: f });
             }
         }
-        // deprecated single isCompleted
-        if (typeof isCompleted === 'boolean' && !('task_isCompleted_exact' in prefixed)) andClauses.push({ isCompleted });
         const or = orFilters(['title', 'description', 'labels', 'labelsAi'], q);
         const finalFilter = buildAndWrap(or);
         const docs = await ModelTask.find(finalFilter)
@@ -343,9 +318,8 @@ export const mcpSearchSource = async ({
     }
 
     if (source === 'memo') {
-        // handle isArchived/pinned deprecated + prefixed
-        const memoArchived = (prefixed['memo_archived_exact'] as boolean) ?? (isArchived as boolean | undefined);
-        const memoPinned = (prefixed['memo_pinned_exact'] as boolean) ?? (pinned as boolean | undefined);
+        const memoArchived = prefixed['memo_archived_exact'] as boolean | undefined;
+        const memoPinned = prefixed['memo_pinned_exact'] as boolean | undefined;
         const memoTrashed = prefixed['memo_trashed_exact'] as boolean | undefined;
         if (memoTrashed === true) {
             // include trashed, do not filter
@@ -471,7 +445,7 @@ export const mcpSearchSource = async ({
     }
 
     // infoVault
-    const vaultArchived = (prefixed['infoVault_isArchived_exact'] as boolean) ?? (isArchived as boolean | undefined);
+    const vaultArchived = prefixed['infoVault_isArchived_exact'] as boolean | undefined;
     if (vaultArchived === true) {
         // include
     } else if (vaultArchived === false) {
@@ -523,12 +497,12 @@ export const mcpSearchAll = async ({
     offset,
     sortBy,
     order,
-    fromDate,
-    toDate,
     tags,
-    isCompleted,
-    isArchived,
-    pinned,
+    createdAfter,
+    createdBefore,
+    updatedAfter,
+    updatedBefore,
+    prefixed,
 }: {
     userId: mongoose.Types.ObjectId | string;
     query: string;
@@ -544,12 +518,12 @@ export const mcpSearchAll = async ({
                 offset,
                 sortBy,
                 order,
-                fromDate,
-                toDate,
                 tags,
-                isCompleted,
-                isArchived,
-                pinned,
+                createdAfter,
+                createdBefore,
+                updatedAfter,
+                updatedBefore,
+                prefixed,
             })
         )
     );
