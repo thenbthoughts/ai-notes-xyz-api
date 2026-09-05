@@ -22,6 +22,7 @@ import {
 } from './agentOpencodeWorkspace';
 import { ANSWER_ENGINE_AGENT_OPENCODE } from './agentOpencodeConstants';
 import { handleAgentOpencodeStream } from './agentOpencodeStream';
+import { resolveOpencodeServerConfig } from './agentOpencodeServer';
 
 const router = Router();
 
@@ -289,15 +290,26 @@ router.post(
                   })
                 : '';
 
-            // Build Opencode web URL for browser: http://localhost:4096/server/<base64>/session/<id>
-            // aHR0cDovL2xvY2FsaG9zdDo0MDk2 is base64 of http://localhost:4096 (no padding)
-            const opencodeHost = process.env.OPENCODE_PORT ? `http://localhost:${process.env.OPENCODE_PORT}` : 'http://localhost:4096';
+            // Build Opencode web URL — respect user-configured opencodeUrl (Agent Workspace -> Opencode) if present
+            const resolvedOpencode = resolveOpencodeServerConfig(apiKey);
+            const opencodeHost = resolvedOpencode?.baseUrl || (process.env.OPENCODE_PORT ? `http://localhost:${process.env.OPENCODE_PORT}` : 'http://localhost:4096');
             const base64Server = Buffer.from(opencodeHost).toString('base64').replace(/=+$/, '');
             const opencodeWebUrl =
                 (opened as any).webUrl ||
                 (sessionId
                     ? `${opencodeHost}/server/${base64Server}/session/${sessionId}`
                     : `${opencodeHost}/`);
+            // Optional auth-embedded URL for the browser when username/password are set
+            let opencodeAuthUrl = '';
+            if (resolvedOpencode?.password) {
+                try {
+                    const u = new URL(opencodeHost);
+                    const user = encodeURIComponent(resolvedOpencode.username || 'opencode');
+                    const pass = encodeURIComponent(resolvedOpencode.password);
+                    const hostWithAuth = `${u.protocol}//${user}:${pass}@${u.host}`;
+                    opencodeAuthUrl = sessionId ? `${hostWithAuth}/server/${base64Server}/session/${sessionId}` : `${hostWithAuth}/`;
+                } catch { /* fallback to webUrl */ }
+            }
 
             return res.status(200).json({
                 success: true,
@@ -309,7 +321,8 @@ router.post(
                 desktopUrl,
                 desktopAuthUrl,
                 opencodeWebUrl,
-                webUrl: (opened as any).webUrl || opencodeWebUrl,
+                opencodeAuthUrl,
+                webUrl: (opened as any).webUrl || opencodeAuthUrl || opencodeWebUrl,
             });
         } catch (error) {
             console.error(error);

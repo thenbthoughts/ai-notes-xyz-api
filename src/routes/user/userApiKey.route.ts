@@ -402,18 +402,21 @@ router.post(
     }
 );
 
-// Get User Agent Workspace for iframe (read-only desktop)
+// Get User Agent Workspace for iframe (read-only desktop) + opencode
 router.get(
     '/getUserApiAgentWorkspace',
     middlewareUserAuth,
     async (req: Request, res: Response) => {
         try {
             const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId }).lean();
-            if (!doc) return res.json({ agentWorkspaceValid: false, desktopUrl: '', apiUrl: '' });
+            if (!doc) return res.json({ agentWorkspaceValid: false, desktopUrl: '', apiUrl: '', opencodeUrl: '', opencodeUsername: 'opencode' });
             return res.json({
                 agentWorkspaceValid: !!doc.agentWorkspaceValid,
                 desktopUrl: doc.agentWorkspaceDesktopUrl || '',
                 apiUrl: doc.agentWorkspaceApiUrl || '',
+                opencodeUrl: (doc as any).opencodeUrl || '',
+                opencodeUsername: (doc as any).opencodeUsername || 'opencode',
+                opencodePassword: (doc as any).opencodePassword || '',
             });
         } catch (error) {
             console.error(error);
@@ -422,7 +425,7 @@ router.get(
     }
 );
 
-// Update User Agent Workspace (ai-notes-xyz-agent-workspace — desktop + API)
+// Update User Agent Workspace (ai-notes-xyz-agent-workspace — desktop + API + optional opencode)
 router.post(
     '/updateUserApiAgentWorkspace',
     middlewareUserAuth,
@@ -436,12 +439,18 @@ router.post(
                 agentWorkspaceDesktopPassword,
                 agentWorkspaceApiUrl,
                 agentWorkspaceApiToken,
+                opencodeUrl,
+                opencodeUsername,
+                opencodePassword,
             } = req.body as {
                 agentWorkspaceDesktopUrl?: string;
                 agentWorkspaceDesktopUsername?: string;
                 agentWorkspaceDesktopPassword?: string;
                 agentWorkspaceApiUrl?: string;
                 agentWorkspaceApiToken?: string;
+                opencodeUrl?: string;
+                opencodeUsername?: string;
+                opencodePassword?: string;
             };
 
             const check = await validateAgentWorkspaceEndpoints(
@@ -458,18 +467,54 @@ router.post(
                 });
             }
 
+            // Optional opencode config — empty url clears the saved opencode settings
+            let normalizedOpencodeUrl = '';
+            let normalizedOpencodeUsername = 'opencode';
+            let normalizedOpencodePassword = '';
+            const hasOpencodeFields = typeof opencodeUrl !== 'undefined' || typeof opencodeUsername !== 'undefined' || typeof opencodePassword !== 'undefined';
+            if (hasOpencodeFields) {
+                const urlRaw = typeof opencodeUrl === 'string' ? opencodeUrl.trim() : '';
+                const usernameRaw = typeof opencodeUsername === 'string' ? opencodeUsername.trim() : 'opencode';
+                const passwordRaw = typeof opencodePassword === 'string' ? opencodePassword.trim() : '';
+                normalizedOpencodeUsername = usernameRaw || 'opencode';
+                normalizedOpencodePassword = passwordRaw;
+                if (urlRaw) {
+                    const parsed = parseOpenCodeServiceOrigin(urlRaw);
+                    if ('error' in parsed) {
+                        return res.status(400).json({ success: '', error: parsed.error });
+                    }
+                    normalizedOpencodeUrl = parsed.origin;
+                    const health = await validateOpencodeHealth(normalizedOpencodeUrl, normalizedOpencodeUsername, normalizedOpencodePassword);
+                    if (!health.ok) {
+                        return res.status(400).json({ success: '', error: health.error });
+                    }
+                } else {
+                    normalizedOpencodeUrl = '';
+                    // keep username default even when url is cleared
+                    normalizedOpencodeUsername = usernameRaw || 'opencode';
+                    normalizedOpencodePassword = passwordRaw;
+                }
+            }
+
+            const update: Record<string, unknown> = {
+                agentWorkspaceValid: true,
+                agentWorkspaceDesktopUrl: check.desktopOrigin,
+                agentWorkspaceDesktopUsername: check.username,
+                agentWorkspaceDesktopPassword: check.password,
+                agentWorkspaceApiUrl: check.apiOrigin,
+                agentWorkspaceApiToken: check.token,
+            };
+            if (hasOpencodeFields) {
+                update.opencodeUrl = normalizedOpencodeUrl;
+                update.opencodeUsername = normalizedOpencodeUsername;
+                update.opencodePassword = normalizedOpencodePassword;
+            }
+
             await ModelUserApiKey.findOneAndUpdate(
                 {
                     userId: res.locals.auth_userId,
                 },
-                {
-                    agentWorkspaceValid: true,
-                    agentWorkspaceDesktopUrl: check.desktopOrigin,
-                    agentWorkspaceDesktopUsername: check.username,
-                    agentWorkspaceDesktopPassword: check.password,
-                    agentWorkspaceApiUrl: check.apiOrigin,
-                    agentWorkspaceApiToken: check.token,
-                },
+                update,
                 {
                     new: true,
                 }
@@ -1784,6 +1829,9 @@ router.post(
                     agentWorkspaceDesktopPassword: '',
                     agentWorkspaceApiUrl: '',
                     agentWorkspaceApiToken: '',
+                    opencodeUrl: '',
+                    opencodeUsername: 'opencode',
+                    opencodePassword: '',
                 },
                 mcp: {
                     mcpBearerTokenValid: false,
