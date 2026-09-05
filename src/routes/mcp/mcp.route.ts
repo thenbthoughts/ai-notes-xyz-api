@@ -13,7 +13,7 @@ router.get('/info', (_req: Request, res: Response) => {
         success: true,
         name: 'ai-notes-xyz',
         mcp: true,
-        tools: ['search', 'add_chat_file'],
+        tools: ['search', 'add_chat_file', 'search_notes', 'search_memo', 'search_tasks', 'search_life_events', 'search_info_vault'],
     });
 });
 
