@@ -155,8 +155,18 @@ const getConversationContextByThreadId = async ({
         ]) as IChatLlm[];
 
         const conversationContext = lastMessages
-            .map(msg => msg.content)
-            .filter(content => typeof content === 'string' && content.trim().length > 0)
+            .map((msg) => {
+                const content = typeof msg.content === 'string' ? msg.content.trim() : '';
+                if (!content) {
+                    return '';
+                }
+                const clipped = content.slice(0, 800);
+                if ((msg as IChatLlm).isAi) {
+                    return `Assistant: ${clipped}`;
+                }
+                return `User: ${clipped}`;
+            })
+            .filter((content) => content.length > 0)
             .join('\n')
             .trim();
 
@@ -206,8 +216,14 @@ const createKeywordsFromThread = async ({
 
         // Prepare messages for LLM
         const messagesContent = last10Messages
-            .filter(msg => msg.type === 'text' && msg.content)
-            .map(msg => msg.content)
+            .filter((msg) => msg.type === 'text' && msg.content)
+            .map((msg) => {
+                const clipped = String(msg.content).trim().slice(0, 800);
+                if ((msg as IChatLlm).isAi) {
+                    return `Assistant: ${clipped}`;
+                }
+                return `User: ${clipped}`;
+            })
             .join('\n\n');
 
         if (!messagesContent || messagesContent.trim().length === 0) {
@@ -218,11 +234,11 @@ const createKeywordsFromThread = async ({
         const llmMessages: Message[] = [
             {
                 role: 'system',
-                content: 'You are a helpful assistant that extracts keywords from conversations. Generate a JSON object with a "keywords" property containing an array of relevant SHORT keywords (around 50 keywords, each 1-3 words maximum) that summarize the main topics discussed. Keep keywords concise and specific. Example: {"keywords": ["API design", "database", "authentication", "React hooks", "error handling", "TypeScript", "REST API", "MongoDB", "user auth", "JWT tokens"]}',
+                content: 'You extract search keywords from a chat. Return JSON {"keywords": [...]} with 12 focused keywords (1-3 words each): named entities, topics, intents. Order most important first. Skip greetings and filler.',
             },
             {
                 role: 'user',
-                content: `Extract around 50 SHORT keywords (1-3 words each) from the following conversation:\n\n${messagesContent}`,
+                content: `Extract 12 focused keywords (1-3 words each) from this conversation:\n\n${messagesContent}`,
             },
         ];
 
@@ -242,8 +258,8 @@ const createKeywordsFromThread = async ({
             apiEndpoint: llmConfig.apiEndpoint,
             model: llmConfig.model,
             messages: llmMessages,
-            temperature: 0.7,
-            maxTokens: 4096,
+            temperature: 0.2,
+            maxTokens: 512,
             responseFormat: 'json_object',
             headersExtra: llmConfig.customHeaders,
         });
@@ -270,9 +286,10 @@ const createKeywordsFromThread = async ({
             }
 
             return keywords
-                .filter(item => typeof item === 'string' && item.trim().length > 0)
-                .map(item => item.trim())
-                .slice(0, 10);
+                .filter((item) => typeof item === 'string' && item.trim().length > 0)
+                .map((item) => item.trim())
+                .filter((item, index, arr) => arr.findIndex((v) => v.toLowerCase() === item.toLowerCase()) === index)
+                .slice(0, 12);
         } catch (parseError) {
             console.error('Failed to parse keywords JSON:', parseError);
             return [];
@@ -295,6 +312,8 @@ const scoreContextReferencesWithLlm = async ({
         entityId: mongoose.Types.ObjectId;
         collectionName: string;
         text?: string;
+        updatedAtUtc?: Date;
+        textScore?: number;
     }>;
 }): Promise<RelevantContextResponse['relevantItems']> => {
     try {
@@ -313,12 +332,16 @@ const scoreContextReferencesWithLlm = async ({
         }
 
         const candidatesStr = searchResults
-            .map(result => {
+            .map((result) => {
                 const rawText = typeof result.text === 'string' ? result.text : '';
-                const compactText = rawText.replace(/\s+/g, ' ').trim().slice(0, 600);
+                const compactText = rawText.replace(/\s+/g, ' ').trim().slice(0, 500);
+                const ageDays = result.updatedAtUtc
+                    ? Math.max(0, Math.round((Date.now() - new Date(result.updatedAtUtc).getTime()) / 86_400_000))
+                    : -1;
                 return [
                     `ID: ${result.entityId.toString()}`,
                     `Collection: ${result.collectionName}`,
+                    `AgeDays: ${ageDays}`,
                     `Text: ${compactText}`,
                 ].join('\n');
             })
@@ -327,7 +350,7 @@ const scoreContextReferencesWithLlm = async ({
         const llmMessages: Message[] = [
             {
                 role: 'system',
-                content: 'You are an AI assistant that evaluates relevance between a conversation and candidate context items. For each candidate, assign a relevanceScore (1-10) and a brief relevanceReason. Return ONLY items with relevanceScore >= 6. Respond in JSON format: {"relevantItems":[{"entityId":"...", "relevanceScore":7, "relevanceReason":"..."}]}',
+                content: 'Score each candidate 1-10 against the conversation. Prefer direct topic match over keyword overlap; prefer recent items when scores tie; keep at most 3 per collection for diversity. Return ONLY items with score >= 6 as {"relevantItems":[{"entityId":"...", "relevanceScore":7, "relevanceReason":"..."}]} ordered best first.',
             },
             {
                 role: 'user',
@@ -366,14 +389,14 @@ const scoreContextReferencesWithLlm = async ({
             }
 
 
-            const validItems = parsed.relevantItems.filter(item => {
+            const validItems = parsed.relevantItems.filter((item) => {
                 return typeof item === 'object'
                     && item !== null
                     && typeof item.entityId === 'string'
                     && typeof item.relevanceScore === 'number'
                     && item.relevanceScore >= 6
                     && typeof item.relevanceReason === 'string';
-            });
+            }).sort((a, b) => b.relevanceScore - a.relevanceScore);
 
             if (validItems.length === 0) {
                 console.error('No valid context items found with relevanceScore >= 6');
@@ -409,41 +432,54 @@ const searchAndAddContextReferences = async ({
 
         // Build search query conditions similar to search.route.ts
         const searchQueryLower = keywords
-            .map(k => k.toLowerCase().trim())
-            .filter(k => k.length >= 1);
+            .map((k) => k.toLowerCase().trim())
+            .filter((k) => k.length >= 1);
 
         if (searchQueryLower.length === 0) {
             return 0;
         }
-
-        const searchQueryOrConditions = searchQueryLower.map(item => {
-            return { text: { $regex: item, $options: 'i' } };
-        });
-
-        const matchConditionsSearch = {
-            $or: searchQueryOrConditions,
-        };
 
         type SearchHit = {
             entityId: mongoose.Types.ObjectId;
             collectionName: string;
             text?: string;
             updatedAtUtc?: Date;
+            textScore?: number;
         };
 
-        // Search global search by keywords (includes memoNotes)
-        const searchResults = await ModelGlobalSearch.aggregate([
-            {
-                $match: {
-                    userId: userId,
-                    collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault', 'memoNotes'] }
-                }
-            },
-            { $sort: { updatedAtUtc: -1 } },
-            { $match: matchConditionsSearch },
-            { $sort: { updatedAtUtc: -1 } },
-            { $limit: limit },
-        ]) as SearchHit[];
+        const baseMatch = {
+            userId: userId,
+            collectionName: { $in: ['tasks', 'notes', 'lifeEvents', 'infoVault', 'memoNotes'] },
+        };
+        const candidateLimit = limit * 2;
+        let searchResults: SearchHit[] = [];
+
+        // Ranked full-text search first (uses the text index), regex fallback second.
+        if (searchQueryLower.length > 1) {
+            try {
+                searchResults = (await ModelGlobalSearch.aggregate([
+                    { $match: { ...baseMatch, $text: { $search: searchQueryLower.join(' ') } } },
+                    { $addFields: { textScore: { $meta: 'textScore' } } },
+                    { $sort: { textScore: { $meta: 'textScore' }, updatedAtUtc: -1 } },
+                    { $limit: candidateLimit },
+                ])) as SearchHit[];
+            } catch (textError) {
+                console.warn('Text search failed, falling back to regex:', textError);
+                searchResults = [];
+            }
+        }
+
+        if (searchResults.length === 0) {
+            const searchQueryOrConditions = searchQueryLower.map((item) => {
+                return { text: { $regex: item, $options: 'i' } };
+            });
+            searchResults = (await ModelGlobalSearch.aggregate([
+                { $match: baseMatch },
+                { $match: { $or: searchQueryOrConditions } },
+                { $sort: { updatedAtUtc: -1 } },
+                { $limit: candidateLimit },
+            ])) as SearchHit[];
+        }
 
         if (searchResults.length === 0) {
             return 0;
@@ -459,7 +495,7 @@ const searchAndAddContextReferences = async ({
             return 0;
         }
 
-        const allowedEntityIds = new Set(scoredItems.map(item => item.entityId));
+        const allowedEntityIds = new Set(scoredItems.map((item) => item.entityId));
 
         // Map collectionName to referenceFrom
         const collectionNameToReferenceFrom: Record<string, 'notes' | 'tasks' | 'chatLlm' | 'lifeEvents' | 'infoVault' | 'memo'> = {
@@ -472,47 +508,53 @@ const searchAndAddContextReferences = async ({
             'memoNotes': 'memo',
         };
 
-        let insertedCount = 0;
-
-        // Insert context references
-        for (const result of searchResults) {
-            const referenceFrom = collectionNameToReferenceFrom[result.collectionName];
-            const entityIdString = result.entityId.toString();
-
-            // Skip if collectionName is not supported
-            if (!referenceFrom) {
-                continue;
+        // Best-first with per-collection diversity cap so one topic cannot crowd out the rest.
+        const scoreById = new Map(scoredItems.map((item) => [item.entityId, item.relevanceScore]));
+        const perCollectionCount = new Map<string, number>();
+        const ranked = searchResults
+            .filter((result) => allowedEntityIds.has(result.entityId.toString()))
+            .filter((result) => collectionNameToReferenceFrom[result.collectionName])
+            .sort((a, b) => (scoreById.get(b.entityId.toString()) || 0) - (scoreById.get(a.entityId.toString()) || 0));
+        const diverse = ranked.filter((result) => {
+            const count = perCollectionCount.get(result.collectionName) || 0;
+            if (count >= 4) {
+                return false;
             }
+            perCollectionCount.set(result.collectionName, count + 1);
+            return true;
+        }).slice(0, limit);
 
-            // Skip if relevance score is not high enough
-            if (!allowedEntityIds.has(entityIdString)) {
-                continue;
-            }
-
-            // Check if reference already exists
-            const existingReference = await ModelChatLlmThreadContextReference.findOne({
-                threadId,
-                userId,
-                referenceFrom,
-                referenceId: result.entityId,
-            });
-
-            if (!existingReference) {
-                // Insert new reference
-                await ModelChatLlmThreadContextReference.create({
-                    threadId,
-                    userId,
-                    referenceFrom,
-                    referenceId: result.entityId,
-                    isAddedByAi: true,
-                    createdAtUtc: new Date(),
-                    updatedAtUtc: new Date(),
-                });
-                insertedCount++;
-            }
+        if (diverse.length === 0) {
+            return 0;
         }
 
-        return insertedCount;
+        const existing = await ModelChatLlmThreadContextReference.find({
+            threadId,
+            userId,
+            referenceId: { $in: diverse.map((result) => result.entityId) },
+        }).select('referenceId').lean();
+        const existingIds = new Set(existing.map((doc) => String(doc.referenceId)));
+
+        const now = new Date();
+        const docsToInsert = diverse
+            .filter((result) => !existingIds.has(result.entityId.toString()))
+            .map((result) => ({
+                threadId,
+                userId,
+                referenceFrom: collectionNameToReferenceFrom[result.collectionName],
+                referenceId: result.entityId,
+                isAddedByAi: true,
+                createdAtUtc: now,
+                updatedAtUtc: now,
+            }));
+
+        if (docsToInsert.length === 0) {
+            return 0;
+        }
+
+        await ModelChatLlmThreadContextReference.insertMany(docsToInsert, { ordered: false });
+
+        return docsToInsert.length;
     } catch (error) {
         console.error('Error in searchAndAddContextReferences:', error);
         return 0;

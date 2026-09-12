@@ -335,8 +335,8 @@ router.post(
             const addData = {
                 threadTitle: threadTitle.trim(),
                 isAutoAiContextSelectEnabled: false,
-                isPersonalContextEnabled: false,
-                isMemoryEnabled: false,
+                isPersonalContextEnabled: true,
+                isMemoryEnabled: true,
 
                 // model settings
                 aiModelName: '',
