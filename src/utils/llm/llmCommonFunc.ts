@@ -60,6 +60,9 @@ export interface tsUserApiKey {
     agentWorkspaceApiUrl: string;
     agentWorkspaceApiToken: string;
 
+    // dapps git + coolify
+    dappsValid: boolean;
+
     clientFrontendUrl: string;
     mcpBearerTokenValid: boolean;
     mcpBearerToken: string;
@@ -133,6 +136,7 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
         mcpBearerTokenValid: false,
         mcpBearerToken: '',
         mcpBaseUrl: '',
+        dappsValid: false,
     } as tsUserApiKey;
 
     try {
@@ -304,6 +308,9 @@ export const getApiKeyByObject = (apiKeyObject: any) => {
             }
             if (typeof apiKeyObject.mcpBaseUrl === 'string') {
                 apiKey.mcpBaseUrl = apiKeyObject.mcpBaseUrl.trim();
+            }
+            if (typeof (apiKeyObject as any).dappsValid === 'boolean' && (apiKeyObject as any).dappsValid) {
+                (apiKey as any).dappsValid = true;
             }
         }
         return apiKey;

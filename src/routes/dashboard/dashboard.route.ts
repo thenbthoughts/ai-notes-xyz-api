@@ -35,6 +35,7 @@ router.get(
                     apiKeyLocalaiValid: !!doc.apiKeyLocalaiValid,
                     agentWorkspaceValid: !!doc.agentWorkspaceValid,
                     mcpBearerTokenValid: !!doc.mcpBearerTokenValid,
+                    dappsValid: !!(doc as any).dappsValid,
                 },
             });
         } catch (error) {

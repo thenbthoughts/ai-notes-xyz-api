@@ -1709,7 +1709,7 @@ router.post(
             const validApiKeyTypes = [
                 'groq', 'openrouter', 's3', 'ollama', 'qdrant',
                 'replicate', 'runpod', 'openai', 'localai', 'smtp', 'telegram',
-                'agentWorkspace', 'mcp', 'opencode',
+                'agentWorkspace', 'mcp', 'opencode', 'dapps',
             ];
 
             if (!validApiKeyTypes.includes(apiKeyType)) {
@@ -1793,6 +1793,22 @@ router.post(
                     opencodeUrl: '',
                     opencodeUsername: 'opencode',
                     opencodePassword: '',
+                },
+                dapps: {
+                    dappsValid: false,
+                    dappsGitProvider: 'gitea',
+                    dappsGitUrl: '',
+                    dappsGitToken: '',
+                    dappsGitOwner: '',
+                    dappsCoolifyUrl: '',
+                    dappsCoolifyToken: '',
+                    dappsCoolifyProject: '',
+                    dappsCoolifyEnvironment: '',
+                    dappsCoolifyProjectProd: '',
+                    dappsCoolifyEnvironmentProd: '',
+                    dappsBaseDomain: '',
+                    dappsDeployKeyUuid: '',
+                    dappsCoolifyTemplateUrl: '',
                 },
             };
 
@@ -1997,6 +2013,343 @@ router.post(
             return res.status(500).json({
                 message: 'Server error',
             });
+        }
+    }
+);
+
+const normalizeHttpOrigin = (raw: string): string => {
+    const trimmed = String(raw || '').trim().replace(/\/+$/, '');
+    if (!trimmed) {
+        return '';
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+    }
+    return `https://${trimmed}`;
+};
+
+const normalizeBaseDomain = (raw: string): string => {
+    let domain = String(raw || '').trim().toLowerCase();
+    if (!domain) {
+        return '';
+    }
+    domain = domain.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    domain = domain.replace(/^\*\./, '');
+    domain = domain.split('/')[0];
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(domain)) {
+        return '';
+    }
+    if (!domain.includes('.')) {
+        return '';
+    }
+    return domain;
+};
+
+const validateDappsEndpoints = async ({
+    gitProvider,
+    gitUrl,
+    gitToken,
+    gitOwner,
+    coolifyBaseUrl,
+    coolifyToken,
+    coolifyProjectId,
+    coolifyEnvId,
+    coolifyProjectIdProd,
+    coolifyEnvIdProd,
+    baseDomain,
+    deployKeyUuid,
+}: {
+    gitProvider: string;
+    gitUrl: string;
+    gitToken: string;
+    gitOwner: string;
+    coolifyBaseUrl: string;
+    coolifyToken: string;
+    coolifyProjectId: string;
+    coolifyEnvId: string;
+    coolifyProjectIdProd: string;
+    coolifyEnvIdProd: string;
+    baseDomain: string;
+    deployKeyUuid: string;
+}): Promise<{ ok: true; normalized: { gitProvider: 'gitea' | 'github'; gitOrigin: string; gitOwner: string; coolifyOrigin: string; coolifyProjectUuid: string; coolifyEnvUuid: string; coolifyProjectUuidProd: string; coolifyEnvUuidProd: string; baseDomain: string; deployKeyUuid: string } } | { ok: false; error: string }> => {
+    const provider = String(gitProvider || '').trim().toLowerCase();
+    if (provider !== 'gitea' && provider !== 'github') {
+        return { ok: false, error: 'Git provider must be gitea or github.' };
+    }
+    const gitOrigin = normalizeHttpOrigin(gitUrl);
+    const token = String(gitToken || '').trim();
+    const ownerHint = String(gitOwner || '').trim();
+    const coolifyApiToken = String(coolifyToken || '').trim();
+    const coolifyOrigin = normalizeHttpOrigin(coolifyBaseUrl);
+    const projectUuid = String(coolifyProjectId || '').trim();
+    const envUuid = String(coolifyEnvId || '').trim();
+    const projectUuidProd = String(coolifyProjectIdProd || '').trim();
+    const envUuidProd = String(coolifyEnvIdProd || '').trim();
+    const normalizedDomain = normalizeBaseDomain(baseDomain);
+    if (!coolifyOrigin) {
+        return { ok: false, error: 'Coolify base URL is required, like https://coolify.example.com.' };
+    }
+    if (!projectUuid) {
+        return { ok: false, error: 'Coolify project ID is required. Copy it from the Coolify page URL after /project/.' };
+    }
+    if (!envUuid) {
+        return { ok: false, error: 'Coolify dev environment ID is required. Copy it from the Coolify page URL after /environment/.' };
+    }
+    if (!projectUuidProd) {
+        return { ok: false, error: 'Coolify prod project ID is required. Create a second project for prod, copy its ID.' };
+    }
+    if (!envUuidProd) {
+        return { ok: false, error: 'Coolify prod environment ID is required. Copy it from the prod project page URL after /environment/.' };
+    }
+    if (!normalizedDomain) {
+        return { ok: false, error: 'Custom domain is required. Type like dapps.example.com. Point *.yourdomain to your server IP.' };
+    }
+    if (!gitOrigin) {
+        return { ok: false, error: 'Git URL is required.' };
+    }
+    if (!token) {
+        return { ok: false, error: 'Git token is required.' };
+    }
+    if (!coolifyApiToken) {
+        return { ok: false, error: 'Coolify token is required.' };
+    }
+
+    try {
+        let gitUsername = ownerHint;
+        if (provider === 'gitea') {
+            const meRes = await axios.get(`${gitOrigin}/api/v1/user`, {
+                headers: { Authorization: `token ${token}` },
+                timeout: 15000,
+            });
+            const login = String(meRes.data?.login || '').trim();
+            if (!login) {
+                return { ok: false, error: 'Git check failed: Gitea did not return a user for this token.' };
+            }
+            if (!gitUsername) {
+                gitUsername = login;
+            }
+            const verifyName = `dapps-verify-${Date.now()}`;
+            const createRes = await axios.post(`${gitOrigin}/api/v1/user/repos`, {
+                name: verifyName,
+                private: true,
+                auto_init: false,
+            }, {
+                headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+                timeout: 15000,
+            });
+            if (!createRes.data) {
+                return { ok: false, error: 'Git check failed: Gitea repo create returned empty.' };
+            }
+            try {
+                await axios.delete(`${gitOrigin}/api/v1/repos/${encodeURIComponent(gitUsername)}/${encodeURIComponent(verifyName)}`, {
+                    headers: { Authorization: `token ${token}` },
+                    timeout: 15000,
+                });
+            } catch (deleteErr) {
+                console.error('DApps Gitea verify cleanup failed:', deleteErr);
+            }
+        } else {
+            const apiBase = gitOrigin.includes('github.com') ? 'https://api.github.com' : `${gitOrigin}/api/v3`;
+            const meRes = await axios.get(`${apiBase}/user`, {
+                headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+                timeout: 15000,
+            });
+            const login = String(meRes.data?.login || '').trim();
+            if (!login) {
+                return { ok: false, error: 'Git check failed: GitHub did not return a user for this token.' };
+            }
+            if (!gitUsername) {
+                gitUsername = login;
+            }
+            const verifyName = `dapps-verify-${Date.now()}`;
+            const createRes = await axios.post(`${apiBase}/user/repos`, {
+                name: verifyName,
+                private: true,
+                auto_init: false,
+            }, {
+                headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+                timeout: 15000,
+            });
+            if (!createRes.data) {
+                return { ok: false, error: 'Git check failed: GitHub repo create returned empty.' };
+            }
+            try {
+                await axios.delete(`${apiBase}/repos/${encodeURIComponent(gitUsername)}/${encodeURIComponent(verifyName)}`, {
+                    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+                    timeout: 15000,
+                });
+            } catch (deleteErr) {
+                console.error('DApps GitHub verify cleanup failed:', deleteErr);
+            }
+        }
+
+        const pairs = [
+            { project: projectUuid, env: envUuid, label: 'dev' },
+            { project: projectUuidProd, env: envUuidProd, label: 'prod' },
+        ];
+        for (const pair of pairs) {
+            const projectRes = await axios.get(`${coolifyOrigin}/api/v1/projects/${encodeURIComponent(pair.project)}`, {
+                headers: { Authorization: `Bearer ${coolifyApiToken}`, 'Content-Type': 'application/json' },
+                timeout: 15000,
+                validateStatus: () => true,
+            });
+            if (projectRes.status !== 200) {
+                return { ok: false, error: `Coolify ${pair.label} project not found (HTTP ${projectRes.status}). Check the ${pair.label} project ID.` };
+            }
+            const envRes = await axios.get(`${coolifyOrigin}/api/v1/projects/${encodeURIComponent(pair.project)}/${encodeURIComponent(pair.env)}`, {
+                headers: { Authorization: `Bearer ${coolifyApiToken}`, 'Content-Type': 'application/json' },
+                timeout: 15000,
+                validateStatus: () => true,
+            });
+            if (envRes.status !== 200) {
+                return { ok: false, error: `Coolify ${pair.label} environment not found (HTTP ${envRes.status}). Check the ${pair.label} environment ID.` };
+            }
+        }
+        const keyUuid = String(deployKeyUuid || '').trim();
+        if (keyUuid) {
+            const keyRes = await axios.get(`${coolifyOrigin}/api/v1/security/keys/${encodeURIComponent(keyUuid)}`, {
+                headers: { Authorization: `Bearer ${coolifyApiToken}`, 'Content-Type': 'application/json' },
+                timeout: 15000,
+                validateStatus: () => true,
+            });
+            if (keyRes.status !== 200) {
+                return { ok: false, error: `Coolify deploy key not found (HTTP ${keyRes.status}). Check the key UUID in Coolify Keys.` };
+            }
+        }
+
+        return {
+            ok: true,
+            normalized: {
+                gitProvider: provider,
+                gitOrigin,
+                gitOwner: gitUsername,
+                coolifyOrigin,
+                coolifyProjectUuid: projectUuid,
+                coolifyEnvUuid: envUuid,
+                coolifyProjectUuidProd: projectUuidProd,
+                coolifyEnvUuidProd: envUuidProd,
+                baseDomain: normalizedDomain,
+                deployKeyUuid: keyUuid,
+            },
+        };
+    } catch (err) {
+        if (isAxiosError(err)) {
+            const status = err.response?.status ? ` (HTTP ${err.response.status})` : '';
+            const apiMsg = typeof err.response?.data?.message === 'string' ? `: ${err.response.data.message}` : '';
+            return { ok: false, error: `DApps verify failed${status}${apiMsg}. Check URLs, tokens, and that the Git token can create repos.` };
+        }
+        console.error('DApps verify failed:', err);
+        return { ok: false, error: 'DApps verify failed. Check URLs and tokens, then retry.' };
+    }
+};
+
+// Get User DApps settings (tokens are never returned)
+router.get(
+    '/getUserApiDapps',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const doc = await ModelUserApiKey.findOne({ userId: res.locals.auth_userId }).lean();
+            if (!doc) {
+                return res.json({ dappsValid: false, gitProvider: 'gitea', gitUrl: '', gitOwner: '', coolifyBaseUrl: '', coolifyProjectId: '', coolifyEnvId: '', coolifyProjectIdProd: '', coolifyEnvIdProd: '', baseDomain: '', deployKeyUuid: '' });
+            }
+            return res.json({
+                dappsValid: !!doc.dappsValid,
+                gitProvider: doc.dappsGitProvider || 'gitea',
+                gitUrl: doc.dappsGitUrl || '',
+                gitOwner: doc.dappsGitOwner || '',
+                coolifyBaseUrl: doc.dappsCoolifyUrl || '',
+                coolifyProjectId: doc.dappsCoolifyProject || '',
+                coolifyEnvId: doc.dappsCoolifyEnvironment || '',
+                coolifyProjectIdProd: (doc as any).dappsCoolifyProjectProd || '',
+                coolifyEnvIdProd: (doc as any).dappsCoolifyEnvironmentProd || '',
+                baseDomain: (doc as any).dappsBaseDomain || '',
+                deployKeyUuid: (doc as any).dappsDeployKeyUuid || '',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+// Update User DApps settings (verify Git create+delete test repo and Coolify template app, then save)
+router.post(
+    '/updateUserApiDapps',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const {
+                dappsGitProvider,
+                dappsGitUrl,
+                dappsGitToken,
+                dappsGitOwner,
+                dappsCoolifyBaseUrl,
+                dappsCoolifyToken,
+                dappsCoolifyProjectId,
+                dappsCoolifyEnvId,
+                dappsCoolifyProjectIdProd,
+                dappsCoolifyEnvIdProd,
+                dappsBaseDomain,
+                dappsDeployKeyUuid,
+            } = req.body as {
+                dappsGitProvider?: string;
+                dappsGitUrl?: string;
+                dappsGitToken?: string;
+                dappsGitOwner?: string;
+                dappsCoolifyBaseUrl?: string;
+                dappsCoolifyToken?: string;
+                dappsCoolifyProjectId?: string;
+                dappsCoolifyEnvId?: string;
+                dappsCoolifyProjectIdProd?: string;
+                dappsCoolifyEnvIdProd?: string;
+                dappsBaseDomain?: string;
+                dappsDeployKeyUuid?: string;
+            };
+
+            const check = await validateDappsEndpoints({
+                gitProvider: typeof dappsGitProvider === 'string' ? dappsGitProvider : 'gitea',
+                gitUrl: typeof dappsGitUrl === 'string' ? dappsGitUrl : '',
+                gitToken: typeof dappsGitToken === 'string' ? dappsGitToken : '',
+                gitOwner: typeof dappsGitOwner === 'string' ? dappsGitOwner : '',
+                coolifyBaseUrl: typeof dappsCoolifyBaseUrl === 'string' ? dappsCoolifyBaseUrl : '',
+                coolifyToken: typeof dappsCoolifyToken === 'string' ? dappsCoolifyToken : '',
+                coolifyProjectId: typeof dappsCoolifyProjectId === 'string' ? dappsCoolifyProjectId : '',
+                coolifyEnvId: typeof dappsCoolifyEnvId === 'string' ? dappsCoolifyEnvId : '',
+                coolifyProjectIdProd: typeof dappsCoolifyProjectIdProd === 'string' ? dappsCoolifyProjectIdProd : '',
+                coolifyEnvIdProd: typeof dappsCoolifyEnvIdProd === 'string' ? dappsCoolifyEnvIdProd : '',
+                baseDomain: typeof dappsBaseDomain === 'string' ? dappsBaseDomain : '',
+                deployKeyUuid: typeof dappsDeployKeyUuid === 'string' ? dappsDeployKeyUuid : '',
+            });
+            if (!check.ok) {
+                const errOf = (c: { ok: false; error: string }): string => c.error;
+                return res.status(400).json({ success: '', error: errOf(check) });
+            }
+
+            await ModelUserApiKey.findOneAndUpdate(
+                { userId: res.locals.auth_userId },
+                {
+                    dappsValid: true,
+                    dappsGitProvider: check.normalized.gitProvider,
+                    dappsGitUrl: check.normalized.gitOrigin,
+                    dappsGitToken: String(req.body?.dappsGitToken || '').trim(),
+                    dappsGitOwner: check.normalized.gitOwner,
+                    dappsCoolifyUrl: check.normalized.coolifyOrigin,
+                    dappsCoolifyToken: String(req.body?.dappsCoolifyToken || '').trim(),
+                    dappsCoolifyProject: check.normalized.coolifyProjectUuid,
+                    dappsCoolifyEnvironment: check.normalized.coolifyEnvUuid,
+                    dappsCoolifyProjectProd: check.normalized.coolifyProjectUuidProd,
+                    dappsCoolifyEnvironmentProd: check.normalized.coolifyEnvUuidProd,
+                    dappsBaseDomain: check.normalized.baseDomain,
+                    dappsDeployKeyUuid: check.normalized.deployKeyUuid,
+                },
+                { new: true, upsert: true }
+            );
+
+            return res.json({ success: 'Updated', error: '' });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
         }
     }
 );

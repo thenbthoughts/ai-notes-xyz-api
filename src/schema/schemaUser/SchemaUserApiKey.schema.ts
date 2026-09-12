@@ -105,6 +105,22 @@ const userApiKeySchema = new Schema<IUserApiKey>({
     /** Public MCP URL the user saved (OpenCode rewrites localhost → host.docker.internal). */
     mcpBaseUrl: { type: String, default: '' },
 
+    // dapps - git provider (gitea or github) + coolify hosting (coolify only)
+    dappsValid: { type: Boolean, default: false },
+    dappsGitProvider: { type: String, enum: ['gitea', 'github'], default: 'gitea' },
+    dappsGitUrl: { type: String, default: '' },
+    dappsGitToken: { type: String, default: '' },
+    dappsGitOwner: { type: String, default: '' },
+    dappsCoolifyUrl: { type: String, default: '' },
+    dappsCoolifyToken: { type: String, default: '' },
+    dappsCoolifyProject: { type: String, default: '' },
+    dappsCoolifyEnvironment: { type: String, default: '' },
+    dappsCoolifyProjectProd: { type: String, default: '' },
+    dappsCoolifyEnvironmentProd: { type: String, default: '' },
+    dappsBaseDomain: { type: String, default: '' },
+    dappsDeployKeyUuid: { type: String, default: '' },
+    dappsCoolifyTemplateUrl: { type: String, default: '' },
+
     // user-email-verify
     userEmailVerifyOtp: { type: Number, default: 0 },
     userEmailVerifyEmail: { type: String, default: '' },

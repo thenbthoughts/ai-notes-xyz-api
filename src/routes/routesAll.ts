@@ -9,6 +9,7 @@ import routesDashboardHomepageSummary from './dashboard/dashboardHomepageSummary
 import routeUserAuth from './user/userAuth.route';
 import routeUserCrud from './user/userCrud.route';
 import routeUserApiKey from './user/userApiKey.route';
+import routeDapps from './dapps/dapps.route';
 import routeUserTimezoneRevalidate from './user/userTimezoneRevalidate.route';
 import routeUserRevalidate from './user/userRevalidate.route';
 import routeUserLoginHistory from './user/userLoginHistory';
@@ -109,6 +110,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.use('/user/auth', routeUserAuth);
 router.use('/user/crud', routeUserCrud);
 router.use('/user/api-keys', routeUserApiKey);
+router.use('/dapps', routeDapps);
 router.use('/user/timezone-revalidate', routeUserTimezoneRevalidate);
 router.use('/user/revalidate', routeUserRevalidate);
 router.use('/user/login-history', routeUserLoginHistory);

@@ -38,6 +38,7 @@ router.post(
                 telegramValid: false,
                 agentWorkspaceValid: false,
                 mcpBearerTokenValid: false,
+                dappsValid: false,
 
                 // timezone
                 timeZoneRegion: 'Asia/Kolkata',
@@ -172,6 +173,13 @@ router.post(
                 resultApiKey.mcpBearerTokenValid = Boolean(
                     resultUserInfoApi.mcpBearerTokenValid && resultUserInfoApi.mcpBearerToken
                 );
+            }
+
+            // dapps git + coolify settings
+            if (resultUserInfoApi) {
+                if (typeof resultUserInfoApi?.dappsValid === 'boolean') {
+                    (resultApiKey as any).dappsValid = resultUserInfoApi.dappsValid;
+                }
             }
 
             if (resultUserInfo) {

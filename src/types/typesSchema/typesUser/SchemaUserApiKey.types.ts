@@ -102,6 +102,22 @@ interface IUserApiKey extends Document {
     mcpBearerToken: string;
     mcpBaseUrl: string;
 
+    // dapps - git provider (gitea or github) + coolify hosting (coolify only)
+    dappsValid: boolean;
+    dappsGitProvider: 'gitea' | 'github';
+    dappsGitUrl: string;
+    dappsGitToken: string;
+    dappsGitOwner: string;
+    dappsCoolifyUrl: string;
+    dappsCoolifyToken: string;
+    dappsCoolifyProject: string;
+    dappsCoolifyEnvironment: string;
+    dappsCoolifyProjectProd: string;
+    dappsCoolifyEnvironmentProd: string;
+    dappsBaseDomain: string;
+    dappsDeployKeyUuid: string;
+    dappsCoolifyTemplateUrl: string;
+
     // user-email-verify
     userEmailVerifyOtp: number;
     userEmailVerifyEmail: string;
