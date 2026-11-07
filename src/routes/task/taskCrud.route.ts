@@ -274,7 +274,7 @@ router.post(
         try {
             const auth_userId = res.locals.auth_userId;
 
-            const { title, description, taskWorkspaceId, taskStatusId } = req.body;
+            const { title, description, taskWorkspaceId, taskStatusId, isTaskPinned } = req.body;
 
             // does task workspace exist and belong to user
             const taskWorkspaceIdObj = getMongodbObjectOrNull(taskWorkspaceId);
@@ -317,6 +317,8 @@ router.post(
                 // identification
                 taskWorkspaceId: taskWorkspaceIdObj,
                 taskStatusId: taskStatusIdObj,
+
+                isTaskPinned: isTaskPinned === true,
 
                 // auth
                 userId: res.locals.auth_userId,
@@ -392,8 +394,10 @@ router.post(
                 taskWorkspaceId?: mongoose.Types.ObjectId;
             };
 
-            // Filter by task workspace id
-            if (typeof req.body?.taskWorkspaceId === 'string') {
+            const listPinnedAcrossWorkspaces = req.body?.taskPageView === 'isTaskPinned';
+
+            // Filter by task workspace id. The pinned menu lists every workspace.
+            if (!listPinnedAcrossWorkspaces && typeof req.body?.taskWorkspaceId === 'string') {
                 if (req.body?.taskWorkspaceId.length === 24) {
                     let tempWorkspaceId = mongoose.Types.ObjectId.createFromHexString(req.body?.taskWorkspaceId);
                     if (tempWorkspaceId) {
@@ -442,7 +446,9 @@ router.post(
                 }
             }
 
-            if (typeof req.body?.isTaskPinned === 'string' && req.body.isTaskPinned.trim() !== '') {
+            if (listPinnedAcrossWorkspaces) {
+                tempStageMatch.isTaskPinned = true;
+            } else if (typeof req.body?.isTaskPinned === 'string' && req.body.isTaskPinned.trim() !== '') {
                 if (req.body.isTaskPinned === 'pinned') {
                     tempStageMatch.isTaskPinned = true;
                 } else if (req.body.isTaskPinned === 'unpinned') {
@@ -914,22 +920,8 @@ router.post(
                 updateObj.taskStatusId = final_taskStatusId;
             }
 
-            const dateNow = new Date();
-
-            // if task is pinned, update all other task pinned to false
-            if (isTaskPinned) {
-                await ModelTask.updateMany(
-                    {
-                        _id: { $ne: getMongodbObjectOrNull(id) },
-                        userId: auth_userId,
-                        isTaskPinned: true,
-                    },
-                    {
-                        $set: {
-                            isTaskPinned: false,
-                        }
-                    }
-                );
+            if (typeof isTaskPinned === 'boolean') {
+                updateObj.isTaskPinned = isTaskPinned;
             }
 
             // get task (lean)
@@ -975,9 +967,6 @@ router.post(
                     isArchived,
                     isCompleted,
                     priority: priority || 'very-low',
-
-                    // task homepage pinned
-                    isTaskPinned: isTaskPinned || false,
 
                     // updated datetime ip
                     updatedAtUtc: actionDatetimeObj.updatedAtUtc,
@@ -1029,6 +1018,62 @@ router.post(
 
             return res.json({
                 message: 'Task edited successfully',
+            });
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
+router.post(
+    '/taskUnpinPinned',
+    middlewareUserAuth,
+    async (req: Request, res: Response) => {
+        try {
+            const auth_userId = res.locals.auth_userId;
+            const taskIds = req.body?.taskIds;
+            const objectIds = [] as mongoose.Types.ObjectId[];
+            if (Array.isArray(taskIds)) {
+                for (let i = 0; i < taskIds.length; i++) {
+                    const id = taskIds[i];
+                    if (typeof id !== 'string') {
+                        continue;
+                    }
+                    const objectId = getMongodbObjectOrNull(id);
+                    if (objectId) {
+                        objectIds.push(objectId);
+                    }
+                }
+            }
+            if (objectIds.length === 0) {
+                return res.json({ message: 'No pinned tasks to clear', count: 0 });
+            }
+            const result = await ModelTask.updateMany(
+                {
+                    _id: { $in: objectIds },
+                    userId: auth_userId,
+                    isTaskPinned: true,
+                },
+                {
+                    $set: {
+                        isTaskPinned: false,
+                    },
+                }
+            );
+            const reindexDocumentArr = [] as { collectionName: 'tasks'; documentId: string }[];
+            for (let i = 0; i < objectIds.length; i++) {
+                reindexDocumentArr.push({
+                    collectionName: 'tasks',
+                    documentId: objectIds[i].toString(),
+                });
+            }
+            await reindexDocument({
+                reindexDocumentArr,
+            });
+            return res.json({
+                message: 'Pinned tasks cleared',
+                count: result.modifiedCount,
             });
         } catch (error) {
             console.error(error);
